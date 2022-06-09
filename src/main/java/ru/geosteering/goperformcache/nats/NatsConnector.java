@@ -38,7 +38,7 @@ public class NatsConnector {
                 .connectionName("goperform-cache")
                 .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", HOST, connection.getStatus()))
                 .noReconnect()
-                .errorListener(new CustomErrorListener(this))
+                .errorListener(listener)
                 .authHandler(Nats.credentials(CREDENTIALS_FILE))
                 .server(HOST)
                 .build();
