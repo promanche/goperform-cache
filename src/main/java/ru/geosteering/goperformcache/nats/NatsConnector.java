@@ -43,9 +43,7 @@ public class NatsConnector {
                 .server(HOST)
                 .build();
 
-
         connection = Nats.connect(options);
-
 
         Dispatcher dispatcher = connection.createDispatcher();
         dispatcher.subscribe(SUBJECT + ".*", realtimeService);
