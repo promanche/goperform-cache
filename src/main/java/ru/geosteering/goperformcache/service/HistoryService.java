@@ -44,10 +44,10 @@ public class HistoryService implements MessageHandler {
     public HistoryService(Storage storage, MyBatisRepository repository) {
         this.storage = storage;
         this.repository = repository;
-        requestAllowed = new AtomicInteger(HISTORY_REQUEST_THREADS);
+        requestAllowed = new AtomicInteger(HISTORY_ONE_TIME_REQUESTS);
         metaData = new HashMap<>();
         receivedCount = new HashMap<>();
-        loadInfo = new ConcurrentHashMap<>();
+        loadInfo = new HashMap<>();
         buffer = new HashMap<>();
     }
 
@@ -61,7 +61,7 @@ public class HistoryService implements MessageHandler {
     }
 
     public void restart() {
-        requestAllowed.set(HISTORY_REQUEST_THREADS);
+        requestAllowed.set(HISTORY_ONE_TIME_REQUESTS);
         metaData.clear();
         receivedCount.clear();
         loadInfo.clear();
@@ -82,28 +82,18 @@ public class HistoryService implements MessageHandler {
         messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
         requestScheduler = Executors.newSingleThreadScheduledExecutor();
 
-        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 30, 1, TimeUnit.SECONDS);
+        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 20, 1, TimeUnit.SECONDS);
     }
 
     private void loadHistory() {
-        if (requestAllowed.getAndDecrement() > 0) {
 
+        if (requestAllowed.getAndDecrement() > 0) {
             Long id = findForLoad();
 
-            if (id != null) {
-                CurveDataRequest request = createRequest(id);
-                receivedCount.put(id, new AtomicInteger(0));
-
-                try {
-                    connector.sendRequest(request.toBytes());
-                } catch (ExecutionException | InterruptedException e) {
-                    log.error("Send request exception: {}", e.getMessage(), e);
-                    applyStatus(id, LoadStatus.ERROR);
-                }
-
-            } else {
-                log.info("No curves for history load");
+            if (id == null) {
                 requestAllowed.incrementAndGet();
+            } else {
+                sendRequest(id);
             }
 
         } else {
@@ -125,7 +115,7 @@ public class HistoryService implements MessageHandler {
 
             if (id == null) {
                 id = storage.getActiveCurves().stream()
-                        .filter(curId -> loadInfo.get(curId) == null)
+                        .filter(curId -> !loadInfo.containsKey(curId))
                         .findFirst()
                         .orElse(null);
 
@@ -139,21 +129,27 @@ public class HistoryService implements MessageHandler {
         return id;
     }
 
-    private CurveDataRequest createRequest(Long id) {
+    private void sendRequest(Long id) {
 
-        CurveDataRequest request;
+        String from = metaData.get(id) == null ?
+                null : metaData.get(id).getLast().plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
 
-        synchronized (metaData) {
-            String from = metaData.get(id) == null ?
-                    null : metaData.get(id).getLast().plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
+        OffsetDateTime firstReal = storage.getFirstReal(id);
 
-            String to = storage.getFirstReal(id).minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
+        String to = firstReal == null ?
+                null : firstReal.minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
 
-            request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
-            log.info("Request: {}", request);
+        CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
+        log.info("Request: {}", request);
+
+        receivedCount.put(id, new AtomicInteger(0));
+
+        try {
+            connector.sendRequest(request.toBytes());
+        } catch (ExecutionException | InterruptedException e) {
+            log.error("Send request exception: {}", e.getMessage(), e);
+            applyStatus(id, LoadStatus.ERROR);
         }
-
-        return request;
     }
 
     @Override
@@ -169,6 +165,9 @@ public class HistoryService implements MessageHandler {
 
         if (curveDataMessage == null) {
             Long id = CacheUtils.getIdFromSubject(msg.getSubject());
+            if (id == null) {
+                return;
+            }
 
             if (CacheUtils.getFieldFromJson(json, "type").equalsIgnoreCase("end")) {
                 String sent = CacheUtils.getFieldFromJson(json, "sentCount");
@@ -182,10 +181,11 @@ public class HistoryService implements MessageHandler {
 
                 } else {
                     log.info("History part received: subject {}, message {}", msg.getSubject(), json);
+                    drainToStorage(id);
+                    refreshMetaData(id);
                     applyStatus(id, LoadStatus.PARK);
                 }
 
-                receivedCount.get(id).set(0);
                 requestAllowed.incrementAndGet();
             }
 
@@ -205,27 +205,20 @@ public class HistoryService implements MessageHandler {
         loadInfo.put(id, status);
 
         switch (status) {
-            case DONE -> onLoadDone(id);
-            case ERROR -> onLoadError(id);
-            case PARK -> onLoadPark(id);
+            case ERROR -> onStatusError(id);
+            case DONE -> onStatusDone(id);
             default -> {
             }
         }
     }
 
-    private void onLoadPark(Long id) {
-        drainToStorage(id);
-        refreshMetaData(id);
-    }
-
-    private void onLoadError(Long id) {
-
+    private void onStatusError(Long id) {
         buffer.get(id).clear();
-        log.info("Clear buffer on loading error for id {}", id);
+        log.info("Clear buffer for id {}", id);
         applyStatus(id, LoadStatus.PARK);
     }
 
-    private void onLoadDone(Long id) {
+    private void onStatusDone(Long id) {
         storage.setHistoryLoaded(id);
 
         if (storage.isActiveCurve(id)) {
@@ -247,21 +240,19 @@ public class HistoryService implements MessageHandler {
 
     private void refreshMetaData(Long id) {
 
-        synchronized (metaData) {
-            OffsetDateTime last = storage.getLastHistory(id);
-            OffsetDateTime first = storage.getFirstHistory(id);
+        OffsetDateTime last = storage.getLastHistory(id);
+        OffsetDateTime first = storage.getFirstHistory(id);
 
-            MetaDataDTO metaDataDTO = metaData.get(id);
-            if (metaDataDTO == null) {
-                metaDataDTO = new MetaDataDTO();
-                metaDataDTO.setCurveId(id);
-            }
-
-            metaDataDTO.setFirst(first);
-            metaDataDTO.setLast(last);
-
-            metaData.put(id, metaDataDTO);
+        MetaDataDTO metaDataDTO = metaData.get(id);
+        if (metaDataDTO == null) {
+            metaDataDTO = new MetaDataDTO();
+            metaDataDTO.setCurveId(id);
         }
+
+        metaDataDTO.setFirst(first);
+        metaDataDTO.setLast(last);
+
+        metaData.put(id, metaDataDTO);
     }
 
     private void shutdownHandler() {
