@@ -15,7 +15,7 @@ public class CustomErrorListener implements ErrorListener {
 
     @Override
     public void exceptionOccurred(Connection conn, Exception exp) {
-        log.error("exceptionOccurred: {}", exp.getMessage(), exp);
+        log.error("exceptionOccurred: {}", exp.getMessage());
         connector.reconnect();
     }
 }

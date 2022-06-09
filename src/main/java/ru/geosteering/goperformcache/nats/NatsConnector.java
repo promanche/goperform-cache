@@ -26,13 +26,12 @@ public class NatsConnector {
     private final HistoryService historyService;
 
     @PostConstruct
-    private void init() throws IOException, InterruptedException {
+    private void init() {
         historyService.setConnector(this);
         listener = new CustomErrorListener(this);
-        connect();
     }
 
-    private void connect() throws IOException, InterruptedException {
+    public void connect() {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
@@ -43,11 +42,17 @@ public class NatsConnector {
                 .server(HOST)
                 .build();
 
-        connection = Nats.connect(options);
+        try {
+            connection = Nats.connect(options);
+        } catch (IOException | InterruptedException e) {
+            log.error("Connection exception: {}", e.getMessage());
+        }
 
-        Dispatcher dispatcher = connection.createDispatcher();
-        dispatcher.subscribe(SUBJECT + ".*", realtimeService);
-        dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyService);
+        if (connection != null) {
+            Dispatcher dispatcher = connection.createDispatcher();
+            dispatcher.subscribe(SUBJECT + ".*", realtimeService);
+            dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyService);
+        }
     }
 
     public void sendRequest(byte[] data) throws ExecutionException, InterruptedException {
@@ -83,27 +88,17 @@ public class NatsConnector {
                 onError();
                 closeConnection();
 
-                while (true) {
-                    int seconds = RECONNECT_TIMEOUT_SECONDS;
-                    while (seconds > 0) {
-                        log.info("Reconnect waiting... " + seconds);
-                        Thread.sleep(1000);
-                        seconds--;
-                    }
-
-                    connect();
-                    if (connection.getStatus() == Connection.Status.CONNECTED) {
-                        break;
-                    } else {
-                        log.warn("Not connected. Next try");
-                    }
+                int seconds = RECONNECT_TIMEOUT_SECONDS;
+                while (seconds > 0) {
+                    log.info("Reconnect waiting... " + seconds);
+                    Thread.sleep(1000);
+                    seconds--;
                 }
 
+                connect();
                 onReconnect();
-            } catch (InterruptedException | IOException e) {
-                log.error("Reconnect error: {}", e.getMessage(), e);
-                log.warn("Shutdown");
-                System.exit(0);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }).start();
     }
