@@ -21,16 +21,18 @@ import static ru.geosteering.goperformcache.config.Config.*;
 public class NatsConnector {
 
     private Connection connection;
+    private CustomErrorListener listener;
     private final RealtimeService realtimeService;
     private final HistoryService historyService;
 
     @PostConstruct
-    private void init() {
+    private void init() throws IOException, InterruptedException {
         historyService.setConnector(this);
+        listener = new CustomErrorListener(this);
         connect();
     }
 
-    private void connect() {
+    private void connect() throws IOException, InterruptedException {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
@@ -41,17 +43,13 @@ public class NatsConnector {
                 .server(HOST)
                 .build();
 
-        try {
-            connection = Nats.connect(options);
-        } catch (IOException | InterruptedException e) {
-            log.error(e.getMessage());
-        }
 
-        if (connection != null) {
-            Dispatcher dispatcher = connection.createDispatcher();
-            dispatcher.subscribe(SUBJECT + ".*", realtimeService);
-            dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyService);
-        }
+        connection = Nats.connect(options);
+
+
+        Dispatcher dispatcher = connection.createDispatcher();
+        dispatcher.subscribe(SUBJECT + ".*", realtimeService);
+        dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyService);
     }
 
     public void sendRequest(byte[] data) throws ExecutionException, InterruptedException {
@@ -104,7 +102,7 @@ public class NatsConnector {
                 }
 
                 onReconnect();
-            } catch (InterruptedException e) {
+            } catch (InterruptedException | IOException e) {
                 log.error("Reconnect error: {}", e.getMessage(), e);
                 log.warn("Shutdown");
                 System.exit(0);
