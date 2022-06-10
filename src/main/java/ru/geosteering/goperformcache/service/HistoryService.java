@@ -48,7 +48,7 @@ public class HistoryService implements MessageHandler {
         metaData = new HashMap<>();
         receivedCount = new HashMap<>();
         loadInfo = new HashMap<>();
-        buffer = new HashMap<>();
+        buffer = new ConcurrentHashMap<>();
     }
 
     @PostConstruct
@@ -230,12 +230,7 @@ public class HistoryService implements MessageHandler {
     private void drainToStorage(Long id) {
 
         log.info("Drain buffer to storage. Curve id: {}, items: {}", id, buffer.get(id).size());
-
-        Iterator<CurveDataItem> iterator = buffer.get(id).iterator();
-        while (iterator.hasNext()) {
-            storage.addData(id, iterator.next(), false);
-            iterator.remove();
-        }
+        storage.addHistoryDataSet(id, buffer.get(id));
     }
 
     private void refreshMetaData(Long id) {

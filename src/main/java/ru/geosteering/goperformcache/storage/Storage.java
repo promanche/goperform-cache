@@ -43,6 +43,21 @@ public class Storage {
         }
     }
 
+    public void addHistoryDataSet(Long id, Set<CurveDataItem> historySet) {
+        PriorityQueue<CurveDataItem> items =
+                historyCache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CurveDataItem::getTime)));
+
+        synchronized (items) {
+
+            Iterator<CurveDataItem> iterator = historySet.iterator();
+            while (iterator.hasNext()) {
+                items.add(iterator.next());
+                iterator.remove();
+            }
+            transferIfNeed(id, items, false);
+        }
+    }
+
     private void transferIfNeed(Long id, PriorityQueue<CurveDataItem> items, boolean isReal) {
         if (isReal && !isHistoryLoaded(id)) {
             return;
@@ -55,7 +70,10 @@ public class Storage {
                 transfer.add(items.poll());
             }
             repository.saveDataBatch(id, transfer.get(0).getTime(), transfer.get(transfer.size() - 1).getTime(), CacheUtils.toJson(transfer));
+
+            transferIfNeed(id, items, isReal);
         }
+
     }
 
     public void mergeCache(Long id) {
