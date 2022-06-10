@@ -30,7 +30,7 @@ public class Storage {
         historyLoaded = ConcurrentHashMap.newKeySet();
     }
 
-    public void addData(Long id, CurveDataItem item, boolean isReal) {
+    public void add(Long id, CurveDataItem item, boolean isReal) {
 
         Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
 
@@ -43,17 +43,15 @@ public class Storage {
         }
     }
 
-    public void addHistoryDataSet(Long id, Set<CurveDataItem> historySet) {
+    public void addAll(Long id, Collection<CurveDataItem> collection, boolean isReal) {
+
+        Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
+
         PriorityQueue<CurveDataItem> items =
-                historyCache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CurveDataItem::getTime)));
+                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CurveDataItem::getTime)));
 
         synchronized (items) {
-
-            Iterator<CurveDataItem> iterator = historySet.iterator();
-            while (iterator.hasNext()) {
-                items.add(iterator.next());
-                iterator.remove();
-            }
+            items.addAll(collection);
             transferIfNeed(id, items, false);
         }
     }
@@ -73,7 +71,6 @@ public class Storage {
 
             transferIfNeed(id, items, isReal);
         }
-
     }
 
     public void mergeCache(Long id) {

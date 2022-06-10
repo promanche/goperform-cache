@@ -44,7 +44,7 @@ public class HistoryService implements MessageHandler {
     public HistoryService(Storage storage, MyBatisRepository repository) {
         this.storage = storage;
         this.repository = repository;
-        requestAllowed = new AtomicInteger(HISTORY_ONE_TIME_REQUESTS);
+        requestAllowed = new AtomicInteger(HISTORY_ONETIME_REQUESTS);
         metaData = new HashMap<>();
         receivedCount = new HashMap<>();
         loadInfo = new HashMap<>();
@@ -61,7 +61,7 @@ public class HistoryService implements MessageHandler {
     }
 
     public void restart() {
-        requestAllowed.set(HISTORY_ONE_TIME_REQUESTS);
+        requestAllowed.set(HISTORY_ONETIME_REQUESTS);
         metaData.clear();
         receivedCount.clear();
         loadInfo.clear();
@@ -82,18 +82,16 @@ public class HistoryService implements MessageHandler {
         messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
         requestScheduler = Executors.newSingleThreadScheduledExecutor();
 
-        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 20, 1, TimeUnit.SECONDS);
+        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 30000, 200, TimeUnit.MILLISECONDS);
     }
 
     private void loadHistory() {
 
         if (requestAllowed.getAndDecrement() > 0) {
-            Long id = findForLoad();
+            Long id = loadIfNeed();
 
             if (id == null) {
                 requestAllowed.incrementAndGet();
-            } else {
-                sendRequest(id);
             }
 
         } else {
@@ -101,7 +99,7 @@ public class HistoryService implements MessageHandler {
         }
     }
 
-    private Long findForLoad() {
+    private Long loadIfNeed() {
 
         Long id;
 
@@ -127,29 +125,6 @@ public class HistoryService implements MessageHandler {
         }
 
         return id;
-    }
-
-    private void sendRequest(Long id) {
-
-        String from = metaData.get(id) == null ?
-                null : metaData.get(id).getLast().plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
-
-        OffsetDateTime firstReal = storage.getFirstReal(id);
-
-        String to = firstReal == null ?
-                null : firstReal.minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
-
-        CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
-        log.info("Request: {}", request);
-
-        receivedCount.put(id, new AtomicInteger(0));
-
-        try {
-            connector.sendRequest(request.toBytes());
-        } catch (ExecutionException | InterruptedException e) {
-            log.error("Send request exception: {}", e.getMessage(), e);
-            applyStatus(id, LoadStatus.ERROR);
-        }
     }
 
     @Override
@@ -205,10 +180,34 @@ public class HistoryService implements MessageHandler {
         loadInfo.put(id, status);
 
         switch (status) {
+            case REQUEST -> onStatusRequest(id);
             case ERROR -> onStatusError(id);
             case DONE -> onStatusDone(id);
             default -> {
             }
+        }
+    }
+
+    private void onStatusRequest(Long id) {
+
+        String from = metaData.get(id) == null ?
+                null : metaData.get(id).getLast().plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
+
+        OffsetDateTime firstReal = storage.getFirstReal(id);
+
+        String to = firstReal == null ?
+                null : firstReal.minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
+
+        CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
+        log.info("Request: {}", request);
+
+        receivedCount.put(id, new AtomicInteger(0));
+
+        try {
+            connector.sendRequest(request.toBytes());
+        } catch (Exception e) {
+            log.error("Send request exception: {}", e.getMessage(), e);
+            applyStatus(id, LoadStatus.ERROR);
         }
     }
 
@@ -229,8 +228,10 @@ public class HistoryService implements MessageHandler {
 
     private void drainToStorage(Long id) {
 
-        log.info("Drain buffer to storage. Curve id: {}, items: {}", id, buffer.get(id).size());
-        storage.addHistoryDataSet(id, buffer.get(id));
+        Set<CurveDataItem> set = buffer.get(id);
+        log.info("Drain buffer to storage. Curve id: {}, items: {}", id, set.size());
+        storage.addAll(id, set, false);
+        set.clear();
     }
 
     private void refreshMetaData(Long id) {

@@ -11,7 +11,7 @@ import ru.geosteering.goperformcache.service.RealtimeService;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.*;
 
 import static ru.geosteering.goperformcache.config.Config.*;
 
@@ -21,14 +21,14 @@ import static ru.geosteering.goperformcache.config.Config.*;
 public class NatsConnector {
 
     private Connection connection;
-    private CustomErrorListener listener;
+    private CustomErrorListener errorListener;
     private final RealtimeService realtimeService;
     private final HistoryService historyService;
 
     @PostConstruct
     private void init() {
         historyService.setConnector(this);
-        listener = new CustomErrorListener(this);
+        errorListener = new CustomErrorListener(this);
     }
 
     public void connect() {
@@ -37,7 +37,7 @@ public class NatsConnector {
                 .connectionName("goperform-cache")
                 .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", HOST, connection.getStatus()))
                 .noReconnect()
-                .errorListener(listener)
+                .errorListener(errorListener)
                 .authHandler(Nats.credentials(CREDENTIALS_FILE))
                 .server(HOST)
                 .build();
@@ -55,13 +55,13 @@ public class NatsConnector {
         }
     }
 
-    public void sendRequest(byte[] data) throws ExecutionException, InterruptedException {
+    public void sendRequest(byte[] data) throws ExecutionException, InterruptedException, TimeoutException {
         Message message = NatsMessage.builder()
                 .subject(SUBJECT)
                 .data(data)
                 .build();
 
-        Message response = connection.request(message).get();
+        Message response = connection.request(message).get(3, TimeUnit.SECONDS);
         log.info("Response: {}", response.toString());
     }
 
@@ -76,9 +76,13 @@ public class NatsConnector {
     }
 
     @PreDestroy
-    private void closeConnection() throws InterruptedException {
+    private void closeConnection() {
         if (connection != null) {
-            connection.close();
+            try {
+                connection.close();
+            } catch (Exception e) {
+                log.error("Exception while closing: {}", e.getMessage());
+            }
         }
     }
 

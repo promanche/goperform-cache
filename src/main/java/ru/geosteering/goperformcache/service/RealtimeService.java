@@ -50,7 +50,7 @@ public class RealtimeService implements MessageHandler {
         CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(new String(msg.getData()), msg.getSubject());
 
         if (curveDataMessage != null) {
-            storage.addData(curveDataMessage.getId(), curveDataMessage.getData(), true);
+            storage.add(curveDataMessage.getId(), curveDataMessage.getData(), true);
             wsTemplate.convertAndSend("/realtime/curve", curveDataMessage);
         }
     }

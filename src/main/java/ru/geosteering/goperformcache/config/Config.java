@@ -20,7 +20,7 @@ public class Config {
     public static final int MARGIN_SIZE;
     public static final String CREDENTIALS_FILE;
     public static final String HISTORY_NUID;
-    public static final int HISTORY_ONE_TIME_REQUESTS;
+    public static final int HISTORY_ONETIME_REQUESTS;
     public static final int RECONNECT_TIMEOUT_SECONDS;
 
     static {
@@ -35,7 +35,7 @@ public class Config {
         BATCH_SIZE = Integer.parseInt(properties.getProperty("batch-size", "1000"));
         MARGIN_SIZE = Integer.parseInt(properties.getProperty("margin-size", "20"));
         CREDENTIALS_FILE = properties.getProperty("credentials-file", "app.creds");
-        HISTORY_ONE_TIME_REQUESTS = Integer.parseInt(properties.getProperty("history-one-time-requests", "2"));
+        HISTORY_ONETIME_REQUESTS = Integer.parseInt(properties.getProperty("history-onetime-requests", "2"));
         RECONNECT_TIMEOUT_SECONDS = Integer.parseInt(properties.getProperty("reconnect-timeout-sec", "10"));
 
         HISTORY_NUID = NUID.nextGlobal();
