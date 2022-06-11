@@ -3,8 +3,8 @@ package ru.geosteering.goperformcache.storage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperformcache.model.CurveDataItem;
-import ru.geosteering.goperformcache.repository.MyBatisRepository;
-import ru.geosteering.goperformcache.utils.CacheUtils;
+import ru.geosteering.goperformcache.repository.CurveCacheRepository;
+import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
 
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -17,17 +17,20 @@ import static ru.geosteering.goperformcache.config.Config.MARGIN_SIZE;
 @Slf4j
 public class Storage {
 
-    private final MyBatisRepository repository;
+    private final CurveCacheRepository repository;
 
     private final Map<Long, PriorityQueue<CurveDataItem>> realTimeCache;
     private final Map<Long, PriorityQueue<CurveDataItem>> historyCache;
     private final Set<Long> historyLoaded;
+    private final Set<CurveCacheDTO> errorBuffer;
+    //TODO error buffer -> what to do?
 
-    public Storage(MyBatisRepository repository) {
+    public Storage(CurveCacheRepository repository) {
         this.repository = repository;
         realTimeCache = new ConcurrentHashMap<>();
         historyCache = new ConcurrentHashMap<>();
         historyLoaded = ConcurrentHashMap.newKeySet();
+        errorBuffer = ConcurrentHashMap.newKeySet();
     }
 
     public void add(Long id, CurveDataItem item, boolean isReal) {
@@ -61,15 +64,28 @@ public class Storage {
             return;
         }
 
-        if (items.size() >= BATCH_SIZE + MARGIN_SIZE) {
-//            log.info("Cache full for id {}. Transfer data to the database", id);
-            ArrayList<CurveDataItem> transfer = new ArrayList<>(BATCH_SIZE);
-            for (int i = 0; i < BATCH_SIZE; i++) {
-                transfer.add(items.poll());
-            }
-            repository.saveDataBatch(id, transfer.get(0).getTime(), transfer.get(transfer.size() - 1).getTime(), CacheUtils.toJson(transfer));
+        List<CurveCacheDTO> transferList = new ArrayList<>();
+        fillTransferList(id, items, transferList);
 
-            transferIfNeed(id, items, isReal);
+        if (!transferList.isEmpty()) {
+            try {
+                repository.save(transferList);
+            } catch (Exception e) {
+                errorBuffer.addAll(transferList);
+                log.error("Database exception: {}. Data added to errorBuffer", e.getMessage());
+            }
+        }
+    }
+
+    private void fillTransferList(Long id, PriorityQueue<CurveDataItem> items, List<CurveCacheDTO> transferList) {
+
+        if (items.size() >= BATCH_SIZE + MARGIN_SIZE) {
+            ArrayList<CurveDataItem> itemsBatch = new ArrayList<>(BATCH_SIZE);
+            for (int i = 0; i < BATCH_SIZE; i++) {
+                itemsBatch.add(items.poll());
+            }
+            transferList.add(new CurveCacheDTO(id, itemsBatch));
+            fillTransferList(id, items, transferList);
         }
     }
 
@@ -101,8 +117,8 @@ public class Storage {
         int realTotal = realTimeCache.values().stream().mapToInt(PriorityQueue::size).sum();
         int historyTotal = historyCache.values().stream().mapToInt(PriorityQueue::size).sum();
 
-        return String.format("Realtime cache: curves - %d; records - %d. History cache: curves - %d; records - %d. History loaded: %s",
-                realTimeCache.size(), realTotal, historyCache.size(), historyTotal, historyLoaded);
+        return String.format("Realtime cache: curves - %d; records - %d. History cache: curves - %d; records - %d. History loaded: %s. Error buffer size: %d",
+                realTimeCache.size(), realTotal, historyCache.size(), historyTotal, historyLoaded, errorBuffer.size());
     }
 
     public Set<Long> getActiveCurves() {
@@ -124,7 +140,7 @@ public class Storage {
 
     public OffsetDateTime getFirstHistory(Long id) {
 
-        OffsetDateTime first = repository.getFirstTimeByCurveId(id);
+        OffsetDateTime first = repository.getMinFirst(id);
 
         if (first == null) {
 
@@ -150,7 +166,7 @@ public class Storage {
                     .max(Comparator.comparing(CurveDataItem::getTime))
                     .orElse(null);
 
-            result = curveDataItem == null ? repository.getLastTimeByCurveId(id) : curveDataItem.getTime();
+            result = curveDataItem == null ? repository.getMaxLast(id) : curveDataItem.getTime();
         }
 
         return result;

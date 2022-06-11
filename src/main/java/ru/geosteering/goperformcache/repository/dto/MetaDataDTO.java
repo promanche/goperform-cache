@@ -1,4 +1,4 @@
-package ru.geosteering.goperformcache.repository;
+package ru.geosteering.goperformcache.repository.dto;
 
 import lombok.*;
 

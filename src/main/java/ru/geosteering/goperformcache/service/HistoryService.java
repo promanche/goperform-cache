@@ -7,8 +7,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperformcache.model.*;
 import ru.geosteering.goperformcache.nats.NatsConnector;
-import ru.geosteering.goperformcache.repository.MetaDataDTO;
-import ru.geosteering.goperformcache.repository.MyBatisRepository;
+import ru.geosteering.goperformcache.repository.CurveCacheRepository;
+import ru.geosteering.goperformcache.repository.dto.MetaDataDTO;
 import ru.geosteering.goperformcache.storage.Storage;
 import ru.geosteering.goperformcache.utils.CacheUtils;
 
@@ -27,7 +27,7 @@ import static ru.geosteering.goperformcache.config.Config.*;
 public class HistoryService implements MessageHandler {
 
     private final Storage storage;
-    private final MyBatisRepository repository;
+    private final CurveCacheRepository repository;
 
     private final AtomicInteger requestAllowed;
     private final Map<Long, MetaDataDTO> metaData;
@@ -41,7 +41,7 @@ public class HistoryService implements MessageHandler {
     @Setter
     private NatsConnector connector;
 
-    public HistoryService(Storage storage, MyBatisRepository repository) {
+    public HistoryService(Storage storage, CurveCacheRepository repository) {
         this.storage = storage;
         this.repository = repository;
         requestAllowed = new AtomicInteger(HISTORY_ONETIME_REQUESTS);
@@ -206,7 +206,7 @@ public class HistoryService implements MessageHandler {
         try {
             connector.sendRequest(request.toBytes());
         } catch (Exception e) {
-            log.error("Send request exception: {}", e.getMessage(), e);
+            log.error("Send request exception: {}", e.getMessage());
             applyStatus(id, LoadStatus.ERROR);
         }
     }

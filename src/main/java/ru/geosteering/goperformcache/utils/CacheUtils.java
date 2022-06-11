@@ -2,6 +2,7 @@ package ru.geosteering.goperformcache.utils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
 import ru.geosteering.goperformcache.model.CurveDataMessage;
 
@@ -14,6 +15,7 @@ public class CacheUtils {
 
     static {
         mapper.findAndRegisterModules();
+        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     public static CurveDataMessage parseCurveDataMessage(String json, String subject) {
