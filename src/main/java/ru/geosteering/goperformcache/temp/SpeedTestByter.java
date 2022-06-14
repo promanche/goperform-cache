@@ -3,10 +3,10 @@ package ru.geosteering.goperformcache.temp;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.*;
 import io.nats.client.impl.NatsMessage;
+import lombok.*;
 
 import java.io.IOException;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,7 +20,7 @@ public class SpeedTestByter {
         AtomicInteger count = new AtomicInteger(0);
         String nuid = NUID.nextGlobal();
         int threads = 4;
-        long curveId = 68708L;
+        Long curveId = 68708L;
 
         AtomicBoolean isEnd = new AtomicBoolean(false);
 
@@ -149,66 +149,28 @@ public class SpeedTestByter {
         System.exit(0);
     }
 
+    @Getter
+    @Setter
+    @AllArgsConstructor
     public static class CurveDataMessage {
         String type;
-        Long id;
+        String id;
         CurveDataItem data;
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public void setId(Long id) {
-            this.id = id;
-        }
-
-        public CurveDataItem getData() {
-            return data;
-        }
-
-        public void setData(CurveDataItem data) {
-            this.data = data;
-        }
     }
 
+    @Getter
+    @Setter
+    @AllArgsConstructor
     public static class CurveDataItem {
-        OffsetDateTime time;
-        Double depth;
-        Double value;
-
-        public OffsetDateTime getTime() {
-            return time;
-        }
-
-        public void setTime(OffsetDateTime time) {
-            this.time = time;
-        }
-
-        public Double getDepth() {
-            return depth;
-        }
-
-        public void setDepth(Double depth) {
-            this.depth = depth;
-        }
-
-        public Double getValue() {
-            return value;
-        }
-
-        public void setValue(Double value) {
-            this.value = value;
-        }
+        LocalDateTime time;
+        String depth;
+        String value;
     }
 
+    @Getter
+    @Setter
+    @AllArgsConstructor
+    @NoArgsConstructor
     public static class CurveDataRequest {
         private Long curveId;
         private String from;
@@ -218,84 +180,6 @@ public class SpeedTestByter {
         private boolean withRange;
         private Integer limit;
         private String replyToSuffix;
-
-        public CurveDataRequest(Long curveId, String from, String to, Integer ms, boolean infoOnly, boolean withRange, Integer limit, String replyToSuffix) {
-            this.curveId = curveId;
-            this.from = from;
-            this.to = to;
-            this.ms = ms;
-            this.infoOnly = infoOnly;
-            this.withRange = withRange;
-            this.limit = limit;
-            this.replyToSuffix = replyToSuffix;
-        }
-
-        public CurveDataRequest() {
-        }
-
-        public Long getCurveId() {
-            return curveId;
-        }
-
-        public void setCurveId(Long curveId) {
-            this.curveId = curveId;
-        }
-
-        public String getFrom() {
-            return from;
-        }
-
-        public void setFrom(String from) {
-            this.from = from;
-        }
-
-        public String getTo() {
-            return to;
-        }
-
-        public void setTo(String to) {
-            this.to = to;
-        }
-
-        public Integer getMs() {
-            return ms;
-        }
-
-        public void setMs(Integer ms) {
-            this.ms = ms;
-        }
-
-        public boolean isInfoOnly() {
-            return infoOnly;
-        }
-
-        public void setInfoOnly(boolean infoOnly) {
-            this.infoOnly = infoOnly;
-        }
-
-        public boolean isWithRange() {
-            return withRange;
-        }
-
-        public void setWithRange(boolean withRange) {
-            this.withRange = withRange;
-        }
-
-        public Integer getLimit() {
-            return limit;
-        }
-
-        public void setLimit(Integer limit) {
-            this.limit = limit;
-        }
-
-        public String getReplyToSuffix() {
-            return replyToSuffix;
-        }
-
-        public void setReplyToSuffix(String replyToSuffix) {
-            this.replyToSuffix = replyToSuffix;
-        }
     }
 
     public static class Byter {
@@ -304,27 +188,18 @@ public class SpeedTestByter {
 
             try {
                 String id = new String(Arrays.copyOfRange(bytes, 19, 24));
-                String time = new String(Arrays.copyOfRange(bytes, 41, 61));
+                int year = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 41, 45)));
+                int month = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 46, 48)));
+                int day = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 49, 51)));
+                int hour = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 52, 54)));
+                int minute = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 55, 57)));
+                int second = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 58, 60)));
                 String depth = new String(Arrays.copyOfRange(bytes, 71, 74));
+                String value = new String(Arrays.copyOfRange(bytes, 83, bytes.length - 2));
 
-                byte[] valueArr = new byte[bytes.length - 83];
-                for (int i = 83; i < bytes.length; i++) {
-                    if (bytes[i] != 125) {
-                        valueArr[i - 83] = bytes[i];
-                    }
-                }
-                String value = new String(valueArr);
+                CurveDataItem item = new CurveDataItem(LocalDateTime.of(year, month, day, hour, minute, second), depth, value);
 
-                CurveDataItem item = new SpeedTestByter.CurveDataItem();
-                item.setTime(OffsetDateTime.parse(time, DateTimeFormatter.ISO_DATE_TIME));
-                item.setDepth(Double.parseDouble(depth));
-                item.setValue(Double.parseDouble(value));
-
-                CurveDataMessage message = new CurveDataMessage();
-                message.setId(Long.parseLong(id));
-                message.setData(item);
-
-                return message;
+                return new CurveDataMessage(null, id, item);
             } catch (Exception e) {
                 System.err.println(e.getMessage());
                 return null;
