@@ -106,7 +106,7 @@ public class HistoryService implements MessageHandler {
         synchronized (loadInfo) {
 
             id = loadInfo.entrySet().stream()
-                    .filter(e -> e.getValue() == LoadStatus.PARK)
+                    .filter(e -> e.getValue() == LoadStatus.WAIT)
                     .map(Map.Entry::getKey)
                     .findFirst()
                     .orElse(null);
@@ -158,7 +158,7 @@ public class HistoryService implements MessageHandler {
                     log.info("History part received: subject {}, message {}", msg.getSubject(), json);
                     drainToStorage(id);
                     refreshMetaData(id);
-                    applyStatus(id, LoadStatus.PARK);
+                    applyStatus(id, LoadStatus.WAIT);
                 }
 
                 requestAllowed.incrementAndGet();
@@ -168,7 +168,6 @@ public class HistoryService implements MessageHandler {
             buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
                     .add(curveDataMessage.getData());
 
-//            storage.addData(curveDataMessage.getId(), curveDataMessage.getData(), false);
             receivedCount.get(curveDataMessage.getId()).incrementAndGet();
         }
     }
@@ -214,11 +213,12 @@ public class HistoryService implements MessageHandler {
     private void onStatusError(Long id) {
         buffer.get(id).clear();
         log.info("Clear buffer for id {}", id);
-        applyStatus(id, LoadStatus.PARK);
+        applyStatus(id, LoadStatus.WAIT);
     }
 
     private void onStatusDone(Long id) {
         storage.setHistoryLoaded(id);
+        buffer.remove(id);
 
         if (storage.isActiveCurve(id)) {
             storage.mergeCache(id);
@@ -284,6 +284,6 @@ public class HistoryService implements MessageHandler {
     }
 
     private enum LoadStatus {
-        DONE, REQUEST, PARK, ERROR
+        DONE, REQUEST, WAIT, ERROR
     }
 }
