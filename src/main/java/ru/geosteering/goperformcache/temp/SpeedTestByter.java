@@ -187,15 +187,15 @@ public class SpeedTestByter {
         public CurveDataMessage get(byte[] bytes) {
 
             try {
-                String id = new String(Arrays.copyOfRange(bytes, 19, 24));
-                int year = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 41, 45)));
-                int month = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 46, 48)));
-                int day = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 49, 51)));
-                int hour = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 52, 54)));
-                int minute = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 55, 57)));
-                int second = Integer.parseInt(new String(Arrays.copyOfRange(bytes, 58, 60)));
-                String depth = new String(Arrays.copyOfRange(bytes, 71, 74));
-                String value = new String(Arrays.copyOfRange(bytes, 83, bytes.length - 2));
+                String id = new String(bytes, 19, 5);
+                int year = Integer.parseInt(new String(bytes, 41, 4));
+                int month = Integer.parseInt(new String(bytes, 46, 2));
+                int day = Integer.parseInt(new String(bytes, 49, 2));
+                int hour = Integer.parseInt(new String(bytes, 52, 2));
+                int minute = Integer.parseInt(new String(bytes, 55, 2));
+                int second = Integer.parseInt(new String(bytes, 58, 2));
+                String depth = new String(bytes, 71, 3);
+                String value = new String(bytes, 83, bytes.length - 85);
 
                 CurveDataItem item = new CurveDataItem(LocalDateTime.of(year, month, day, hour, minute, second), depth, value);
 
