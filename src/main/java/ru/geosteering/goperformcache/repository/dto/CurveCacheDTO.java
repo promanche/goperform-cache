@@ -23,4 +23,8 @@ public class CurveCacheDTO {
         this.last = list.get(list.size() - 1).getTime();
         this.cache = CacheUtils.toJson(list);
     }
+
+    public List<CurveDataItem> toItems() {
+        return CacheUtils.parseCurveDataItems(cache);
+    }
 }

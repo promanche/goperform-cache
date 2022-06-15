@@ -5,16 +5,17 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperformcache.controller.dto.CacheResponse;
+import ru.geosteering.goperformcache.model.CurveDataItem;
 import ru.geosteering.goperformcache.model.CurveDataRequest;
 import ru.geosteering.goperformcache.nats.NatsConnector;
 import ru.geosteering.goperformcache.repository.CurveCacheRepository;
+import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
 import ru.geosteering.goperformcache.repository.dto.MetaDataDTO;
 import ru.geosteering.goperformcache.storage.Storage;
 
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -185,7 +186,23 @@ public class HistoryLoader {
     public CacheResponse getCacheResponse(Long id, OffsetDateTime from, OffsetDateTime to) {
 
         if (storage.isHistoryLoaded(id)) {
-            return new CacheResponse(); //TODO not realized yet
+            List<CurveDataItem> items = new ArrayList<>();
+
+            repository.get(id, from, to).stream()
+                    .map(CurveCacheDTO::toItems)
+                    .forEach(list -> {
+                        list.removeIf(i -> i.getTime().isAfter(to) || i.getTime().isBefore(from));
+                        items.addAll(list);
+                    });
+
+            items.addAll(storage.getFromCache(id, from, to));
+
+//            items.sort(Comparator.comparing(CurveDataItem::getTime));
+
+            CacheResponse response = new CacheResponse();
+            response.setId(id);
+            response.setData(items);
+            return response;
         }
 
         if (!loadInfo.containsKey(id)) {

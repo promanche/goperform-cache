@@ -21,4 +21,7 @@ public interface CurveCacheMapper {
 
     @Select("select curve_id as curveId, min(first) as first, max(last) as last from curve_cache group by curve_id")
     List<MetaDataDTO> getMetaData();
+
+    @Select("select curve_id as curveId, first, last, cache from curve_cache where id = #{id} and ((first between '#{from}' and '#{to}') or (last between '#{from}' and '#{to}'))")
+    List<CurveCacheDTO> get(@Param("id") Long id, @Param("from")OffsetDateTime from, @Param("to")OffsetDateTime to);
 }

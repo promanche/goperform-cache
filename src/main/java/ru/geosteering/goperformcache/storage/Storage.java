@@ -192,4 +192,29 @@ public class Storage {
     public void onRestartReal() {
         realTimeCache.clear();
     }
+
+    public List<CurveDataItem> getFromCache(Long id, OffsetDateTime from, OffsetDateTime to) {
+        List<CurveDataItem> result = getFromCache(id, from, to, false);
+        result.addAll(getFromCache(id, from, to, true));
+        return result;
+    }
+
+    private List<CurveDataItem> getFromCache(Long id, OffsetDateTime from, OffsetDateTime to, boolean isReal) {
+        ArrayList<CurveDataItem> fromCache = new ArrayList<>();
+
+        Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
+
+        if (cache.containsKey(id)) {
+            PriorityQueue<CurveDataItem> items = cache.get(id);
+            synchronized (items) {
+                if (!items.isEmpty() && items.peek().getTime().isBefore(to.plusSeconds(1))) {
+                    items.stream()
+                            .filter(item -> item.getTime().isBefore(to.plusSeconds(1)) && item.getTime().isAfter(from.minusSeconds(1)))
+                            .forEach(fromCache::add);
+                }
+            }
+        }
+
+        return fromCache;
+    }
 }

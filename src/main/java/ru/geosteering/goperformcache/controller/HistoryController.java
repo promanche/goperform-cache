@@ -21,6 +21,14 @@ public class HistoryController {
                                              @RequestParam(required = false) OffsetDateTime from,
                                              @RequestParam(required = false) OffsetDateTime to) {
 
+        if (from == null) {
+            from = OffsetDateTime.MIN;
+        }
+
+        if (to == null) {
+            to = OffsetDateTime.MAX;
+        }
+
         CacheResponse cacheResponse = loader.getCacheResponse(id, from, to);
 
         if (cacheResponse == null) {

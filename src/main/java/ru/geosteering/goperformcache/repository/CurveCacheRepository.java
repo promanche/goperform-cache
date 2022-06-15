@@ -44,4 +44,8 @@ public class CurveCacheRepository {
     public List<MetaDataDTO> getMetaData() {
         return mapper.getMetaData();
     }
+
+    public List<CurveCacheDTO> get(Long id, OffsetDateTime from, OffsetDateTime to) {
+        return mapper.get(id, from, to);
+    }
 }

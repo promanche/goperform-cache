@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
+import ru.geosteering.goperformcache.model.CurveDataItem;
 import ru.geosteering.goperformcache.model.CurveDataMessage;
 
 import java.io.IOException;
+import java.util.*;
 
 @Slf4j
 public class CacheUtils {
@@ -19,14 +21,21 @@ public class CacheUtils {
     }
 
     public static CurveDataMessage parseCurveDataMessage(String json, String subject) {
-        CurveDataMessage curveDataMessage;
         try {
-            curveDataMessage = mapper.readValue(json, CurveDataMessage.class);
+            return mapper.readValue(json, CurveDataMessage.class);
         } catch (IOException e) {
             log.warn("Parsing CurveDataMessage exception. Message: {}, subject: {}", json, subject);
             return null;
         }
-        return curveDataMessage;
+    }
+
+    public static List<CurveDataItem> parseCurveDataItems(String json) {
+        try {
+            return Arrays.asList(mapper.readValue(json, CurveDataItem[].class));
+        } catch (JsonProcessingException e) {
+            log.error("Parsing CurveDataItem[] exception: {}", json);
+            return Collections.emptyList();
+        }
     }
 
     public static byte[] toBytes(Object obj) {
@@ -57,13 +66,12 @@ public class CacheUtils {
     }
 
     public static Long getIdFromSubject(String subject) {
-        Long id = null;
         try {
             String[] arr = subject.split("\\.");
-            id = Long.parseLong(arr[arr.length - 1]);
+            return Long.parseLong(arr[arr.length - 1]);
         } catch (Exception e) {
-            log.error("Parsing id from subject exception: {}", e.getMessage(), e);
+            log.error("Parsing id from subject exception: {}", subject);
+            return null;
         }
-        return id;
     }
 }
