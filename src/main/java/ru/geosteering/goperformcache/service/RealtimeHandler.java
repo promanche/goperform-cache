@@ -9,7 +9,6 @@ import ru.geosteering.goperformcache.model.CurveDataMessage;
 import ru.geosteering.goperformcache.storage.Storage;
 import ru.geosteering.goperformcache.utils.CacheUtils;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.concurrent.*;
 
@@ -17,27 +16,21 @@ import static ru.geosteering.goperformcache.config.Config.REALTIME_THREADS;
 
 @Component
 @Slf4j
-public class RealtimeService implements MessageHandler {
+public class RealtimeHandler implements MessageHandler {
 
     private final Storage storage;
     private final SimpMessagingTemplate wsTemplate;
 
-    private ExecutorService messageHandler;
+    private ExecutorService messageHandler = Executors.newFixedThreadPool(REALTIME_THREADS);
 
-    public RealtimeService(Storage storage, SimpMessagingTemplate wsTemplate) {
+    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate) {
         this.storage = storage;
         this.wsTemplate = wsTemplate;
     }
 
-    @PostConstruct
-    private void start() {
-        messageHandler = Executors.newFixedThreadPool(REALTIME_THREADS);
-        log.info(getClass().getSimpleName() + " started");
-    }
-
     public void restart() {
         storage.onRestartReal();
-        start();
+        messageHandler = Executors.newFixedThreadPool(REALTIME_THREADS);
     }
 
     @Override

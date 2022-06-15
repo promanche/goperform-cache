@@ -1,22 +1,20 @@
 package ru.geosteering.goperformcache.service;
 
-import io.nats.client.Message;
-import io.nats.client.MessageHandler;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperformcache.model.*;
+import ru.geosteering.goperformcache.controller.dto.CacheResponse;
+import ru.geosteering.goperformcache.model.CurveDataRequest;
 import ru.geosteering.goperformcache.nats.NatsConnector;
 import ru.geosteering.goperformcache.repository.CurveCacheRepository;
 import ru.geosteering.goperformcache.repository.dto.MetaDataDTO;
 import ru.geosteering.goperformcache.storage.Storage;
-import ru.geosteering.goperformcache.utils.CacheUtils;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -24,38 +22,36 @@ import static ru.geosteering.goperformcache.config.Config.*;
 
 @Component
 @Slf4j
-public class HistoryService implements MessageHandler {
+public class HistoryLoader {
 
     private final Storage storage;
     private final CurveCacheRepository repository;
+    private final SimpMessagingTemplate wsTemplate;
 
     private final AtomicInteger requestAllowed;
     private final Map<Long, MetaDataDTO> metaData;
-    private final Map<Long, AtomicInteger> receivedCount;
     private final Map<Long, LoadStatus> loadInfo;
-    private final Map<Long, Set<CurveDataItem>> buffer;
 
-    private ExecutorService messageHandler;
     private ScheduledExecutorService requestScheduler;
 
     @Setter
     private NatsConnector connector;
 
-    public HistoryService(Storage storage, CurveCacheRepository repository) {
+    public HistoryLoader(Storage storage, CurveCacheRepository repository, SimpMessagingTemplate wsTemplate) {
         this.storage = storage;
         this.repository = repository;
+        this.wsTemplate = wsTemplate;
         requestAllowed = new AtomicInteger(HISTORY_ONETIME_REQUESTS);
-        metaData = new HashMap<>();
-        receivedCount = new HashMap<>();
-        loadInfo = new HashMap<>();
-        buffer = new ConcurrentHashMap<>();
+        metaData = new ConcurrentHashMap<>();
+        loadInfo = new ConcurrentHashMap<>();
     }
 
-    @PostConstruct
-    private void start() {
+    public void start() {
 
         loadMetaData();
-        initExecutors();
+
+        requestScheduler = Executors.newSingleThreadScheduledExecutor();
+        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 30000, 200, TimeUnit.MILLISECONDS);
 
         log.info(getClass().getSimpleName() + " started");
     }
@@ -63,32 +59,21 @@ public class HistoryService implements MessageHandler {
     public void restart() {
         requestAllowed.set(HISTORY_ONETIME_REQUESTS);
         metaData.clear();
-        receivedCount.clear();
         loadInfo.clear();
-        buffer.clear();
-
-        storage.onRestartHistory();
-
         start();
     }
 
     private void loadMetaData() {
         List<MetaDataDTO> metaData = repository.getMetaData();
         metaData.forEach(data -> this.metaData.put(data.getCurveId(), data));
+
         log.info("Metadata loaded: {}", metaData);
-    }
-
-    private void initExecutors() {
-        messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
-        requestScheduler = Executors.newSingleThreadScheduledExecutor();
-
-        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 30000, 200, TimeUnit.MILLISECONDS);
     }
 
     private void loadHistory() {
 
         if (requestAllowed.getAndDecrement() > 0) {
-            Long id = loadIfNeed();
+            Long id = loadNext();
 
             if (id == null) {
                 requestAllowed.incrementAndGet();
@@ -99,7 +84,7 @@ public class HistoryService implements MessageHandler {
         }
     }
 
-    private Long loadIfNeed() {
+    private Long loadNext() {
 
         Long id;
 
@@ -127,52 +112,7 @@ public class HistoryService implements MessageHandler {
         return id;
     }
 
-    @Override
-    public void onMessage(Message msg) {
-        messageHandler.submit(() -> handleMessage(msg));
-    }
-
-    private void handleMessage(Message msg) {
-
-        String json = new String(msg.getData());
-
-        CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(json, msg.getSubject());
-
-        if (curveDataMessage == null) {
-            Long id = CacheUtils.getIdFromSubject(msg.getSubject());
-            if (id == null) {
-                return;
-            }
-
-            if (CacheUtils.getFieldFromJson(json, "type").equalsIgnoreCase("end")) {
-                String sent = CacheUtils.getFieldFromJson(json, "sentCount");
-
-                if (sent.equalsIgnoreCase("0")) {
-                    applyStatus(id, LoadStatus.DONE);
-
-                } else if (!sent.equals(String.valueOf(receivedCount.get(id).get()))) {
-                    log.error("Received count '{}' not equals to sent '{}'", receivedCount.get(id).get(), sent);
-                    applyStatus(id, LoadStatus.ERROR);
-
-                } else {
-                    log.info("History part received: subject {}, message {}", msg.getSubject(), json);
-                    drainToStorage(id);
-                    refreshMetaData(id);
-                    applyStatus(id, LoadStatus.WAIT);
-                }
-
-                requestAllowed.incrementAndGet();
-            }
-
-        } else {
-            buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
-                    .add(curveDataMessage.getData());
-
-            receivedCount.get(curveDataMessage.getId()).incrementAndGet();
-        }
-    }
-
-    private void applyStatus(Long id, LoadStatus status) {
+    public void applyStatus(Long id, LoadStatus status) {
 
         log.info("Status for {}: {}", id, status);
 
@@ -200,8 +140,6 @@ public class HistoryService implements MessageHandler {
         CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
         log.info("Request: {}", request);
 
-        receivedCount.put(id, new AtomicInteger(0));
-
         try {
             connector.sendRequest(request.toBytes());
         } catch (Exception e) {
@@ -211,14 +149,11 @@ public class HistoryService implements MessageHandler {
     }
 
     private void onStatusError(Long id) {
-        buffer.get(id).clear();
-        log.info("Clear buffer for id {}", id);
         applyStatus(id, LoadStatus.WAIT);
     }
 
     private void onStatusDone(Long id) {
         storage.setHistoryLoaded(id);
-        buffer.remove(id);
 
         if (storage.isActiveCurve(id)) {
             storage.mergeCache(id);
@@ -226,15 +161,7 @@ public class HistoryService implements MessageHandler {
         //TODO websocket -> loaded
     }
 
-    private void drainToStorage(Long id) {
-
-        Set<CurveDataItem> set = buffer.get(id);
-        log.info("Drain buffer to storage. Curve id: {}, items: {}", id, set.size());
-        storage.addAll(id, set, false);
-        set.clear();
-    }
-
-    private void refreshMetaData(Long id) {
+    public void refreshMetaData(Long id) {
 
         OffsetDateTime last = storage.getLastHistory(id);
         OffsetDateTime first = storage.getFirstHistory(id);
@@ -251,20 +178,24 @@ public class HistoryService implements MessageHandler {
         metaData.put(id, metaDataDTO);
     }
 
-    private void shutdownHandler() {
-        try {
-            messageHandler.shutdown();
-            if (!messageHandler.awaitTermination(5, TimeUnit.SECONDS)) {
-                log.warn(getClass().getSimpleName() + " messageHandler shutdown timeout");
-                messageHandler.shutdownNow();
-            }
-            log.info(getClass().getSimpleName() + " messageHandler shutdown");
-        } catch (Exception e) {
-            log.error(getClass().getSimpleName() + "messageHandler shutdown exception: {}", e.getMessage(), e);
-        }
+    public void onEndMessage() {
+        requestAllowed.incrementAndGet();
     }
 
-    private void shutdownScheduler() {
+    public CacheResponse getCacheResponse(Long id, OffsetDateTime from, OffsetDateTime to) {
+
+        if (storage.isHistoryLoaded(id)) {
+            return new CacheResponse(); //TODO not realized yet
+        }
+
+        if (!loadInfo.containsKey(id)) {
+            applyStatus(id, LoadStatus.WAIT);
+        }
+
+        return null;
+    }
+
+    public void stop() {
         try {
             requestScheduler.shutdown();
             if (!requestScheduler.awaitTermination(2, TimeUnit.SECONDS)) {
@@ -275,15 +206,5 @@ public class HistoryService implements MessageHandler {
         } catch (Exception e) {
             log.error(getClass().getSimpleName() + "requestScheduler shutdown exception: {}", e.getMessage(), e);
         }
-    }
-
-    @PreDestroy
-    public void stop() {
-        shutdownScheduler();
-        shutdownHandler();
-    }
-
-    private enum LoadStatus {
-        DONE, REQUEST, WAIT, ERROR
     }
 }

@@ -5,8 +5,7 @@ import io.nats.client.impl.NatsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperformcache.service.HistoryService;
-import ru.geosteering.goperformcache.service.RealtimeService;
+import ru.geosteering.goperformcache.service.*;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
@@ -20,15 +19,18 @@ import static ru.geosteering.goperformcache.config.Config.*;
 @RequiredArgsConstructor
 public class NatsConnector {
 
+    private final RealtimeHandler realtimeHandler;
+    private final HistoryHandler historyHandler;
+    private final HistoryLoader historyLoader;
+
     private Connection connection;
     private CustomErrorListener errorListener;
-    private final RealtimeService realtimeService;
-    private final HistoryService historyService;
 
     @PostConstruct
     private void init() {
-        historyService.setConnector(this);
         errorListener = new CustomErrorListener(this);
+        historyLoader.setConnector(this);
+        historyLoader.start();
     }
 
     public void connect() {
@@ -50,8 +52,8 @@ public class NatsConnector {
 
         if (connection != null) {
             Dispatcher dispatcher = connection.createDispatcher();
-            dispatcher.subscribe(SUBJECT + ".*", realtimeService);
-            dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyService);
+            dispatcher.subscribe(SUBJECT + ".*", realtimeHandler);
+            dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyHandler);
         }
     }
 
@@ -66,13 +68,15 @@ public class NatsConnector {
     }
 
     private void onError() {
-        historyService.stop();
-        realtimeService.stop();
+        historyLoader.stop();
+        realtimeHandler.stop();
+        historyHandler.stop();
     }
 
     private void onReconnect() {
-        realtimeService.restart();
-        historyService.restart();
+        realtimeHandler.restart();
+        historyHandler.restart();
+        historyLoader.restart();
     }
 
     @PreDestroy
