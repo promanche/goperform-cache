@@ -22,6 +22,7 @@ public class Storage {
     private final Map<Long, PriorityQueue<CurveDataItem>> realTimeCache;
     private final Map<Long, PriorityQueue<CurveDataItem>> historyCache;
     private final Set<Long> historyLoaded;
+    private final Set<Long> activeCurves;
     private final Set<CurveCacheDTO> errorBuffer;
     //TODO error buffer -> what to do?
 
@@ -30,6 +31,7 @@ public class Storage {
         realTimeCache = new ConcurrentHashMap<>();
         historyCache = new ConcurrentHashMap<>();
         historyLoaded = ConcurrentHashMap.newKeySet();
+        activeCurves = ConcurrentHashMap.newKeySet();
         errorBuffer = ConcurrentHashMap.newKeySet();
     }
 
@@ -44,6 +46,10 @@ public class Storage {
             items.add(item);
             transferIfNeed(id, items, isReal);
         }
+
+        if (isReal) {
+            activeCurves.add(id);
+        }
     }
 
     public void addAll(Long id, Collection<CurveDataItem> collection, boolean isReal) {
@@ -51,20 +57,21 @@ public class Storage {
         Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
 
         PriorityQueue<CurveDataItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CurveDataItem::getTime)));
+                cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing(CurveDataItem::getTime)));
 
         synchronized (items) {
             items.addAll(collection);
-            transferIfNeed(id, items, false);
+            transferIfNeed(id, items, isReal);
         }
     }
 
     private void transferIfNeed(Long id, PriorityQueue<CurveDataItem> items, boolean isReal) {
-        if (isReal && !isHistoryLoaded(id)) {
+        if (isReal && !isHistoryLoaded(id) || items.size() < BATCH_SIZE + MARGIN_SIZE) {
             return;
         }
 
-        List<CurveCacheDTO> transferList = new ArrayList<>();
+        List<CurveCacheDTO> transferList = new ArrayList<>((items.size() - MARGIN_SIZE) / BATCH_SIZE);
+
         fillTransferList(id, items, transferList);
 
         if (!transferList.isEmpty()) {
@@ -97,18 +104,18 @@ public class Storage {
 
             PriorityQueue<CurveDataItem> historyItems = historyCache.get(id);
 
+            if (historyItems != null && !historyItems.isEmpty()) {
+                int before = historyItems.size();
+                log.info("Start merging caches. Before merging: id={}, real_size={}, hist_size={}", id, realItems.size(), before);
 
-            int before = historyItems.size();
-            log.info("Start merging caches. Before merging: id={}, real_size={}, hist_size={}", id, realItems.size(), before);
-            historyItems.removeAll(realItems);
-            log.info("Found {} duplicates", before - historyItems.size());
+                historyItems.removeAll(realItems);
+                log.info("Found {} duplicates", before - historyItems.size());
 
-            realItems.addAll(historyItems);
-            historyItems.clear();
+                realItems.addAll(historyItems);
+                historyItems.clear();
 
-            transferIfNeed(id, realItems, true);
-
-            log.info("End merging caches. After merging: id={}, real_size={}, hist_size={}", id, realItems.size(), historyItems.size());
+                transferIfNeed(id, realItems, true);
+            }
         }
     }
 
@@ -122,7 +129,9 @@ public class Storage {
     }
 
     public Set<Long> getActiveCurves() {
-        return Set.copyOf(realTimeCache.keySet());
+        synchronized (activeCurves) {
+            return Set.copyOf(activeCurves);
+        }
     }
 
     public OffsetDateTime getFirstReal(Long id) {
@@ -173,7 +182,7 @@ public class Storage {
     }
 
     public boolean isActiveCurve(Long id) {
-        return realTimeCache.containsKey(id);
+        return activeCurves.contains(id);
     }
 
     public void setHistoryLoaded(Long id) {
@@ -191,6 +200,7 @@ public class Storage {
 
     public void onRestartReal() {
         realTimeCache.clear();
+        activeCurves.clear();
     }
 
     public List<CurveDataItem> getFromCache(Long id, OffsetDateTime from, OffsetDateTime to) {
@@ -214,6 +224,8 @@ public class Storage {
                 }
             }
         }
+
+        fromCache.sort(Comparator.comparing(CurveDataItem::getTime));
 
         return fromCache;
     }

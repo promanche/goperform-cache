@@ -3,6 +3,7 @@ package ru.geosteering.goperformcache.service;
 import io.nats.client.Message;
 import io.nats.client.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperformcache.model.CurveDataMessage;
@@ -39,12 +40,15 @@ public class RealtimeHandler implements MessageHandler {
     }
 
     private void handleMessage(Message msg) {
+        try {
+            CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(new String(msg.getData()), msg.getSubject());
 
-        CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(new String(msg.getData()), msg.getSubject());
-
-        if (curveDataMessage != null) {
-            storage.add(curveDataMessage.getId(), curveDataMessage.getData(), true);
-            wsTemplate.convertAndSend("/realtime/curve", curveDataMessage);
+            if (curveDataMessage != null) {
+                storage.add(curveDataMessage.getId(), curveDataMessage.getData(), true);
+                wsTemplate.convertAndSend("/realtime/curve", curveDataMessage);
+            }
+        } catch (MessagingException e) {
+            log.error(e.getMessage(), e);
         }
     }
 

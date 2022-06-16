@@ -51,54 +51,66 @@ public class HistoryHandler implements MessageHandler {
 
     private void handleMessage(Message msg) {
 
-        String json = new String(msg.getData());
+        try {
+            String json = new String(msg.getData());
 
-        CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(json, msg.getSubject());
+            CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(json, msg.getSubject());
 
-        if (curveDataMessage == null) {
-            Long id = CacheUtils.getIdFromSubject(msg.getSubject());
-            if (id == null) {
-                return;
-            }
-
-            if (CacheUtils.getFieldFromJson(json, "type").equalsIgnoreCase("end")) {
-                String sent = CacheUtils.getFieldFromJson(json, "sentCount");
-
-                int received = receivedCount.remove(id).get();
-
-                if (sent.equalsIgnoreCase("0")) {
-                    buffer.remove(id);
-                    historyLoader.applyStatus(id, LoadStatus.DONE);
-
-                } else if (!sent.equals(String.valueOf(received))) {
-                    log.error("Received count '{}' not equals to sent '{}'", received, sent);
-                    buffer.get(id).clear();
-                    historyLoader.applyStatus(id, LoadStatus.ERROR);
-
-                } else {
-                    log.info("History part received: subject {}, message {}", msg.getSubject(), json);
-                    drainToStorage(id);
-                    historyLoader.refreshMetaData(id);
-                    historyLoader.applyStatus(id, LoadStatus.WAIT);
+            if (curveDataMessage == null) {
+                Long id = CacheUtils.getIdFromSubject(msg.getSubject());
+                if (id == null) {
+                    return;
                 }
 
-                historyLoader.onEndMessage();
+                if (CacheUtils.getFieldFromJson(json, "type").equalsIgnoreCase("end")) {
+                    String sent = CacheUtils.getFieldFromJson(json, "sentCount");
+
+                    int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : 0;
+
+                    if (sent.equals("0")) {
+                        historyLoader.applyStatus(id, LoadStatus.DONE);
+                        buffer.remove(id);
+
+                    } else if (!sent.equals(String.valueOf(received))) {
+                        log.error("Received count '{}' not equals to sent '{}'", received, sent);
+                        buffer.get(id).clear();
+                        historyLoader.applyStatus(id, LoadStatus.ERROR);
+
+                    } else {
+                        try {
+                            log.info("History part received: subject {}, message {}", msg.getSubject(), json);
+                            drainToStorage(id);
+                            historyLoader.refreshMetaData(id);
+                            historyLoader.applyStatus(id, LoadStatus.WAIT);
+                        } catch (Exception e) {
+                            //Это костыль для time = null
+                            log.error(e.getMessage());
+                            historyLoader.applyStatus(id, LoadStatus.ERROR);
+                        } finally {
+                            buffer.get(id).clear();
+                        }
+                    }
+
+                    historyLoader.onEndMessage();
+                }
+
+            } else {
+
+                buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
+                        .add(curveDataMessage.getData());
+
+                receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
+                        .incrementAndGet();
             }
-
-        } else {
-            buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
-                    .add(curveDataMessage.getData());
-
-            receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
-                    .incrementAndGet();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
         }
     }
 
     private void drainToStorage(Long id) {
-        Set<CurveDataItem> set = buffer.get(id);
-        log.info("Drain buffer to storage. Curve id: {}, items: {}", id, set.size());
-        storage.addAll(id, set, false);
-        set.clear();
+        log.info("Drain buffer to storage. Curve id: {}, items: {}", id, buffer.get(id).size());
+        storage.addAll(id, buffer.get(id), false);
+        buffer.get(id).clear();
     }
 
     @PreDestroy

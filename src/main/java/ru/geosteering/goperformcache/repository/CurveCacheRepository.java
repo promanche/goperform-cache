@@ -1,6 +1,7 @@
 package ru.geosteering.goperformcache.repository;
 
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
@@ -11,6 +12,7 @@ import java.util.List;
 
 @Repository
 @AllArgsConstructor
+@Slf4j
 public class CurveCacheRepository {
 
     private final CurveCacheMapper mapper;
@@ -18,10 +20,10 @@ public class CurveCacheRepository {
 
     public void save(List<CurveCacheDTO> list) throws Exception {
         SqlSession session = sessionFactory.openSession(ExecutorType.BATCH);
+
         try {
             for (CurveCacheDTO dto : list) {
-                session.getMapper(CurveCacheMapper.class)
-                        .save(dto);
+                mapper.save(dto);
             }
 
             session.commit();

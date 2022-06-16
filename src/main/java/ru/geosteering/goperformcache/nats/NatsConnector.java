@@ -10,7 +10,7 @@ import ru.geosteering.goperformcache.service.*;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutionException;
 
 import static ru.geosteering.goperformcache.config.Config.*;
 
@@ -57,13 +57,13 @@ public class NatsConnector {
         }
     }
 
-    public void sendRequest(byte[] data) throws ExecutionException, InterruptedException, TimeoutException {
+    public void sendRequest(byte[] data) throws ExecutionException, InterruptedException {
         Message message = NatsMessage.builder()
                 .subject(SUBJECT)
                 .data(data)
                 .build();
 
-        Message response = connection.request(message).get(3, TimeUnit.SECONDS);
+        Message response = connection.request(message).get();
         log.info("Response: {}", response.toString());
     }
 

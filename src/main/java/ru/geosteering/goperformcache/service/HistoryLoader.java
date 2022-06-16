@@ -13,6 +13,7 @@ import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
 import ru.geosteering.goperformcache.repository.dto.MetaDataDTO;
 import ru.geosteering.goperformcache.storage.Storage;
 
+import javax.annotation.PreDestroy;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -52,7 +53,7 @@ public class HistoryLoader {
         loadMetaData();
 
         requestScheduler = Executors.newSingleThreadScheduledExecutor();
-        requestScheduler.scheduleWithFixedDelay(this::loadHistory, 30000, 200, TimeUnit.MILLISECONDS);
+        requestScheduler.scheduleAtFixedRate(this::loadHistory, 30000, 100, TimeUnit.MILLISECONDS);
 
         log.info(getClass().getSimpleName() + " started");
     }
@@ -73,15 +74,19 @@ public class HistoryLoader {
 
     private void loadHistory() {
 
-        if (requestAllowed.getAndDecrement() > 0) {
-            Long id = loadNext();
+        try {
+            if (requestAllowed.getAndDecrement() > 0) {
+                Long id = loadNext();
 
-            if (id == null) {
+                if (id == null) {
+                    requestAllowed.incrementAndGet();
+                }
+
+            } else {
                 requestAllowed.incrementAndGet();
             }
-
-        } else {
-            requestAllowed.incrementAndGet();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
         }
     }
 
@@ -197,8 +202,6 @@ public class HistoryLoader {
 
             items.addAll(storage.getFromCache(id, from, to));
 
-//            items.sort(Comparator.comparing(CurveDataItem::getTime));
-
             CacheResponse response = new CacheResponse();
             response.setId(id);
             response.setData(items);
@@ -212,6 +215,7 @@ public class HistoryLoader {
         return null;
     }
 
+    @PreDestroy
     public void stop() {
         try {
             requestScheduler.shutdown();
