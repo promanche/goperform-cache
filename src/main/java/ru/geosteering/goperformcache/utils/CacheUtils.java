@@ -22,7 +22,12 @@ public class CacheUtils {
 
     public static CurveDataMessage parseCurveDataMessage(String json, String subject) {
         try {
-            return mapper.readValue(json, CurveDataMessage.class);
+            CurveDataMessage message = mapper.readValue(json, CurveDataMessage.class);
+            if (message.getData().getTime() == null) {
+                throw new RuntimeException();
+            }
+            return message;
+
         } catch (IOException e) {
             log.warn("Parsing CurveDataMessage exception. Message: {}, subject: {}", json, subject);
             return null;
@@ -31,10 +36,10 @@ public class CacheUtils {
 
     public static List<CurveDataItem> parseCurveDataItems(String json) {
         try {
-            return Arrays.asList(mapper.readValue(json, CurveDataItem[].class));
+            return new ArrayList<>(Arrays.asList(mapper.readValue(json, CurveDataItem[].class)));
         } catch (JsonProcessingException e) {
             log.error("Parsing CurveDataItem[] exception: {}", json);
-            return Collections.emptyList();
+            return new ArrayList<>();
         }
     }
 

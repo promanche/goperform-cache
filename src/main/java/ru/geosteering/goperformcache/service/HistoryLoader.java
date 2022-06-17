@@ -191,16 +191,21 @@ public class HistoryLoader {
     public CacheResponse getCacheResponse(Long id, OffsetDateTime from, OffsetDateTime to) {
 
         if (storage.isHistoryLoaded(id)) {
+            OffsetDateTime finalFrom = from == null ? metaData.get(id).getFirst() : from;
+            OffsetDateTime finalTo = to == null ? metaData.get(id).getLast() : to;
+
             List<CurveDataItem> items = new ArrayList<>();
 
-            repository.get(id, from, to).stream()
-                    .map(CurveCacheDTO::toItems)
-                    .forEach(list -> {
-                        list.removeIf(i -> i.getTime().isAfter(to) || i.getTime().isBefore(from));
-                        items.addAll(list);
-                    });
+            List<List<CurveDataItem>> fromDB = repository.get(id, finalFrom, finalTo).stream()
+                    .map(CurveCacheDTO::toItems).toList();
 
-            items.addAll(storage.getFromCache(id, from, to));
+            if (!fromDB.isEmpty()) {
+                fromDB.get(0).removeIf(i -> i.getTime().isBefore(finalFrom));
+                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getTime().isAfter(finalTo));
+                fromDB.forEach(items::addAll);
+            }
+
+            items.addAll(storage.getFromCache(id, finalFrom, finalTo));
 
             CacheResponse response = new CacheResponse();
             response.setId(id);

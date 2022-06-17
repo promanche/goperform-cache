@@ -1,6 +1,7 @@
 package ru.geosteering.goperformcache.controller;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,16 +19,8 @@ public class HistoryController {
 
     @GetMapping
     public ResponseEntity<CacheResponse> get(@RequestParam Long id,
-                                             @RequestParam(required = false) OffsetDateTime from,
-                                             @RequestParam(required = false) OffsetDateTime to) {
-
-        if (from == null) {
-            from = OffsetDateTime.MIN;
-        }
-
-        if (to == null) {
-            to = OffsetDateTime.MAX;
-        }
+                                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+                                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to) {
 
         CacheResponse cacheResponse = loader.getCacheResponse(id, from, to);
 

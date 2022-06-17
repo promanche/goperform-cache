@@ -117,6 +117,8 @@ public class Storage {
                 transferIfNeed(id, realItems, true);
             }
         }
+
+        historyCache.remove(id);
     }
 
     public synchronized String getInfo() {
@@ -136,12 +138,15 @@ public class Storage {
 
     public OffsetDateTime getFirstReal(Long id) {
 
-        OffsetDateTime first;
-        PriorityQueue<CurveDataItem> items = realTimeCache.get(id);
+        OffsetDateTime first = null;
 
-        synchronized (items) {
-            CurveDataItem item = realTimeCache.get(id).peek();
-            first = item == null ? null : item.getTime();
+        if (realTimeCache.containsKey(id)) {
+            PriorityQueue<CurveDataItem> items = realTimeCache.get(id);
+
+            synchronized (items) {
+                CurveDataItem item = realTimeCache.get(id).peek();
+                first = item == null ? null : item.getTime();
+            }
         }
 
         return first;
@@ -151,7 +156,7 @@ public class Storage {
 
         OffsetDateTime first = repository.getMinFirst(id);
 
-        if (first == null) {
+        if (first == null && historyCache.containsKey(id)) {
 
             PriorityQueue<CurveDataItem> items = historyCache.get(id);
 
@@ -166,16 +171,18 @@ public class Storage {
 
     public OffsetDateTime getLastHistory(Long id) {
 
-        CurveDataItem curveDataItem;
-        OffsetDateTime result;
-        PriorityQueue<CurveDataItem> items = historyCache.get(id);
+        OffsetDateTime result = null;
 
-        synchronized (items) {
-            curveDataItem = items.stream()
-                    .max(Comparator.comparing(CurveDataItem::getTime))
-                    .orElse(null);
+        if (historyCache.containsKey(id)) {
+            PriorityQueue<CurveDataItem> items = historyCache.get(id);
 
-            result = curveDataItem == null ? repository.getMaxLast(id) : curveDataItem.getTime();
+            synchronized (items) {
+                CurveDataItem curveDataItem = items.stream()
+                        .max(Comparator.comparing(CurveDataItem::getTime))
+                        .orElse(null);
+
+                result = curveDataItem == null ? repository.getMaxLast(id) : curveDataItem.getTime();
+            }
         }
 
         return result;

@@ -77,18 +77,10 @@ public class HistoryHandler implements MessageHandler {
                         historyLoader.applyStatus(id, LoadStatus.ERROR);
 
                     } else {
-                        try {
-                            log.info("History part received: subject {}, message {}", msg.getSubject(), json);
-                            drainToStorage(id);
-                            historyLoader.refreshMetaData(id);
-                            historyLoader.applyStatus(id, LoadStatus.WAIT);
-                        } catch (Exception e) {
-                            //Это костыль для time = null
-                            log.error(e.getMessage());
-                            historyLoader.applyStatus(id, LoadStatus.ERROR);
-                        } finally {
-                            buffer.get(id).clear();
-                        }
+                        log.info("History part received: subject {}, message {}", msg.getSubject(), json);
+                        drainToStorage(id);
+                        historyLoader.refreshMetaData(id);
+                        historyLoader.applyStatus(id, LoadStatus.WAIT);
                     }
 
                     historyLoader.onEndMessage();

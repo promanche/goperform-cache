@@ -8,6 +8,7 @@ import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
 import ru.geosteering.goperformcache.repository.dto.MetaDataDTO;
 
 import java.time.OffsetDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Repository
@@ -48,6 +49,6 @@ public class CurveCacheRepository {
     }
 
     public List<CurveCacheDTO> get(Long id, OffsetDateTime from, OffsetDateTime to) {
-        return mapper.get(id, from, to);
+        return mapper.get(id, from.minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME), to.plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME));
     }
 }

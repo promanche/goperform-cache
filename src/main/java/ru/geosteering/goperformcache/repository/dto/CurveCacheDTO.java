@@ -4,7 +4,7 @@ import lombok.*;
 import ru.geosteering.goperformcache.model.CurveDataItem;
 import ru.geosteering.goperformcache.utils.CacheUtils;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Getter
@@ -13,14 +13,14 @@ import java.util.List;
 @EqualsAndHashCode
 public class CurveCacheDTO {
     private Long curveId;
-    private OffsetDateTime first;
-    private OffsetDateTime last;
+    private LocalDateTime first;
+    private LocalDateTime last;
     private String cache;
 
     public CurveCacheDTO(Long curveId, List<CurveDataItem> list) {
         this.curveId = curveId;
-        this.first = list.get(0).getTime();
-        this.last = list.get(list.size() - 1).getTime();
+        this.first = list.get(0).getTime().toLocalDateTime();
+        this.last = list.get(list.size() - 1).getTime().toLocalDateTime();
         this.cache = CacheUtils.toJson(list);
     }
 
