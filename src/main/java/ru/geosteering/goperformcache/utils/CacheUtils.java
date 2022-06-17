@@ -24,7 +24,7 @@ public class CacheUtils {
         try {
             CurveDataMessage message = mapper.readValue(json, CurveDataMessage.class);
             if (message.getData().getTime() == null) {
-                throw new RuntimeException();
+                throw new RuntimeException("Broken item. Message: " + json + ", subject: " + subject); //TODO обрабатывать такие ситуации?
             }
             return message;
 
