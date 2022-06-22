@@ -4,14 +4,15 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
+import ru.geosteering.commonModels.dataService.CurveDataItem;
+import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.goperformcache.controller.dto.CacheResponse;
-import ru.geosteering.goperformcache.model.CurveDataItem;
-import ru.geosteering.goperformcache.model.CurveDataRequest;
 import ru.geosteering.goperformcache.nats.NatsConnector;
 import ru.geosteering.goperformcache.repository.CurveCacheRepository;
 import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
 import ru.geosteering.goperformcache.repository.dto.MetaDataDTO;
 import ru.geosteering.goperformcache.storage.Storage;
+import ru.geosteering.goperformcache.utils.CacheUtils;
 
 import javax.annotation.PreDestroy;
 import java.time.OffsetDateTime;
@@ -128,6 +129,7 @@ public class HistoryLoader {
             case REQUEST -> onStatusRequest(id);
             case ERROR -> onStatusError(id);
             case DONE -> onStatusDone(id);
+            case PART -> onStatusPart(id);
             default -> {
             }
         }
@@ -147,7 +149,7 @@ public class HistoryLoader {
         log.info("Request: {}", request);
 
         try {
-            connector.sendRequest(request.toBytes());
+            connector.sendRequest(CacheUtils.toBytes(request));
         } catch (Exception e) {
             log.error("Send request exception: {}", e.getMessage());
             applyStatus(id, LoadStatus.ERROR);
@@ -167,18 +169,23 @@ public class HistoryLoader {
         //TODO websocket -> loaded
     }
 
-    public void refreshMetaData(Long id) {
+    private void onStatusPart(Long id) {
+        refreshMetaData(id);
+        applyStatus(id, LoadStatus.WAIT);
+    }
 
-        OffsetDateTime last = storage.getLastHistory(id);
-        OffsetDateTime first = storage.getFirstHistory(id);
+    private void refreshMetaData(Long id) {
 
         MetaDataDTO metaDataDTO = metaData.get(id);
+
         if (metaDataDTO == null) {
             metaDataDTO = new MetaDataDTO();
+            OffsetDateTime first = repository.getMinFirst(id);
             metaDataDTO.setCurveId(id);
+            metaDataDTO.setFirst(first);
         }
 
-        metaDataDTO.setFirst(first);
+        OffsetDateTime last = storage.getLastHistory(id);
         metaDataDTO.setLast(last);
 
         metaData.put(id, metaDataDTO);
@@ -192,7 +199,7 @@ public class HistoryLoader {
 
         if (storage.isHistoryLoaded(id)) {
             OffsetDateTime finalFrom = from == null ? metaData.get(id).getFirst() : from;
-            OffsetDateTime finalTo = to == null ? metaData.get(id).getLast() : to;
+            OffsetDateTime finalTo = to == null ? OffsetDateTime.now().plusHours(23) : to;
 
             List<CurveDataItem> items = new ArrayList<>();
 
@@ -200,8 +207,8 @@ public class HistoryLoader {
                     .map(CurveCacheDTO::toItems).toList();
 
             if (!fromDB.isEmpty()) {
-                fromDB.get(0).removeIf(i -> i.getTime().isBefore(finalFrom));
-                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getTime().isAfter(finalTo));
+                fromDB.get(0).removeIf(i -> i.time.isBefore(finalFrom));
+                fromDB.get(fromDB.size() - 1).removeIf(i -> i.time.isAfter(finalTo));
                 fromDB.forEach(items::addAll);
             }
 

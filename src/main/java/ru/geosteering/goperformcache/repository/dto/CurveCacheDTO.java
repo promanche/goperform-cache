@@ -1,7 +1,7 @@
 package ru.geosteering.goperformcache.repository.dto;
 
 import lombok.*;
-import ru.geosteering.goperformcache.model.CurveDataItem;
+import ru.geosteering.commonModels.dataService.CurveDataItem;
 import ru.geosteering.goperformcache.utils.CacheUtils;
 
 import java.time.LocalDateTime;
@@ -19,8 +19,8 @@ public class CurveCacheDTO {
 
     public CurveCacheDTO(Long curveId, List<CurveDataItem> list) {
         this.curveId = curveId;
-        this.first = list.get(0).getTime().toLocalDateTime();
-        this.last = list.get(list.size() - 1).getTime().toLocalDateTime();
+        this.first = list.get(0).time.toLocalDateTime();
+        this.last = list.get(list.size() - 1).time.toLocalDateTime();
         this.cache = CacheUtils.toJson(list);
     }
 

@@ -6,7 +6,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.MessagingException;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperformcache.model.CurveDataMessage;
+import ru.geosteering.commonModels.dataService.responses.ApiMessage;
+import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.goperformcache.storage.Storage;
 import ru.geosteering.goperformcache.utils.CacheUtils;
 
@@ -41,9 +42,10 @@ public class RealtimeHandler implements MessageHandler {
 
     private void handleMessage(Message msg) {
         try {
-            CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(new String(msg.getData()), msg.getSubject());
+            ApiMessage apiMessage = CacheUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
 
-            if (curveDataMessage != null) {
+            if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
+                CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
                 storage.add(curveDataMessage.getId(), curveDataMessage.getData(), true);
                 wsTemplate.convertAndSend("/realtime/curve", curveDataMessage);
             }

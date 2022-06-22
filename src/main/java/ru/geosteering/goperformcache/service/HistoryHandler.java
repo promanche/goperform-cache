@@ -4,8 +4,8 @@ import io.nats.client.Message;
 import io.nats.client.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperformcache.model.CurveDataItem;
-import ru.geosteering.goperformcache.model.CurveDataMessage;
+import ru.geosteering.commonModels.dataService.CurveDataItem;
+import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperformcache.storage.Storage;
 import ru.geosteering.goperformcache.utils.CacheUtils;
 
@@ -52,51 +52,62 @@ public class HistoryHandler implements MessageHandler {
     private void handleMessage(Message msg) {
 
         try {
-            String json = new String(msg.getData());
+            ApiMessage apiMessage = CacheUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
 
-            CurveDataMessage curveDataMessage = CacheUtils.parseCurveDataMessage(json, msg.getSubject());
+            if (apiMessage != null) {
+                ApiMessage.MessageType type = apiMessage.getType();
 
-            if (curveDataMessage == null) {
-                Long id = CacheUtils.getIdFromSubject(msg.getSubject());
-                if (id == null) {
-                    return;
+                switch (type) {
+                    case CURVE_DATA -> processCurveData((CurveDataMessage) apiMessage);
+                    case DATA_END -> processDataEnd((DataEndMessage) apiMessage, msg.getSubject());
+                    case STATUS -> processStatus((StatusMessage) apiMessage, msg.getSubject());
+                    default -> log.warn("Some ApiMessage: {}, subject: {}", apiMessage, msg.getSubject());
                 }
-
-                if (CacheUtils.getFieldFromJson(json, "type").equalsIgnoreCase("end")) {
-                    String sent = CacheUtils.getFieldFromJson(json, "sentCount");
-
-                    int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : 0;
-
-                    if (sent.equals("0")) {
-                        historyLoader.applyStatus(id, LoadStatus.DONE);
-                        buffer.remove(id);
-
-                    } else if (!sent.equals(String.valueOf(received))) {
-                        log.error("Received count '{}' not equals to sent '{}'", received, sent);
-                        buffer.get(id).clear();
-                        historyLoader.applyStatus(id, LoadStatus.ERROR);
-
-                    } else {
-                        log.info("History part received: subject {}, message {}", msg.getSubject(), json);
-                        drainToStorage(id);
-                        historyLoader.refreshMetaData(id);
-                        historyLoader.applyStatus(id, LoadStatus.WAIT);
-                    }
-
-                    historyLoader.onEndMessage();
-                }
-
-            } else {
-
-                buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
-                        .add(curveDataMessage.getData());
-
-                receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
-                        .incrementAndGet();
             }
+
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
+    }
+
+    private void processCurveData(CurveDataMessage curveDataMessage) {
+
+        buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
+                .add(curveDataMessage.getData());
+
+        receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
+                .incrementAndGet();
+    }
+
+    private void processDataEnd(DataEndMessage dataEndMessage, String subject) throws InterruptedException {
+
+        Thread.sleep(100);
+
+        Long id = CacheUtils.getIdFromSubject(subject);
+
+        int sent = dataEndMessage.getSentCount();
+        int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : -1;
+
+        if (sent == 0) {
+            buffer.remove(id);
+            historyLoader.applyStatus(id, LoadStatus.DONE);
+
+        } else if (sent != received) {
+            log.error("Received count '{}' not equals to sent '{}'", received, sent);
+            buffer.get(id).clear();
+            historyLoader.applyStatus(id, LoadStatus.ERROR);
+
+        } else {
+            log.info("History part received: id {}, message {}", id, dataEndMessage);
+            drainToStorage(id);
+            historyLoader.applyStatus(id, LoadStatus.PART);
+        }
+
+        historyLoader.onEndMessage();
+    }
+
+    private void processStatus(StatusMessage statusMessage, String subject) {
+        log.warn("StatusMessage: {}, subject {}", statusMessage, subject);
     }
 
     private void drainToStorage(Long id) {

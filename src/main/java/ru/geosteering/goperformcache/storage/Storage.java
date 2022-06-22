@@ -2,7 +2,7 @@ package ru.geosteering.goperformcache.storage;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperformcache.model.CurveDataItem;
+import ru.geosteering.commonModels.dataService.CurveDataItem;
 import ru.geosteering.goperformcache.repository.CurveCacheRepository;
 import ru.geosteering.goperformcache.repository.dto.CurveCacheDTO;
 
@@ -40,7 +40,7 @@ public class Storage {
         Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
 
         PriorityQueue<CurveDataItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CurveDataItem::getTime)));
+                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing((CurveDataItem o) -> o.time)));
 
         synchronized (items) {
             items.add(item);
@@ -57,7 +57,7 @@ public class Storage {
         Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
 
         PriorityQueue<CurveDataItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing(CurveDataItem::getTime)));
+                cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing((CurveDataItem o) -> o.time)));
 
         synchronized (items) {
             items.addAll(collection);
@@ -145,24 +145,7 @@ public class Storage {
 
             synchronized (items) {
                 CurveDataItem item = realTimeCache.get(id).peek();
-                first = item == null ? null : item.getTime();
-            }
-        }
-
-        return first;
-    }
-
-    public OffsetDateTime getFirstHistory(Long id) {
-
-        OffsetDateTime first = repository.getMinFirst(id);
-
-        if (first == null && historyCache.containsKey(id)) {
-
-            PriorityQueue<CurveDataItem> items = historyCache.get(id);
-
-            synchronized (items) {
-                CurveDataItem item = items.peek();
-                first = item == null ? null : item.getTime();
+                first = item == null ? null : item.time;
             }
         }
 
@@ -178,10 +161,10 @@ public class Storage {
 
             synchronized (items) {
                 CurveDataItem curveDataItem = items.stream()
-                        .max(Comparator.comparing(CurveDataItem::getTime))
+                        .max(Comparator.comparing((CurveDataItem o) -> o.time))
                         .orElse(null);
 
-                result = curveDataItem == null ? repository.getMaxLast(id) : curveDataItem.getTime();
+                result = curveDataItem == null ? repository.getMaxLast(id) : curveDataItem.time;
             }
         }
 
@@ -224,15 +207,15 @@ public class Storage {
         if (cache.containsKey(id)) {
             PriorityQueue<CurveDataItem> items = cache.get(id);
             synchronized (items) {
-                if (!items.isEmpty() && items.peek().getTime().isBefore(to.plusSeconds(1))) {
+                if (!items.isEmpty() && items.peek().time.isBefore(to.plusSeconds(1))) {
                     items.stream()
-                            .filter(item -> item.getTime().isBefore(to.plusSeconds(1)) && item.getTime().isAfter(from.minusSeconds(1)))
+                            .filter(item -> item.time.isBefore(to.plusSeconds(1)) && item.time.isAfter(from.minusSeconds(1)))
                             .forEach(fromCache::add);
                 }
             }
         }
 
-        fromCache.sort(Comparator.comparing(CurveDataItem::getTime));
+        fromCache.sort(Comparator.comparing((CurveDataItem o) -> o.time));
 
         return fromCache;
     }

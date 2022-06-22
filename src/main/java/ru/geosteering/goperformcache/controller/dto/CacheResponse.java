@@ -2,7 +2,7 @@ package ru.geosteering.goperformcache.controller.dto;
 
 import lombok.Getter;
 import lombok.Setter;
-import ru.geosteering.goperformcache.model.CurveDataItem;
+import ru.geosteering.commonModels.dataService.CurveDataItem;
 
 import java.util.List;
 

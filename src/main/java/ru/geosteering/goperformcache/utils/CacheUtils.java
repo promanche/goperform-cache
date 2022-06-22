@@ -4,10 +4,9 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
-import ru.geosteering.goperformcache.model.CurveDataItem;
-import ru.geosteering.goperformcache.model.CurveDataMessage;
+import ru.geosteering.commonModels.dataService.CurveDataItem;
+import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 
-import java.io.IOException;
 import java.util.*;
 
 @Slf4j
@@ -20,16 +19,11 @@ public class CacheUtils {
         mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
-    public static CurveDataMessage parseCurveDataMessage(String json, String subject) {
+    public static ApiMessage parseApiMessage(String json, String subject) {
         try {
-            CurveDataMessage message = mapper.readValue(json, CurveDataMessage.class);
-            if (message.getData().getTime() == null) {
-                throw new RuntimeException("Broken item. Message: " + json + ", subject: " + subject); //TODO обрабатывать такие ситуации?
-            }
-            return message;
-
-        } catch (IOException e) {
-            log.warn("Parsing CurveDataMessage exception. Message: {}, subject: {}", json, subject);
+            return mapper.readValue(json, ApiMessage.class);
+        } catch (JsonProcessingException e) {
+            log.warn("Parsing ApiMessage exception. Message: {}, subject: {}", json, subject);
             return null;
         }
     }
@@ -49,15 +43,6 @@ public class CacheUtils {
         } catch (JsonProcessingException e) {
             log.error("Object to bytes exception: {}", obj);
             return new byte[0];
-        }
-    }
-
-    public static String getFieldFromJson(String json, String fieldName) {
-        try {
-            return mapper.readTree(json).get(fieldName).asText();
-        } catch (JsonProcessingException e) {
-            log.error("Field {} not found in {}", fieldName, json);
-            return "";
         }
     }
 
