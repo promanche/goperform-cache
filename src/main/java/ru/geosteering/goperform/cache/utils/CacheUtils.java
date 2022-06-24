@@ -32,7 +32,7 @@ public class CacheUtils {
         try {
             return new ArrayList<>(Arrays.asList(mapper.readValue(json, CurveDataItem[].class)));
         } catch (JsonProcessingException e) {
-            log.error("Parsing CurveDataItem[] exception: {}", json);
+            log.error("Parsing CurveDataItem[] exception: {}", json, e);
             return new ArrayList<>();
         }
     }
@@ -41,7 +41,7 @@ public class CacheUtils {
         try {
             return mapper.writeValueAsBytes(obj);
         } catch (JsonProcessingException e) {
-            log.error("Object to bytes exception: {}", obj);
+            log.error("Object to bytes exception: {}", obj, e);
             return new byte[0];
         }
     }
@@ -50,7 +50,7 @@ public class CacheUtils {
         try {
             return mapper.writeValueAsString(obj);
         } catch (JsonProcessingException e) {
-            log.error("Object to json exception: {}", obj);
+            log.error("Object to json exception: {}", obj, e);
             return "";
         }
     }
@@ -60,7 +60,7 @@ public class CacheUtils {
             String[] arr = subject.split("\\.");
             return Long.parseLong(arr[arr.length - 1]);
         } catch (Exception e) {
-            log.error("Parsing id from subject exception: {}", subject);
+            log.error("Parsing id from subject exception: {}", subject, e);
             return null;
         }
     }

@@ -6,7 +6,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.dataService.CurveDataItem;
 import ru.geosteering.commonModels.dataService.responses.*;
-import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
 
@@ -15,6 +14,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import static ru.geosteering.goperform.cache.config.Config.HISTORY_REQUEST_LIMIT;
+import static ru.geosteering.goperform.cache.config.Config.HISTORY_THREADS;
 
 @Component
 @Slf4j
@@ -26,7 +28,7 @@ public class HistoryHandler implements MessageHandler {
     private final Map<Long, AtomicInteger> receivedCount;
     private final Map<Long, Set<CurveDataItem>> buffer;
 
-    private ExecutorService messageHandler = Executors.newFixedThreadPool(Config.HISTORY_THREADS);
+    private ExecutorService messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
 
     public HistoryHandler(Storage storage, HistoryLoader historyLoader) {
         this.storage = storage;
@@ -39,7 +41,7 @@ public class HistoryHandler implements MessageHandler {
         receivedCount.clear();
         buffer.clear();
         storage.onRestartHistory();
-        messageHandler = Executors.newFixedThreadPool(Config.HISTORY_THREADS);
+        messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
     }
 
     @Override
@@ -70,38 +72,45 @@ public class HistoryHandler implements MessageHandler {
 
     private void processCurveData(CurveDataMessage curveDataMessage) {
 
-        buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(Config.HISTORY_REQUEST_LIMIT))
+        buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
                 .add(curveDataMessage.getData());
 
         receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
                 .incrementAndGet();
     }
 
-    private void processDataEnd(DataEndMessage dataEndMessage, String subject) throws InterruptedException {
-
-        Thread.sleep(100);
+    private void processDataEnd(DataEndMessage dataEndMessage, String subject) {
 
         Long id = CacheUtils.getIdFromSubject(subject);
 
-        int sent = dataEndMessage.getSentCount();
-        int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : -1;
+        try {
+            Thread.sleep(100);
 
-        if (sent == 0) {
+            int sent = dataEndMessage.getSentCount();
+            int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : -1;
+
+            if (sent == 0) {
+                historyLoader.applyStatus(id, LoadStatus.DONE);
+
+            } else if (sent != received) {
+                log.error("Received count '{}' not equals to sent '{}'", received, sent);
+                historyLoader.applyStatus(id, LoadStatus.ERROR);
+
+            } else {
+                log.info("History part received: id {}, message {}", id, dataEndMessage);
+                drainToStorage(id);
+                historyLoader.applyStatus(id, LoadStatus.PART);
+            }
+
             buffer.remove(id);
-            historyLoader.applyStatus(id, LoadStatus.DONE);
 
-        } else if (sent != received) {
-            log.error("Received count '{}' not equals to sent '{}'", received, sent);
-            buffer.get(id).clear();
+        } catch (Exception e) {
+            log.error("DataEndMessage processing exception: {}", e.getMessage(), e);
             historyLoader.applyStatus(id, LoadStatus.ERROR);
 
-        } else {
-            log.info("History part received: id {}, message {}", id, dataEndMessage);
-            drainToStorage(id);
-            historyLoader.applyStatus(id, LoadStatus.PART);
+        } finally {
+            historyLoader.onEndMessage();
         }
-
-        historyLoader.onEndMessage();
     }
 
     private void processStatus(StatusMessage statusMessage, String subject) {
@@ -111,7 +120,6 @@ public class HistoryHandler implements MessageHandler {
     private void drainToStorage(Long id) {
         log.info("Drain buffer to storage. Curve id: {}, items: {}", id, buffer.get(id).size());
         storage.addAll(id, buffer.get(id), false);
-        buffer.get(id).clear();
     }
 
     @PreDestroy

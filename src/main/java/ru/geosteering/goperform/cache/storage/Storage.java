@@ -79,7 +79,7 @@ public class Storage {
                 repository.save(transferList);
             } catch (Exception e) {
                 errorBuffer.addAll(transferList);
-                log.error("Database exception: {}. Data added to errorBuffer", e.getMessage());
+                log.error("Database exception: {}. Data added to errorBuffer", e.getMessage(), e);
             }
         }
     }

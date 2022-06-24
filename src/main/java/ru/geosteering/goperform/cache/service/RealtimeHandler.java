@@ -41,6 +41,8 @@ public class RealtimeHandler implements MessageHandler {
     }
 
     private void handleMessage(Message msg) {
+        //TODO проверка, что не чужие данные
+
         try {
             ApiMessage apiMessage = CacheUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
 

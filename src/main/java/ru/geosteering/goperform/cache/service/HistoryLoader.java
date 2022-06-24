@@ -151,7 +151,7 @@ public class HistoryLoader {
         try {
             connector.sendRequest(CacheUtils.toBytes(request));
         } catch (Exception e) {
-            log.error("Send request exception: {}", e.getMessage());
+            log.error("Send request exception: {}", e.getMessage(), e);
             applyStatus(id, LoadStatus.ERROR);
         }
     }

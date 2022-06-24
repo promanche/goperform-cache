@@ -5,13 +5,14 @@ import io.nats.client.impl.NatsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.service.*;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
+
+import static ru.geosteering.goperform.cache.config.Config.*;
 
 @Component
 @Slf4j
@@ -36,29 +37,29 @@ public class NatsConnector {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
-                .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", Config.HOST, connection.getStatus()))
+                .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", HOST, connection.getStatus()))
                 .noReconnect()
                 .errorListener(errorListener)
-                .authHandler(Nats.credentials(Config.CREDENTIALS_FILE))
-                .server(Config.HOST)
+                .authHandler(Nats.credentials(CREDENTIALS_FILE))
+                .server(HOST)
                 .build();
 
         try {
             connection = Nats.connect(options);
         } catch (IOException | InterruptedException e) {
-            log.error("Connection exception: {}", e.getMessage());
+            log.error("Connection exception: {}", e.getMessage(), e);
         }
 
         if (connection != null) {
             Dispatcher dispatcher = connection.createDispatcher();
-            dispatcher.subscribe(Config.SUBJECT + ".*", realtimeHandler);
-            dispatcher.subscribe(Config.SUBJECT + "." + Config.HISTORY_NUID + ".*", historyHandler);
+            dispatcher.subscribe(SUBJECT + ".*", realtimeHandler);
+            dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyHandler);
         }
     }
 
     public void sendRequest(byte[] data) throws ExecutionException, InterruptedException {
         Message message = NatsMessage.builder()
-                .subject(Config.SUBJECT)
+                .subject(SUBJECT)
                 .data(data)
                 .build();
 
@@ -84,7 +85,7 @@ public class NatsConnector {
             try {
                 connection.close();
             } catch (Exception e) {
-                log.error("Exception while closing: {}", e.getMessage());
+                log.error("Exception while closing: {}", e.getMessage(), e);
             }
         }
     }
@@ -95,7 +96,7 @@ public class NatsConnector {
                 onError();
                 closeConnection();
 
-                int seconds = Config.RECONNECT_TIMEOUT_SECONDS;
+                int seconds = RECONNECT_TIMEOUT_SECONDS;
                 while (seconds > 0) {
                     log.info("Reconnect waiting... " + seconds);
                     Thread.sleep(1000);
@@ -105,7 +106,7 @@ public class NatsConnector {
                 connect();
                 onReconnect();
             } catch (InterruptedException e) {
-                e.printStackTrace();
+                log.error(e.getMessage(), e);
             }
         }).start();
     }
