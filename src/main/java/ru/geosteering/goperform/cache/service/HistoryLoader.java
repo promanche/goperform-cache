@@ -4,18 +4,18 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
-import ru.geosteering.commonModels.dataService.CurveDataItem;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
-import ru.geosteering.goperform.cache.repository.dto.CurveCacheDTO;
-import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.controller.dto.CacheResponse;
+import ru.geosteering.goperform.cache.controller.CacheResponse;
+import ru.geosteering.goperform.cache.model.CacheItem;
+import ru.geosteering.goperform.cache.model.ItemType;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
+import ru.geosteering.goperform.cache.repository.CurveCacheDTO;
 import ru.geosteering.goperform.cache.repository.CurveCacheRepository;
-import ru.geosteering.goperform.cache.repository.dto.MetaDataDTO;
+import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
 
 import javax.annotation.PreDestroy;
-import java.time.OffsetDateTime;
+import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
@@ -32,7 +32,6 @@ public class HistoryLoader {
     private final SimpMessagingTemplate wsTemplate;
 
     private final AtomicInteger requestAllowed;
-    private final Map<Long, MetaDataDTO> metaData;
     private final Map<Long, LoadStatus> loadInfo;
 
     private ScheduledExecutorService requestScheduler;
@@ -45,14 +44,10 @@ public class HistoryLoader {
         this.repository = repository;
         this.wsTemplate = wsTemplate;
         requestAllowed = new AtomicInteger(HISTORY_ONETIME_REQUESTS);
-        metaData = new ConcurrentHashMap<>();
         loadInfo = new ConcurrentHashMap<>();
     }
 
     public void start() {
-
-        loadMetaData();
-
         requestScheduler = Executors.newSingleThreadScheduledExecutor();
         requestScheduler.scheduleAtFixedRate(this::loadHistory, 30000, 100, TimeUnit.MILLISECONDS);
 
@@ -61,16 +56,8 @@ public class HistoryLoader {
 
     public void restart() {
         requestAllowed.set(HISTORY_ONETIME_REQUESTS);
-        metaData.clear();
         loadInfo.clear();
         start();
-    }
-
-    private void loadMetaData() {
-        List<MetaDataDTO> metaData = repository.getMetaData();
-        metaData.forEach(data -> this.metaData.put(data.getCurveId(), data));
-
-        log.info("Metadata loaded: {}", metaData);
     }
 
     private void loadHistory() {
@@ -137,13 +124,9 @@ public class HistoryLoader {
 
     private void onStatusRequest(Long id) {
 
-        String from = metaData.get(id) == null ?
-                null : metaData.get(id).getLast().plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
+        String from = getItemKeyAsString(storage.getLastHistory(id));
 
-        OffsetDateTime firstReal = storage.getFirstReal(id);
-
-        String to = firstReal == null ?
-                null : firstReal.minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME);
+        String to = getItemKeyAsString(storage.getFirstReal(id));
 
         CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
         log.info("Request: {}", request);
@@ -154,6 +137,20 @@ public class HistoryLoader {
             log.error("Send request exception: {}", e.getMessage(), e);
             applyStatus(id, LoadStatus.ERROR);
         }
+    }
+
+    private String getItemKeyAsString(CacheItem item) {
+        String result = null;
+        if (item != null) {
+            Double key = item.getKey();
+            if (item.getType() == ItemType.TIME) {
+                result = OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+            } else {
+                result = String.valueOf(key);
+            }
+        }
+
+        return result;
     }
 
     private void onStatusError(Long id) {
@@ -170,45 +167,29 @@ public class HistoryLoader {
     }
 
     private void onStatusPart(Long id) {
-        refreshMetaData(id);
         applyStatus(id, LoadStatus.WAIT);
-    }
-
-    private void refreshMetaData(Long id) {
-
-        MetaDataDTO metaDataDTO = metaData.get(id);
-
-        if (metaDataDTO == null) {
-            metaDataDTO = new MetaDataDTO();
-            OffsetDateTime first = repository.getMinFirst(id);
-            metaDataDTO.setCurveId(id);
-            metaDataDTO.setFirst(first);
-        }
-
-        OffsetDateTime last = storage.getLastHistory(id);
-        metaDataDTO.setLast(last);
-
-        metaData.put(id, metaDataDTO);
     }
 
     public void onEndMessage() {
         requestAllowed.incrementAndGet();
     }
 
-    public CacheResponse getCacheResponse(Long id, OffsetDateTime from, OffsetDateTime to) {
+    public CacheResponse getCacheResponse(Long id, Double from, Double to) {
 
         if (storage.isHistoryLoaded(id)) {
-            OffsetDateTime finalFrom = from == null ? metaData.get(id).getFirst() : from;
-            OffsetDateTime finalTo = to == null ? OffsetDateTime.now().plusHours(23) : to;
+            log.info("Begin response preparing for id {}", id);
+            Double finalFrom = from == null ? 0 : from;
+            Double finalTo = to == null ? Double.MAX_VALUE : to;
 
-            List<CurveDataItem> items = new ArrayList<>();
+            List<CacheItem> items = new ArrayList<>();
 
-            List<List<CurveDataItem>> fromDB = repository.get(id, finalFrom, finalTo).stream()
-                    .map(CurveCacheDTO::toItems).toList();
+            List<List<CacheItem>> fromDB = repository.get(id, finalFrom, finalTo).stream()
+                    .map(CurveCacheDTO::toItems)
+                    .toList();
 
             if (!fromDB.isEmpty()) {
-                fromDB.get(0).removeIf(i -> i.time.isBefore(finalFrom));
-                fromDB.get(fromDB.size() - 1).removeIf(i -> i.time.isAfter(finalTo));
+                fromDB.get(0).removeIf(i -> i.getKey() < finalFrom);
+                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > finalTo);
                 fromDB.forEach(items::addAll);
             }
 
@@ -217,6 +198,7 @@ public class HistoryLoader {
             CacheResponse response = new CacheResponse();
             response.setId(id);
             response.setData(items);
+            log.info("Response for id {} prepared. Items count: {}", id, items.size());
             return response;
         }
 

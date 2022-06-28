@@ -2,11 +2,10 @@ package ru.geosteering.goperform.cache.storage;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.commonModels.dataService.CurveDataItem;
+import ru.geosteering.goperform.cache.model.CacheItem;
+import ru.geosteering.goperform.cache.repository.CurveCacheDTO;
 import ru.geosteering.goperform.cache.repository.CurveCacheRepository;
-import ru.geosteering.goperform.cache.repository.dto.CurveCacheDTO;
 
-import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -19,8 +18,8 @@ public class Storage {
 
     private final CurveCacheRepository repository;
 
-    private final Map<Long, PriorityQueue<CurveDataItem>> realTimeCache;
-    private final Map<Long, PriorityQueue<CurveDataItem>> historyCache;
+    private final Map<Long, PriorityQueue<CacheItem>> realTimeCache;
+    private final Map<Long, PriorityQueue<CacheItem>> historyCache;
     private final Set<Long> historyLoaded;
     private final Set<Long> activeCurves;
     private final Set<CurveCacheDTO> errorBuffer;
@@ -35,12 +34,12 @@ public class Storage {
         errorBuffer = ConcurrentHashMap.newKeySet();
     }
 
-    public void add(Long id, CurveDataItem item, boolean isReal) {
+    public void add(Long id, CacheItem item, boolean isReal) {
 
-        Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
+        Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
 
-        PriorityQueue<CurveDataItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing((CurveDataItem o) -> o.time)));
+        PriorityQueue<CacheItem> items =
+                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CacheItem::getKey)));
 
         synchronized (items) {
             items.add(item);
@@ -52,21 +51,23 @@ public class Storage {
         }
     }
 
-    public void addAll(Long id, Collection<CurveDataItem> collection, boolean isReal) {
+    public void addAll(Long id, Collection<CacheItem> collection, boolean isReal) {
 
-        Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
+        if (collection != null && !collection.isEmpty()) {
+            Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
 
-        PriorityQueue<CurveDataItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing((CurveDataItem o) -> o.time)));
+            PriorityQueue<CacheItem> items =
+                    cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing(CacheItem::getKey)));
 
-        synchronized (items) {
-            items.addAll(collection);
-            transferIfNeed(id, items, isReal);
+            synchronized (items) {
+                items.addAll(collection);
+                transferIfNeed(id, items, isReal);
+            }
         }
     }
 
-    private void transferIfNeed(Long id, PriorityQueue<CurveDataItem> items, boolean isReal) {
-        if (isReal && !isHistoryLoaded(id) || items.size() < BATCH_SIZE + MARGIN_SIZE) {
+    private void transferIfNeed(Long id, PriorityQueue<CacheItem> items, boolean isReal) {
+        if ((isReal && !isHistoryLoaded(id)) || items.size() < BATCH_SIZE + MARGIN_SIZE) {
             return;
         }
 
@@ -84,25 +85,24 @@ public class Storage {
         }
     }
 
-    private void fillTransferList(Long id, PriorityQueue<CurveDataItem> items, List<CurveCacheDTO> transferList) {
+    private void fillTransferList(Long id, PriorityQueue<CacheItem> items, List<CurveCacheDTO> transferList) {
 
-        if (items.size() >= BATCH_SIZE + MARGIN_SIZE) {
-            ArrayList<CurveDataItem> itemsBatch = new ArrayList<>(BATCH_SIZE);
+        while (items.size() >= BATCH_SIZE + MARGIN_SIZE) {
+            ArrayList<CacheItem> itemsBatch = new ArrayList<>(BATCH_SIZE);
             for (int i = 0; i < BATCH_SIZE; i++) {
                 itemsBatch.add(items.poll());
             }
             transferList.add(new CurveCacheDTO(id, itemsBatch));
-            fillTransferList(id, items, transferList);
         }
     }
 
     public void mergeCache(Long id) {
 
-        PriorityQueue<CurveDataItem> realItems = realTimeCache.get(id);
+        PriorityQueue<CacheItem> realItems = realTimeCache.get(id);
 
         synchronized (realItems) {
 
-            PriorityQueue<CurveDataItem> historyItems = historyCache.get(id);
+            PriorityQueue<CacheItem> historyItems = historyCache.get(id);
 
             if (historyItems != null && !historyItems.isEmpty()) {
                 int before = historyItems.size();
@@ -136,39 +136,37 @@ public class Storage {
         }
     }
 
-    public OffsetDateTime getFirstReal(Long id) {
-
-        OffsetDateTime first = null;
+    public CacheItem getFirstReal(Long id) {
 
         if (realTimeCache.containsKey(id)) {
-            PriorityQueue<CurveDataItem> items = realTimeCache.get(id);
+            PriorityQueue<CacheItem> items = realTimeCache.get(id);
 
             synchronized (items) {
-                CurveDataItem item = realTimeCache.get(id).peek();
-                first = item == null ? null : item.time;
+                return realTimeCache.get(id).peek();
             }
         }
-
-        return first;
+        return null;
     }
 
-    public OffsetDateTime getLastHistory(Long id) {
+    public CacheItem getLastHistory(Long id) {
 
-        OffsetDateTime result = null;
+        CacheItem lastHistory = null;
 
         if (historyCache.containsKey(id)) {
-            PriorityQueue<CurveDataItem> items = historyCache.get(id);
+            PriorityQueue<CacheItem> items = historyCache.get(id);
 
             synchronized (items) {
-                CurveDataItem curveDataItem = items.stream()
-                        .max(Comparator.comparing((CurveDataItem o) -> o.time))
+                lastHistory = items.stream()
+                        .max(Comparator.comparing(CacheItem::getKey))
                         .orElse(null);
-
-                result = curveDataItem == null ? repository.getMaxLast(id) : curveDataItem.time;
             }
         }
 
-        return result;
+        if (lastHistory == null) {
+            lastHistory = repository.getEmptyLast(id);
+        }
+
+        return lastHistory;
     }
 
     public boolean isActiveCurve(Long id) {
@@ -193,29 +191,31 @@ public class Storage {
         activeCurves.clear();
     }
 
-    public List<CurveDataItem> getFromCache(Long id, OffsetDateTime from, OffsetDateTime to) {
-        List<CurveDataItem> result = getFromCache(id, from, to, false);
+    public List<CacheItem> getFromCache(Long id, Double from, Double to) {
+        List<CacheItem> result = getFromCache(id, from, to, false);
         result.addAll(getFromCache(id, from, to, true));
         return result;
     }
 
-    private List<CurveDataItem> getFromCache(Long id, OffsetDateTime from, OffsetDateTime to, boolean isReal) {
-        ArrayList<CurveDataItem> fromCache = new ArrayList<>();
+    private List<CacheItem> getFromCache(Long id, Double from, Double to, boolean isReal) {
+        ArrayList<CacheItem> fromCache = new ArrayList<>();
 
-        Map<Long, PriorityQueue<CurveDataItem>> cache = isReal ? realTimeCache : historyCache;
+        Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
 
         if (cache.containsKey(id)) {
-            PriorityQueue<CurveDataItem> items = cache.get(id);
+            PriorityQueue<CacheItem> items = cache.get(id);
             synchronized (items) {
-                if (!items.isEmpty() && items.peek().time.isBefore(to.plusSeconds(1))) {
+                if (!items.isEmpty() && items.peek().getKey() <= to) {
                     items.stream()
-                            .filter(item -> item.time.isBefore(to.plusSeconds(1)) && item.time.isAfter(from.minusSeconds(1)))
+                            .filter(item -> item.getKey() >= from && item.getKey() <= to)
                             .forEach(fromCache::add);
                 }
             }
         }
 
-        fromCache.sort(Comparator.comparing((CurveDataItem o) -> o.time));
+        if (!fromCache.isEmpty()) {
+            fromCache.sort(Comparator.comparing(CacheItem::getKey));
+        }
 
         return fromCache;
     }

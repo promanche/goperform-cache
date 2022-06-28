@@ -4,9 +4,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.*;
 import io.nats.client.impl.NatsMessage;
+import ru.geosteering.commonModels.dataService.AbstractDataItem;
+import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
+import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 
 import java.io.IOException;
-import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -16,7 +18,7 @@ public class SpeedTestMapper {
 
     public static void main(String[] args) throws IOException, InterruptedException, ExecutionException {
 
-        Integer limit = 200000;
+        int limit = 200000;
         AtomicInteger count = new AtomicInteger(0);
         String nuid = NUID.nextGlobal();
         int threads = 4;
@@ -31,7 +33,7 @@ public class SpeedTestMapper {
         ObjectMapper mapper = new ObjectMapper();
         mapper.findAndRegisterModules();
 
-        PriorityBlockingQueue<CurveDataItem> queue = new PriorityBlockingQueue<>(100000, Comparator.comparing((CurveDataItem o) -> o.time));
+        PriorityBlockingQueue<AbstractDataItem<?>> queue = new PriorityBlockingQueue<>(limit, Comparator.comparing(AbstractDataItem::getTime));
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
@@ -68,7 +70,7 @@ public class SpeedTestMapper {
                                 return;
                             }
                             msgList.add(System.nanoTime());
-                            queue.add(curveDataMessage.data);
+                            queue.add(curveDataMessage.getData());
                             msgList.add(System.nanoTime());
                             map.put(i, msgList);
                         }
@@ -157,154 +159,5 @@ public class SpeedTestMapper {
 
         connection.close();
         System.exit(0);
-    }
-
-    public static class CurveDataMessage {
-        String type;
-        Long id;
-        CurveDataItem data;
-
-        public String getType() {
-            return type;
-        }
-
-        public void setType(String type) {
-            this.type = type;
-        }
-
-        public Long getId() {
-            return id;
-        }
-
-        public void setId(Long id) {
-            this.id = id;
-        }
-
-        public CurveDataItem getData() {
-            return data;
-        }
-
-        public void setData(CurveDataItem data) {
-            this.data = data;
-        }
-    }
-
-    public static class CurveDataItem {
-        OffsetDateTime time;
-        Double depth;
-        Double value;
-
-        public OffsetDateTime getTime() {
-            return time;
-        }
-
-        public void setTime(OffsetDateTime time) {
-            this.time = time;
-        }
-
-        public Double getDepth() {
-            return depth;
-        }
-
-        public void setDepth(Double depth) {
-            this.depth = depth;
-        }
-
-        public Double getValue() {
-            return value;
-        }
-
-        public void setValue(Double value) {
-            this.value = value;
-        }
-    }
-
-    public static class CurveDataRequest {
-        private Long curveId;
-        private String from;
-        private String to;
-        private Integer ms;
-        private boolean infoOnly;
-        private boolean withRange;
-        private Integer limit;
-        private String replyToSuffix;
-
-        public CurveDataRequest(Long curveId, String from, String to, Integer ms, boolean infoOnly, boolean withRange, Integer limit, String replyToSuffix) {
-            this.curveId = curveId;
-            this.from = from;
-            this.to = to;
-            this.ms = ms;
-            this.infoOnly = infoOnly;
-            this.withRange = withRange;
-            this.limit = limit;
-            this.replyToSuffix = replyToSuffix;
-        }
-
-        public CurveDataRequest() {
-        }
-
-        public Long getCurveId() {
-            return curveId;
-        }
-
-        public void setCurveId(Long curveId) {
-            this.curveId = curveId;
-        }
-
-        public String getFrom() {
-            return from;
-        }
-
-        public void setFrom(String from) {
-            this.from = from;
-        }
-
-        public String getTo() {
-            return to;
-        }
-
-        public void setTo(String to) {
-            this.to = to;
-        }
-
-        public Integer getMs() {
-            return ms;
-        }
-
-        public void setMs(Integer ms) {
-            this.ms = ms;
-        }
-
-        public boolean isInfoOnly() {
-            return infoOnly;
-        }
-
-        public void setInfoOnly(boolean infoOnly) {
-            this.infoOnly = infoOnly;
-        }
-
-        public boolean isWithRange() {
-            return withRange;
-        }
-
-        public void setWithRange(boolean withRange) {
-            this.withRange = withRange;
-        }
-
-        public Integer getLimit() {
-            return limit;
-        }
-
-        public void setLimit(Integer limit) {
-            this.limit = limit;
-        }
-
-        public String getReplyToSuffix() {
-            return replyToSuffix;
-        }
-
-        public void setReplyToSuffix(String replyToSuffix) {
-            this.replyToSuffix = replyToSuffix;
-        }
     }
 }

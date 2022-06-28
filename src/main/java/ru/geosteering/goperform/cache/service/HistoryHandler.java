@@ -4,8 +4,8 @@ import io.nats.client.Message;
 import io.nats.client.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.commonModels.dataService.CurveDataItem;
 import ru.geosteering.commonModels.dataService.responses.*;
+import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
 
@@ -26,7 +26,7 @@ public class HistoryHandler implements MessageHandler {
     private final HistoryLoader historyLoader;
 
     private final Map<Long, AtomicInteger> receivedCount;
-    private final Map<Long, Set<CurveDataItem>> buffer;
+    private final Map<Long, Set<CacheItem>> buffer;
 
     private ExecutorService messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
 
@@ -73,7 +73,7 @@ public class HistoryHandler implements MessageHandler {
     private void processCurveData(CurveDataMessage curveDataMessage) {
 
         buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
-                .add(curveDataMessage.getData());
+                .add(CacheItem.fromCurveDataItem(curveDataMessage.getData()));
 
         receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
                 .incrementAndGet();

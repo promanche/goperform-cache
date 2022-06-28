@@ -16,7 +16,7 @@ public class SpeedTestByter {
 
     public static void main(String[] args) throws IOException, InterruptedException, ExecutionException {
 
-        Integer limit = 200000;
+        int limit = 200000;
         AtomicInteger count = new AtomicInteger(0);
         String nuid = NUID.nextGlobal();
         int threads = 4;
@@ -34,7 +34,7 @@ public class SpeedTestByter {
         mapper.findAndRegisterModules();
 
 
-        PriorityBlockingQueue<CurveDataItem> queue = new PriorityBlockingQueue<>(100000, Comparator.comparing((CurveDataItem o) -> o.time));
+        PriorityBlockingQueue<CurveDataItem> queue = new PriorityBlockingQueue<>(limit, Comparator.comparing((CurveDataItem o) -> o.time));
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")

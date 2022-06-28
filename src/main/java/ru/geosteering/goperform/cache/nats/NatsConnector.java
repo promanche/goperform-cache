@@ -64,7 +64,7 @@ public class NatsConnector {
                 .build();
 
         Message response = connection.request(message).get();
-        log.info("Response: {}", response.toString());
+        log.info("Response: {}", new String(response.getData()));
     }
 
     private void onError() {

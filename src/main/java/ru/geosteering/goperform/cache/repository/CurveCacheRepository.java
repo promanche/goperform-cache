@@ -4,11 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
-import ru.geosteering.goperform.cache.repository.dto.CurveCacheDTO;
-import ru.geosteering.goperform.cache.repository.dto.MetaDataDTO;
+import ru.geosteering.goperform.cache.model.CacheItem;
 
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 @Repository
@@ -36,19 +33,11 @@ public class CurveCacheRepository {
         }
     }
 
-    public OffsetDateTime getMaxLast(Long id) {
-        return mapper.getMaxLast(id);
+    public CacheItem getEmptyLast(Long id) {
+        return mapper.getEmptyLast(id);
     }
 
-    public OffsetDateTime getMinFirst(Long id) {
-        return mapper.getMinFirst(id);
-    }
-
-    public List<MetaDataDTO> getMetaData() {
-        return mapper.getMetaData();
-    }
-
-    public List<CurveCacheDTO> get(Long id, OffsetDateTime from, OffsetDateTime to) {
-        return mapper.get(id, from.minusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME), to.plusSeconds(1).format(DateTimeFormatter.ISO_DATE_TIME));
+    public List<CurveCacheDTO> get(Long id, Double from, Double to) {
+        return mapper.get(id, from, to);
     }
 }

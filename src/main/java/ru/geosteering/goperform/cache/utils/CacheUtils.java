@@ -2,10 +2,9 @@ package ru.geosteering.goperform.cache.utils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import lombok.extern.slf4j.Slf4j;
-import ru.geosteering.commonModels.dataService.CurveDataItem;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
+import ru.geosteering.goperform.cache.model.CacheItem;
 
 import java.util.*;
 
@@ -16,7 +15,6 @@ public class CacheUtils {
 
     static {
         mapper.findAndRegisterModules();
-        mapper.disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
     }
 
     public static ApiMessage parseApiMessage(String json, String subject) {
@@ -28,9 +26,9 @@ public class CacheUtils {
         }
     }
 
-    public static List<CurveDataItem> parseCurveDataItems(String json) {
+    public static List<CacheItem> parseCacheItems(String json) {
         try {
-            return new ArrayList<>(Arrays.asList(mapper.readValue(json, CurveDataItem[].class)));
+            return new ArrayList<>(Arrays.asList(mapper.readValue(json, CacheItem[].class)));
         } catch (JsonProcessingException e) {
             log.error("Parsing CurveDataItem[] exception: {}", json, e);
             return new ArrayList<>();
