@@ -11,6 +11,7 @@ import ru.geosteering.commonModels.dataService.AbstractDataItem;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Setter
 @Getter
@@ -38,7 +39,7 @@ public class CacheItem {
 
         @Override
         public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-            gen.writeNumber(new BigDecimal(value).toPlainString());
+            gen.writeNumber(new BigDecimal(value).setScale(3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
         }
     }
 }
