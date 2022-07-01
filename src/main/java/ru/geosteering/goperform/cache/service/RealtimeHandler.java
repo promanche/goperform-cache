@@ -49,8 +49,10 @@ public class RealtimeHandler implements MessageHandler {
 
                 if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
                     CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
-                    storage.add(curveDataMessage.getId(), CacheItem.fromCurveDataItem(curveDataMessage.getData()), true);
-                    wsTemplate.convertAndSend("/realtime/curve", curveDataMessage);
+                    CacheItem item = CacheItem.fromCurveDataItem(curveDataMessage.getData());
+                    storage.add(curveDataMessage.getId(), item, true);
+                    String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + CacheUtils.toJson(item) + "}";
+                    wsTemplate.convertAndSend("/websocket/AddPoint", toWs);
                 }
             }
 

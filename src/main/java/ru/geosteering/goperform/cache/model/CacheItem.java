@@ -27,7 +27,7 @@ public class CacheItem {
     Double key;
     Object value;
 
-    public static CacheItem fromCurveDataItem(AbstractDataItem<?> dataItem) {
+    public static CacheItem fromCurveDataItem(AbstractDataItem dataItem) {
         CacheItem cacheItem = new CacheItem();
         cacheItem.type = dataItem.getTime() == null ? ItemType.DEPTH : ItemType.TIME;
         cacheItem.key = dataItem.getTime() == null ? dataItem.getDepth() : dataItem.getTime().toInstant().toEpochMilli();

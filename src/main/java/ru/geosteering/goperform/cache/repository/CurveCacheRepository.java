@@ -37,7 +37,11 @@ public class CurveCacheRepository {
         return mapper.getEmptyLast(id);
     }
 
-    public List<CurveCacheDTO> get(Long id, Double from, Double to) {
-        return mapper.get(id, from, to);
+    public List<String> getFromTo(Long id, Double from, Double to) {
+        return mapper.getFromTo(id, from, to);
+    }
+
+    public List<String> getAll(Long id) {
+        return mapper.getAll(id);
     }
 }

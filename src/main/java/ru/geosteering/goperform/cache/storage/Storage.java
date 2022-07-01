@@ -191,14 +191,14 @@ public class Storage {
         activeCurves.clear();
     }
 
-    public List<CacheItem> getFromCache(Long id, Double from, Double to) {
-        List<CacheItem> result = getFromCache(id, from, to, false);
-        result.addAll(getFromCache(id, from, to, true));
+    public List<CacheItem> getFromStorage(Long id, Double from, Double to) {
+        List<CacheItem> result = getFromStorage(id, from, to, false);
+        result.addAll(getFromStorage(id, from, to, true));
         return result;
     }
 
-    private List<CacheItem> getFromCache(Long id, Double from, Double to, boolean isReal) {
-        ArrayList<CacheItem> fromCache = new ArrayList<>();
+    private List<CacheItem> getFromStorage(Long id, Double from, Double to, boolean isReal) {
+        ArrayList<CacheItem> result = new ArrayList<>();
 
         Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
 
@@ -208,15 +208,15 @@ public class Storage {
                 if (!items.isEmpty() && items.peek().getKey() <= to) {
                     items.stream()
                             .filter(item -> item.getKey() >= from && item.getKey() <= to)
-                            .forEach(fromCache::add);
+                            .forEach(result::add);
                 }
             }
         }
 
-        if (!fromCache.isEmpty()) {
-            fromCache.sort(Comparator.comparing(CacheItem::getKey));
+        if (!result.isEmpty()) {
+            result.sort(Comparator.comparing(CacheItem::getKey));
         }
 
-        return fromCache;
+        return result;
     }
 }

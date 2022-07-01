@@ -5,11 +5,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
-import ru.geosteering.goperform.cache.controller.CacheResponse;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.model.ItemType;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.repository.CurveCacheDTO;
 import ru.geosteering.goperform.cache.repository.CurveCacheRepository;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
@@ -163,7 +161,7 @@ public class HistoryLoader {
         if (storage.isActiveCurve(id)) {
             storage.mergeCache(id);
         }
-        //TODO websocket -> loaded
+        wsTemplate.convertAndSend("/websocket/CurveDataLoaded", "{\"curveId\":" + id + "}");
     }
 
     private void onStatusPart(Long id) {
@@ -174,32 +172,29 @@ public class HistoryLoader {
         requestAllowed.incrementAndGet();
     }
 
-    public CacheResponse getCacheResponse(Long id, Double from, Double to) {
+    public List<CacheItem> getResponse(Long id, Double from, Double to, boolean hasFromTo) {
 
         if (storage.isHistoryLoaded(id)) {
             log.info("Begin response preparing for id {}", id);
-            Double finalFrom = from == null ? 0 : from;
-            Double finalTo = to == null ? Double.MAX_VALUE : to;
 
-            List<CacheItem> items = new ArrayList<>();
+            List<CacheItem> result = new ArrayList<>();
 
-            List<List<CacheItem>> fromDB = repository.get(id, finalFrom, finalTo).stream()
-                    .map(CurveCacheDTO::toItems)
+            List<String> caches = hasFromTo ? repository.getFromTo(id, from, to) : repository.getAll(id);
+
+            List<List<CacheItem>> fromDB = caches.stream()
+                    .map(CacheUtils::parseCacheItems)
                     .toList();
 
             if (!fromDB.isEmpty()) {
-                fromDB.get(0).removeIf(i -> i.getKey() < finalFrom);
-                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > finalTo);
-                fromDB.forEach(items::addAll);
+                fromDB.get(0).removeIf(i -> i.getKey() < from);
+                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > to);
+                fromDB.forEach(result::addAll);
             }
 
-            items.addAll(storage.getFromCache(id, finalFrom, finalTo));
+            result.addAll(storage.getFromStorage(id, from, to));
 
-            CacheResponse response = new CacheResponse();
-            response.setId(id);
-            response.setData(items);
-            log.info("Response for id {} prepared. Items count: {}", id, items.size());
-            return response;
+            log.info("Response for id {} prepared. Items count: {}", id, result.size());
+            return result;
         }
 
         if (!loadInfo.containsKey(id)) {

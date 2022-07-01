@@ -33,7 +33,7 @@ public class SpeedTestMapper {
         ObjectMapper mapper = new ObjectMapper();
         mapper.findAndRegisterModules();
 
-        PriorityBlockingQueue<AbstractDataItem<?>> queue = new PriorityBlockingQueue<>(limit, Comparator.comparing(AbstractDataItem::getTime));
+        PriorityBlockingQueue<AbstractDataItem> queue = new PriorityBlockingQueue<>(limit, Comparator.comparing(AbstractDataItem::getTime));
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
