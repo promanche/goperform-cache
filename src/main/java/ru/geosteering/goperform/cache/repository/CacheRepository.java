@@ -11,16 +11,16 @@ import java.util.List;
 @Repository
 @AllArgsConstructor
 @Slf4j
-public class CurveCacheRepository {
+public class CacheRepository {
 
-    private final CurveCacheMapper mapper;
+    private final CacheMapper mapper;
     private final SqlSessionFactory sessionFactory;
 
-    public void save(List<CurveCacheDTO> list) throws Exception {
+    public void save(List<CacheDTO> list) throws Exception {
         SqlSession session = sessionFactory.openSession(ExecutorType.BATCH);
 
         try {
-            for (CurveCacheDTO dto : list) {
+            for (CacheDTO dto : list) {
                 mapper.save(dto);
             }
 

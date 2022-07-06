@@ -6,10 +6,10 @@ import ru.geosteering.goperform.cache.model.CacheItem;
 import java.util.List;
 
 @Mapper
-public interface CurveCacheMapper {
+public interface CacheMapper {
 
     @Insert("insert into curve_cache (curve_id, type, first, last, cache) values (#{curveId}, #{type}, #{first}, #{last}, #{cache}::jsonb)")
-    void save(CurveCacheDTO curveCacheDTO);
+    void save(CacheDTO cacheDTO);
 
     @Select("select type, max(last) as key from curve_cache where curve_id=#{id} group by type")
     CacheItem getEmptyLast(@Param("id") Long id);

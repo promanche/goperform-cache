@@ -11,14 +11,14 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @EqualsAndHashCode
-public class CurveCacheDTO {
+public class CacheDTO {
     private Long curveId;
     private ItemType type;
     private Double first;
     private Double last;
     private String cache;
 
-    public CurveCacheDTO(Long curveId, List<CacheItem> list) {
+    public CacheDTO(Long curveId, List<CacheItem> list) {
         this.curveId = curveId;
         this.type = list.get(0).getType();
         this.first = list.get(0).getKey();

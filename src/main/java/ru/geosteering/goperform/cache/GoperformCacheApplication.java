@@ -9,13 +9,13 @@ import ru.geosteering.goperform.cache.nats.NatsConnector;
 
 @SpringBootApplication
 @EnableScheduling
-public class GoPerformCacheApplication implements CommandLineRunner {
+public class GoperformCacheApplication implements CommandLineRunner {
 
     @Autowired
     NatsConnector connector;
 
     public static void main(String[] args) {
-        SpringApplication.run(GoPerformCacheApplication.class, args);
+        SpringApplication.run(GoperformCacheApplication.class, args);
     }
 
     @Override

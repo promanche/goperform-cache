@@ -4,7 +4,7 @@ import io.nats.client.Message;
 import io.nats.client.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.goperform.cache.model.CacheItem;
@@ -17,7 +17,7 @@ import java.util.concurrent.*;
 import static ru.geosteering.goperform.cache.config.Config.REALTIME_THREADS;
 import static ru.geosteering.goperform.cache.config.Config.SUBJECT;
 
-@Component
+@Service
 @Slf4j
 public class RealtimeHandler implements MessageHandler {
 

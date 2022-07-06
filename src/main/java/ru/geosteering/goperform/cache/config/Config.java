@@ -2,12 +2,14 @@ package ru.geosteering.goperform.cache.config;
 
 import io.nats.client.NUID;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.nio.file.Files;
 import java.util.Properties;
 
+@Component
 @Slf4j
 public class Config {
 
@@ -45,7 +47,7 @@ public class Config {
     private static Properties loadProperties() {
         Properties properties = new Properties();
 
-        File file = new File("application.properties");
+        File file = new File("/opt/goperform-cache/application.properties");
         if (file.exists() && file.isFile()) {
             try (BufferedReader reader = Files.newBufferedReader(file.toPath())) {
                 properties.load(reader);
@@ -53,6 +55,8 @@ public class Config {
                 log.error("Reading properties from file exception: {}", e.getMessage(), e);
             }
 
+        } else {
+            log.warn("application.properties not found");
         }
 
         return properties;

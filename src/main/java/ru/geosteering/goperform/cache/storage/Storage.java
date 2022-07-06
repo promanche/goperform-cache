@@ -3,8 +3,8 @@ package ru.geosteering.goperform.cache.storage;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.model.CacheItem;
-import ru.geosteering.goperform.cache.repository.CurveCacheDTO;
-import ru.geosteering.goperform.cache.repository.CurveCacheRepository;
+import ru.geosteering.goperform.cache.repository.CacheDTO;
+import ru.geosteering.goperform.cache.repository.CacheRepository;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -16,16 +16,16 @@ import static ru.geosteering.goperform.cache.config.Config.MARGIN_SIZE;
 @Slf4j
 public class Storage {
 
-    private final CurveCacheRepository repository;
+    private final CacheRepository repository;
 
     private final Map<Long, PriorityQueue<CacheItem>> realTimeCache;
     private final Map<Long, PriorityQueue<CacheItem>> historyCache;
     private final Set<Long> historyLoaded;
     private final Set<Long> activeCurves;
-    private final Set<CurveCacheDTO> errorBuffer;
+    private final Set<CacheDTO> errorBuffer;
     //TODO error buffer -> what to do?
 
-    public Storage(CurveCacheRepository repository) {
+    public Storage(CacheRepository repository) {
         this.repository = repository;
         realTimeCache = new ConcurrentHashMap<>();
         historyCache = new ConcurrentHashMap<>();
@@ -71,7 +71,7 @@ public class Storage {
             return;
         }
 
-        List<CurveCacheDTO> transferList = new ArrayList<>((items.size() - MARGIN_SIZE) / BATCH_SIZE);
+        List<CacheDTO> transferList = new ArrayList<>((items.size() - MARGIN_SIZE) / BATCH_SIZE);
 
         fillTransferList(id, items, transferList);
 
@@ -85,14 +85,14 @@ public class Storage {
         }
     }
 
-    private void fillTransferList(Long id, PriorityQueue<CacheItem> items, List<CurveCacheDTO> transferList) {
+    private void fillTransferList(Long id, PriorityQueue<CacheItem> items, List<CacheDTO> transferList) {
 
         while (items.size() >= BATCH_SIZE + MARGIN_SIZE) {
             ArrayList<CacheItem> itemsBatch = new ArrayList<>(BATCH_SIZE);
             for (int i = 0; i < BATCH_SIZE; i++) {
                 itemsBatch.add(items.poll());
             }
-            transferList.add(new CurveCacheDTO(id, itemsBatch));
+            transferList.add(new CacheDTO(id, itemsBatch));
         }
     }
 

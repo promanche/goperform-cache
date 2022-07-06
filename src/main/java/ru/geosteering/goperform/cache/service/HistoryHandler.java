@@ -3,7 +3,7 @@ package ru.geosteering.goperform.cache.service;
 import io.nats.client.Message;
 import io.nats.client.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.storage.Storage;
@@ -18,13 +18,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static ru.geosteering.goperform.cache.config.Config.HISTORY_REQUEST_LIMIT;
 import static ru.geosteering.goperform.cache.config.Config.HISTORY_THREADS;
 
-@Component
+@Service
 @Slf4j
 public class HistoryHandler implements MessageHandler {
 
     private final Storage storage;
     private final HistoryLoader historyLoader;
-
     private final Map<Long, AtomicInteger> receivedCount;
     private final Map<Long, Set<CacheItem>> buffer;
 
@@ -58,10 +57,18 @@ public class HistoryHandler implements MessageHandler {
                 ApiMessage.MessageType type = apiMessage.getType();
 
                 switch (type) {
-                    case CURVE_DATA -> processCurveData((CurveDataMessage) apiMessage);
-                    case DATA_END -> processDataEnd((DataEndMessage) apiMessage, msg.getSubject());
-                    case STATUS -> processStatus((StatusMessage) apiMessage, msg.getSubject());
-                    default -> log.warn("Some ApiMessage: {}, subject: {}", apiMessage, msg.getSubject());
+                    case CURVE_DATA:
+                        processCurveData((CurveDataMessage) apiMessage);
+                        break;
+                    case DATA_END:
+                        processDataEnd((DataEndMessage) apiMessage, msg.getSubject());
+                        break;
+                    case STATUS:
+                        processStatus((StatusMessage) apiMessage, msg.getSubject());
+                        break;
+                    default:
+                        log.warn("Some ApiMessage: {}, subject: {}", apiMessage, msg.getSubject());
+                        break;
                 }
             }
 

@@ -34,3 +34,5 @@ build/
 
 /app.creds
 /.gradle/
+/logs/
+/test
