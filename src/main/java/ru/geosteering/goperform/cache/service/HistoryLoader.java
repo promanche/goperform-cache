@@ -3,32 +3,29 @@ package ru.geosteering.goperform.cache.service;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.model.ItemType;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.repository.CurveCacheRepository;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
 
 import javax.annotation.PreDestroy;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static ru.geosteering.goperform.cache.config.Config.*;
 
-@Component
+@Service
 @Slf4j
 public class HistoryLoader {
 
     private final Storage storage;
-    private final CurveCacheRepository repository;
     private final SimpMessagingTemplate wsTemplate;
-
     private final AtomicInteger requestAllowed;
     private final Map<Long, LoadStatus> loadInfo;
 
@@ -37,9 +34,8 @@ public class HistoryLoader {
     @Setter
     private NatsConnector connector;
 
-    public HistoryLoader(Storage storage, CurveCacheRepository repository, SimpMessagingTemplate wsTemplate) {
+    public HistoryLoader(Storage storage, SimpMessagingTemplate wsTemplate) {
         this.storage = storage;
-        this.repository = repository;
         this.wsTemplate = wsTemplate;
         requestAllowed = new AtomicInteger(HISTORY_ONETIME_REQUESTS);
         loadInfo = new ConcurrentHashMap<>();
@@ -111,12 +107,20 @@ public class HistoryLoader {
         loadInfo.put(id, status);
 
         switch (status) {
-            case REQUEST -> onStatusRequest(id);
-            case ERROR -> onStatusError(id);
-            case DONE -> onStatusDone(id);
-            case PART -> onStatusPart(id);
-            default -> {
-            }
+            case REQUEST:
+                onStatusRequest(id);
+                break;
+            case ERROR:
+                onStatusError(id);
+                break;
+            case DONE:
+                onStatusDone(id);
+                break;
+            case PART:
+                onStatusPart(id);
+                break;
+            default:
+                break;
         }
     }
 
@@ -172,36 +176,11 @@ public class HistoryLoader {
         requestAllowed.incrementAndGet();
     }
 
-    public List<CacheItem> getResponse(Long id, Double from, Double to, boolean hasFromTo) {
 
-        if (storage.isHistoryLoaded(id)) {
-            log.info("Begin response preparing for id {}", id);
-
-            List<CacheItem> result = new ArrayList<>();
-
-            List<String> caches = hasFromTo ? repository.getFromTo(id, from, to) : repository.getAll(id);
-
-            List<List<CacheItem>> fromDB = caches.stream()
-                    .map(CacheUtils::parseCacheItems)
-                    .toList();
-
-            if (!fromDB.isEmpty()) {
-                fromDB.get(0).removeIf(i -> i.getKey() < from);
-                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > to);
-                fromDB.forEach(result::addAll);
-            }
-
-            result.addAll(storage.getFromStorage(id, from, to));
-
-            log.info("Response for id {} prepared. Items count: {}", id, result.size());
-            return result;
-        }
-
+    public void loadCurve(Long id) {
         if (!loadInfo.containsKey(id)) {
             applyStatus(id, LoadStatus.WAIT);
         }
-
-        return null;
     }
 
     @PreDestroy

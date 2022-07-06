@@ -57,7 +57,7 @@ public class NatsConnector {
         }
     }
 
-    public void sendRequest(byte[] data) throws ExecutionException, InterruptedException {
+    public Message sendRequest(byte[] data) throws ExecutionException, InterruptedException {
         Message message = NatsMessage.builder()
                 .subject(SUBJECT)
                 .data(data)
@@ -65,6 +65,8 @@ public class NatsConnector {
 
         Message response = connection.request(message).get();
         log.info("Response: {}", new String(response.getData()));
+
+        return response;
     }
 
     private void onError() {
