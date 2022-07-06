@@ -15,7 +15,7 @@ public class Heartbeat {
 
     private final Storage storage;
 
-    @Scheduled(fixedDelay = 30, timeUnit = TimeUnit.SECONDS)
+    @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
     private void heartbeat() {
         log.info(storage.getInfo());
     }

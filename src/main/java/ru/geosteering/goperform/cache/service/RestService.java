@@ -30,7 +30,7 @@ public class RestService {
     public List<CacheItem> getDataItems(Long id, Double from, Double to, boolean hasFromTo, Integer limit) {
 
         if (storage.isHistoryLoaded(id)) {
-            log.info("Begin response preparing for id {}", id);
+            log.debug("Begin response preparing for id {}", id);
 
             List<CacheItem> result = new ArrayList<>();
 
@@ -50,12 +50,11 @@ public class RestService {
 
             if (limit != null && limit > 2) {
                 double factor = 1;
-                log.info("Approximating start: limit {}, size {}", limit, result.size());
                 while (result.size() > limit && factor > 0.01) {
                     factor -= 0.01;
                     int before = result.size();
                     result = CacheUtils.approximate(result, factor);
-                    log.info("Approximate step: factor {}, before: {}, after: {}", factor, before, result.size());
+                    log.debug("Approximate step for id {}, limit{}, factor {}, before {}, after {}", id, limit, factor, before, result.size());
                 }
             }
 
@@ -73,6 +72,9 @@ public class RestService {
         CurveDataRequest request = new CurveDataRequest();
         request.setCurveId(id);
         request.setInfoOnly(true);
+        request.setWithRange(true);
+
+        log.info("Curve info request: {}", request);
 
         Message response = null;
         try {

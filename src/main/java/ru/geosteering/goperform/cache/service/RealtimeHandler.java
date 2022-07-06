@@ -67,7 +67,7 @@ public class RealtimeHandler implements MessageHandler {
             Long.parseLong(tail);
             return true;
         } catch (NumberFormatException e) {
-            log.warn("Spam detected. Subject: {}", subject);
+            log.trace("Spam detected. Subject: {}", subject);
             return false;
         }
     }

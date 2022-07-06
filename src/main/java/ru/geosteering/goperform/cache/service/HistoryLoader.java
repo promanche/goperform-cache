@@ -102,7 +102,7 @@ public class HistoryLoader {
 
     public void applyStatus(Long id, LoadStatus status) {
 
-        log.info("Status for {}: {}", id, status);
+        log.debug("Status for {}: {}", id, status);
 
         loadInfo.put(id, status);
 
