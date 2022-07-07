@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.model.ItemType;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
@@ -18,8 +19,6 @@ import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static ru.geosteering.goperform.cache.config.Config.*;
-
 @Service
 @Slf4j
 public class HistoryLoader {
@@ -28,16 +27,18 @@ public class HistoryLoader {
     private final SimpMessagingTemplate wsTemplate;
     private final AtomicInteger requestAllowed;
     private final Map<Long, LoadStatus> loadInfo;
+    private final Config config;
 
     private ScheduledExecutorService requestScheduler;
 
     @Setter
     private NatsConnector connector;
 
-    public HistoryLoader(Storage storage, SimpMessagingTemplate wsTemplate) {
+    public HistoryLoader(Storage storage, SimpMessagingTemplate wsTemplate, Config config) {
         this.storage = storage;
         this.wsTemplate = wsTemplate;
-        requestAllowed = new AtomicInteger(HISTORY_ONETIME_REQUESTS);
+        this.config = config;
+        requestAllowed = new AtomicInteger(config.HISTORY_ONETIME_REQUESTS);
         loadInfo = new ConcurrentHashMap<>();
     }
 
@@ -49,7 +50,7 @@ public class HistoryLoader {
     }
 
     public void restart() {
-        requestAllowed.set(HISTORY_ONETIME_REQUESTS);
+        requestAllowed.set(config.HISTORY_ONETIME_REQUESTS);
         loadInfo.clear();
         start();
     }
@@ -130,7 +131,7 @@ public class HistoryLoader {
 
         String to = getItemKeyAsString(storage.getFirstReal(id));
 
-        CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, HISTORY_REQUEST_LIMIT, HISTORY_NUID + "." + id);
+        CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, config.HISTORY_REQUEST_LIMIT, config.HISTORY_NUID + "." + id);
         log.info("Request: {}", request);
 
         try {

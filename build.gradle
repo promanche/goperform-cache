@@ -16,8 +16,10 @@ repositories {
 }
 
 dependencies {
+    annotationProcessor "org.springframework.boot:spring-boot-configuration-processor"
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-websocket'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.mybatis.spring.boot:mybatis-spring-boot-starter:2.2.2'
     implementation 'io.nats:jnats:2.15.3'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'

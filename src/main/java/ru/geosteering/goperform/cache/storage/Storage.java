@@ -2,6 +2,7 @@ package ru.geosteering.goperform.cache.storage;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.repository.CacheDTO;
 import ru.geosteering.goperform.cache.repository.CacheRepository;
@@ -9,14 +10,12 @@ import ru.geosteering.goperform.cache.repository.CacheRepository;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static ru.geosteering.goperform.cache.config.Config.BATCH_SIZE;
-import static ru.geosteering.goperform.cache.config.Config.MARGIN_SIZE;
-
 @Component
 @Slf4j
 public class Storage {
 
     private final CacheRepository repository;
+    private final Config config;
 
     private final Map<Long, PriorityQueue<CacheItem>> realTimeCache;
     private final Map<Long, PriorityQueue<CacheItem>> historyCache;
@@ -25,8 +24,9 @@ public class Storage {
     private final Set<CacheDTO> errorBuffer;
     //TODO error buffer -> what to do?
 
-    public Storage(CacheRepository repository) {
+    public Storage(CacheRepository repository, Config config) {
         this.repository = repository;
+        this.config = config;
         realTimeCache = new ConcurrentHashMap<>();
         historyCache = new ConcurrentHashMap<>();
         historyLoaded = ConcurrentHashMap.newKeySet();
@@ -39,7 +39,7 @@ public class Storage {
         Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
 
         PriorityQueue<CacheItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(BATCH_SIZE + MARGIN_SIZE, Comparator.comparing(CacheItem::getKey)));
+                cache.computeIfAbsent(id, val -> new PriorityQueue<>(config.BATCH_SIZE + config.MARGIN_SIZE, Comparator.comparing(CacheItem::getKey)));
 
         synchronized (items) {
             items.add(item);
@@ -67,11 +67,11 @@ public class Storage {
     }
 
     private void transferIfNeed(Long id, PriorityQueue<CacheItem> items, boolean isReal) {
-        if ((isReal && !isHistoryLoaded(id)) || items.size() < BATCH_SIZE + MARGIN_SIZE) {
+        if ((isReal && !isHistoryLoaded(id)) || items.size() < config.BATCH_SIZE + config.MARGIN_SIZE) {
             return;
         }
 
-        List<CacheDTO> transferList = new ArrayList<>((items.size() - MARGIN_SIZE) / BATCH_SIZE);
+        List<CacheDTO> transferList = new ArrayList<>((items.size() - config.MARGIN_SIZE) / config.BATCH_SIZE);
 
         fillTransferList(id, items, transferList);
 
@@ -87,9 +87,9 @@ public class Storage {
 
     private void fillTransferList(Long id, PriorityQueue<CacheItem> items, List<CacheDTO> transferList) {
 
-        while (items.size() >= BATCH_SIZE + MARGIN_SIZE) {
-            ArrayList<CacheItem> itemsBatch = new ArrayList<>(BATCH_SIZE);
-            for (int i = 0; i < BATCH_SIZE; i++) {
+        while (items.size() >= config.BATCH_SIZE + config.MARGIN_SIZE) {
+            ArrayList<CacheItem> itemsBatch = new ArrayList<>(config.BATCH_SIZE);
+            for (int i = 0; i < config.BATCH_SIZE; i++) {
                 itemsBatch.add(items.poll());
             }
             transferList.add(new CacheDTO(id, itemsBatch));

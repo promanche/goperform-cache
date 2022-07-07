@@ -5,6 +5,7 @@ import io.nats.client.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.responses.*;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
@@ -15,9 +16,6 @@ import java.util.Set;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import static ru.geosteering.goperform.cache.config.Config.HISTORY_REQUEST_LIMIT;
-import static ru.geosteering.goperform.cache.config.Config.HISTORY_THREADS;
-
 @Service
 @Slf4j
 public class HistoryHandler implements MessageHandler {
@@ -26,21 +24,23 @@ public class HistoryHandler implements MessageHandler {
     private final HistoryLoader historyLoader;
     private final Map<Long, AtomicInteger> receivedCount;
     private final Map<Long, Set<CacheItem>> buffer;
+    private final Config config;
+    private ExecutorService messageHandler;
 
-    private ExecutorService messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
-
-    public HistoryHandler(Storage storage, HistoryLoader historyLoader) {
+    public HistoryHandler(Storage storage, HistoryLoader historyLoader, Config config) {
         this.storage = storage;
         this.historyLoader = historyLoader;
+        this.config = config;
         receivedCount = new ConcurrentHashMap<>();
         buffer = new ConcurrentHashMap<>();
+        messageHandler = Executors.newFixedThreadPool(config.HISTORY_THREADS);
     }
 
     public void restart() {
         receivedCount.clear();
         buffer.clear();
         storage.onRestartHistory();
-        messageHandler = Executors.newFixedThreadPool(HISTORY_THREADS);
+        messageHandler = Executors.newFixedThreadPool(config.HISTORY_THREADS);
     }
 
     @Override
@@ -79,7 +79,7 @@ public class HistoryHandler implements MessageHandler {
 
     private void processCurveData(CurveDataMessage curveDataMessage) {
 
-        buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(HISTORY_REQUEST_LIMIT))
+        buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(config.HISTORY_REQUEST_LIMIT))
                 .add(CacheItem.fromCurveDataItem(curveDataMessage.getData()));
 
         receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))

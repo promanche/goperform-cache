@@ -5,14 +5,13 @@ import io.nats.client.impl.NatsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.service.*;
 
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
-
-import static ru.geosteering.goperform.cache.config.Config.*;
 
 @Component
 @Slf4j
@@ -22,6 +21,7 @@ public class NatsConnector {
     private final RealtimeHandler realtimeHandler;
     private final HistoryHandler historyHandler;
     private final HistoryLoader historyLoader;
+    private final Config config;
 
     private Connection connection;
     private CustomErrorListener errorListener;
@@ -37,11 +37,11 @@ public class NatsConnector {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
-                .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", HOST, connection.getStatus()))
+                .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", config.HOST, connection.getStatus()))
                 .noReconnect()
                 .errorListener(errorListener)
-                .authHandler(Nats.credentials(CREDENTIALS_FILE))
-                .server(HOST)
+                .authHandler(Nats.credentials(config.CREDENTIALS_FILE))
+                .server(config.HOST)
                 .build();
 
         try {
@@ -52,14 +52,14 @@ public class NatsConnector {
 
         if (connection != null) {
             Dispatcher dispatcher = connection.createDispatcher();
-            dispatcher.subscribe(SUBJECT + ".*", realtimeHandler);
-            dispatcher.subscribe(SUBJECT + "." + HISTORY_NUID + ".*", historyHandler);
+            dispatcher.subscribe(config.SUBJECT + ".*", realtimeHandler);
+            dispatcher.subscribe(config.SUBJECT + "." + config.HISTORY_NUID + ".*", historyHandler);
         }
     }
 
     public Message sendRequest(byte[] data) throws ExecutionException, InterruptedException {
         Message message = NatsMessage.builder()
-                .subject(SUBJECT)
+                .subject(config.SUBJECT)
                 .data(data)
                 .build();
 
@@ -98,7 +98,7 @@ public class NatsConnector {
                 onError();
                 closeConnection();
 
-                int seconds = RECONNECT_TIMEOUT_SECONDS;
+                int seconds = config.RECONNECT_TIMEOUT_SECONDS;
                 while (seconds > 0) {
                     log.info("Reconnect waiting... " + seconds);
                     Thread.sleep(1000);

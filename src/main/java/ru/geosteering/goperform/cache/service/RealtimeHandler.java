@@ -7,6 +7,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
@@ -14,26 +15,26 @@ import ru.geosteering.goperform.cache.utils.CacheUtils;
 import javax.annotation.PreDestroy;
 import java.util.concurrent.*;
 
-import static ru.geosteering.goperform.cache.config.Config.REALTIME_THREADS;
-import static ru.geosteering.goperform.cache.config.Config.SUBJECT;
-
 @Service
 @Slf4j
 public class RealtimeHandler implements MessageHandler {
 
     private final Storage storage;
     private final SimpMessagingTemplate wsTemplate;
+    private final Config config;
 
-    private ExecutorService messageHandler = Executors.newFixedThreadPool(REALTIME_THREADS);
+    private ExecutorService messageHandler;
 
-    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate) {
+    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config) {
         this.storage = storage;
         this.wsTemplate = wsTemplate;
+        this.config = config;
+        messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
     public void restart() {
         storage.onRestartReal();
-        messageHandler = Executors.newFixedThreadPool(REALTIME_THREADS);
+        messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
     @Override
@@ -62,7 +63,7 @@ public class RealtimeHandler implements MessageHandler {
     }
 
     private boolean notSpam(String subject) {
-        String tail = subject.substring(SUBJECT.length() + 1);
+        String tail = subject.substring(config.SUBJECT.length() + 1);
         try {
             Long.parseLong(tail);
             return true;
