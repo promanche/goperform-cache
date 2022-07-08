@@ -203,12 +203,23 @@ public class Storage {
         Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
 
         if (cache.containsKey(id)) {
+
             PriorityQueue<CacheItem> items = cache.get(id);
+
             synchronized (items) {
-                if (!items.isEmpty() && items.peek().getKey() <= to) {
-                    items.stream()
-                            .filter(item -> item.getKey() >= from && item.getKey() <= to)
-                            .forEach(result::add);
+
+                if (from == null && to == null) {
+                    result.addAll(items);
+
+                } else {
+                    double finalFrom = from == null ? Double.MIN_VALUE : from;
+                    double finalTo = to == null ? Double.MAX_VALUE : to;
+
+                    if (!items.isEmpty() && items.peek().getKey() <= finalTo) {
+                        items.stream()
+                                .filter(item -> item.getKey() >= finalFrom && item.getKey() <= finalTo)
+                                .forEach(result::add);
+                    }
                 }
             }
         }

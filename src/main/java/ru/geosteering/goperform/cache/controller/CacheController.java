@@ -23,16 +23,16 @@ public class CacheController {
 
     @GetMapping("/curve/{id}/coordinates/by-time")
     public ResponseEntity<List<CacheItem>> getByTime(@PathVariable Long id,
-                                                     @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
-                                                     @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+                                                     @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+                                                     @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
                                                      @RequestParam(required = false) Integer limit) {
 
         log.info("Incoming by-time response id {}, from {}, to {}, limit {}", id, from, to, limit);
 
-        double doubleFrom = from.toInstant().toEpochMilli();
-        double doubleTo = to.toInstant().toEpochMilli();
+        Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
+        Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
 
-        List<CacheItem> response = service.getDataItems(id, doubleFrom, doubleTo, true, limit);
+        List<CacheItem> response = service.getDataItems(id, doubleFrom, doubleTo, limit);
 
         if (response == null) {
             return new ResponseEntity<>(HttpStatus.ACCEPTED);
@@ -79,7 +79,7 @@ public class CacheController {
     }
 
     private ResponseEntity<List<CacheItem>> getWithoutParams(Long id) {
-        List<CacheItem> response = service.getDataItems(id, null, null, false, null);
+        List<CacheItem> response = service.getDataItems(id, null, null, null);
 
         if (response == null) {
             return new ResponseEntity<>(HttpStatus.ACCEPTED);

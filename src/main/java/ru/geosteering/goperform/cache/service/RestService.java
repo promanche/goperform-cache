@@ -27,22 +27,36 @@ public class RestService {
     private final CacheRepository repository;
     private final HistoryLoader loader;
 
-    public List<CacheItem> getDataItems(Long id, Double from, Double to, boolean hasFromTo, Integer limit) {
+    public List<CacheItem> getDataItems(Long id, Double from, Double to, Integer limit) {
 
         if (storage.isHistoryLoaded(id)) {
             log.debug("Begin response preparing for id {}", id);
 
             List<CacheItem> result = new ArrayList<>();
 
-            List<String> caches = hasFromTo ? repository.getFromTo(id, from, to) : repository.getAll(id);
+            List<String> caches;
+
+            if (from == null && to == null) {
+                caches = repository.getAll(id);
+            } else {
+                from = from == null ? Double.MIN_VALUE : from;
+                to = to == null ? Double.MAX_VALUE : to;
+                caches = repository.getFromTo(id, from, to);
+            }
 
             List<List<CacheItem>> fromDB = caches.stream()
                     .map(CacheUtils::parseCacheItems)
                     .collect(Collectors.toList());
 
             if (!fromDB.isEmpty()) {
-                fromDB.get(0).removeIf(i -> i.getKey() < from);
-                fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > to);
+                if (from != null) {
+                    Double finalFrom = from;
+                    fromDB.get(0).removeIf(i -> i.getKey() < finalFrom);
+                }
+                if (to != null) {
+                    Double finalTo = to;
+                    fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > finalTo);
+                }
                 fromDB.forEach(result::addAll);
             }
 
@@ -59,6 +73,7 @@ public class RestService {
             }
 
             log.info("Response for id {} prepared. Items count: {}", id, result.size());
+
             return result;
         }
 
