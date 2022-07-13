@@ -1,14 +1,17 @@
 package ru.geosteering.goperform.cache.storage;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CacheItem;
 import ru.geosteering.goperform.cache.repository.CacheDTO;
 import ru.geosteering.goperform.cache.repository.CacheRepository;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
@@ -20,7 +23,7 @@ public class Storage {
     private final Map<Long, PriorityQueue<CacheItem>> realTimeCache;
     private final Map<Long, PriorityQueue<CacheItem>> historyCache;
     private final Set<Long> historyLoaded;
-    private final Set<Long> activeCurves;
+    private final Map<Long, LocalDateTime> activeCurves;
     private final Set<CacheDTO> errorBuffer;
     //TODO error buffer -> what to do?
 
@@ -30,7 +33,7 @@ public class Storage {
         realTimeCache = new ConcurrentHashMap<>();
         historyCache = new ConcurrentHashMap<>();
         historyLoaded = ConcurrentHashMap.newKeySet();
-        activeCurves = ConcurrentHashMap.newKeySet();
+        activeCurves = new ConcurrentHashMap<>();
         errorBuffer = ConcurrentHashMap.newKeySet();
     }
 
@@ -47,7 +50,28 @@ public class Storage {
         }
 
         if (isReal) {
-            activeCurves.add(id);
+            if (!activeCurves.containsKey(id)) {
+                historyLoaded.remove(id);
+                log.info("New active curve id {}", id);
+            }
+            activeCurves.put(id, LocalDateTime.now());
+        }
+    }
+
+    @Scheduled(fixedRate = 20, timeUnit = TimeUnit.SECONDS)
+    private void checkActivity() {
+        synchronized (activeCurves) {
+            synchronized (realTimeCache) {
+                LocalDateTime now = LocalDateTime.now();
+                activeCurves.entrySet().removeIf(entry -> {
+                    boolean isNotActive = entry.getValue().isBefore(now.minusSeconds(20));
+                    if (isNotActive) {
+                        log.warn("Curve id {} is not active", entry.getKey());
+                        realTimeCache.remove(entry.getKey());
+                    }
+                    return isNotActive;
+                });
+            }
         }
     }
 
@@ -132,7 +156,7 @@ public class Storage {
 
     public Set<Long> getActiveCurves() {
         synchronized (activeCurves) {
-            return Set.copyOf(activeCurves);
+            return Set.copyOf(activeCurves.keySet());
         }
     }
 
@@ -170,7 +194,7 @@ public class Storage {
     }
 
     public boolean isActiveCurve(Long id) {
-        return activeCurves.contains(id);
+        return activeCurves.containsKey(id);
     }
 
     public void setHistoryLoaded(Long id) {

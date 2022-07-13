@@ -27,7 +27,7 @@ public class CacheController {
                                                      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
                                                      @RequestParam(required = false) Integer limit) {
 
-        log.info("Incoming by-time response id {}, from {}, to {}, limit {}", id, from, to, limit);
+        log.info("Incoming by-time request id {}, from {}, to {}, limit {}", id, from, to, limit);
 
         Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
         Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
@@ -43,7 +43,7 @@ public class CacheController {
     @GetMapping("/curve/{id}/coordinates/by-depth")
     public ResponseEntity<List<CacheItem>> getByDepth(@PathVariable Long id) {
 
-        log.info("Incoming by-depth response id {}", id);
+        log.info("Incoming by-depth request id {}", id);
 
         return getWithoutParams(id);
     }
@@ -51,7 +51,7 @@ public class CacheController {
     @GetMapping("/curve/{id}/coordinates/image")
     public ResponseEntity<List<CacheItem>> getImage(@PathVariable Long id) {
 
-        log.info("Incoming image response id {}", id);
+        log.info("Incoming image request id {}", id);
 
         return getWithoutParams(id);
     }
@@ -59,7 +59,7 @@ public class CacheController {
     @GetMapping("/curve/{id}/coordinates/comments")
     public ResponseEntity<List<CacheItem>> getComments(@PathVariable Long id) {
 
-        log.info("Incoming comments response id {}", id);
+        log.info("Incoming comments request id {}", id);
 
         return getWithoutParams(id);
     }
@@ -67,7 +67,7 @@ public class CacheController {
     @GetMapping("/curve/{id}")
     public ResponseEntity<ApiMessage> getCurveInfo(@PathVariable Long id) {
 
-        log.info("Incoming curve-info response id {}", id);
+        log.info("Incoming curve-info request id {}", id);
 
         ApiMessage curveInfo = service.getCurveInfo(id);
 

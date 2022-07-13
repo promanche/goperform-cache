@@ -25,8 +25,4 @@ public class CacheDTO {
         this.last = list.get(list.size() - 1).getKey();
         this.cache = CacheUtils.toJson(list);
     }
-
-    public List<CacheItem> toItems() {
-        return CacheUtils.parseCacheItems(cache);
-    }
 }

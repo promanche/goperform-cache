@@ -87,7 +87,7 @@ public class HistoryLoader {
 
             if (id == null) {
                 id = storage.getActiveCurves().stream()
-                        .filter(curId -> !loadInfo.containsKey(curId))
+                        .filter(curId -> !storage.isHistoryLoaded(curId) && !loadInfo.containsKey(curId))
                         .findFirst()
                         .orElse(null);
 
@@ -167,6 +167,8 @@ public class HistoryLoader {
             storage.mergeCache(id);
         }
         wsTemplate.convertAndSend("/websocket/CurveDataLoaded", "{\"curveId\":" + id + "}");
+
+        loadInfo.remove(id);
     }
 
     private void onStatusPart(Long id) {
