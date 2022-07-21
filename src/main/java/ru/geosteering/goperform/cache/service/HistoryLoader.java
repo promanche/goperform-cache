@@ -6,15 +6,11 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.CacheItem;
-import ru.geosteering.goperform.cache.model.ItemType;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.CacheUtils;
 
 import javax.annotation.PreDestroy;
-import java.time.*;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -103,6 +99,11 @@ public class HistoryLoader {
 
     public void applyStatus(Long id, LoadStatus status) {
 
+        if (loadInfo.get(id) == LoadStatus.STOP) {
+            log.warn("Unable to change STOP status for id {}", id);
+            return;
+        }
+
         log.debug("Status for {}: {}", id, status);
 
         loadInfo.put(id, status);
@@ -125,11 +126,18 @@ public class HistoryLoader {
         }
     }
 
+    public void applyStatusForce(Long id, LoadStatus status) {
+        synchronized (loadInfo) {
+            loadInfo.remove(id);
+            applyStatus(id, status);
+        }
+    }
+
     private void onStatusRequest(Long id) {
 
-        String from = getItemKeyAsString(storage.getLastHistory(id));
+        String from = storage.getLastHistoryKey(id);
 
-        String to = getItemKeyAsString(storage.getFirstReal(id));
+        String to = storage.getFirstRealKey(id);
 
         CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, config.HISTORY_REQUEST_LIMIT, config.HISTORY_NUID + "." + id);
         log.info("Request: {}", request);
@@ -140,20 +148,6 @@ public class HistoryLoader {
             log.error("Send request exception: {}", e.getMessage(), e);
             applyStatus(id, LoadStatus.ERROR);
         }
-    }
-
-    private String getItemKeyAsString(CacheItem item) {
-        String result = null;
-        if (item != null) {
-            Double key = item.getKey();
-            if (item.getType() == ItemType.TIME) {
-                result = OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
-            } else {
-                result = String.valueOf(key);
-            }
-        }
-
-        return result;
     }
 
     private void onStatusError(Long id) {
@@ -180,7 +174,7 @@ public class HistoryLoader {
     }
 
 
-    public void loadCurve(Long id) {
+    public void loadByRequest(Long id) {
         if (!loadInfo.containsKey(id)) {
             applyStatus(id, LoadStatus.WAIT);
         }

@@ -5,10 +5,13 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CacheItem;
+import ru.geosteering.goperform.cache.model.ItemType;
 import ru.geosteering.goperform.cache.repository.CacheDTO;
 import ru.geosteering.goperform.cache.repository.CacheRepository;
 
-import java.time.LocalDateTime;
+import javax.annotation.PostConstruct;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -24,8 +27,7 @@ public class Storage {
     private final Map<Long, PriorityQueue<CacheItem>> historyCache;
     private final Set<Long> historyLoaded;
     private final Map<Long, LocalDateTime> activeCurves;
-    private final Set<CacheDTO> errorBuffer;
-    //TODO error buffer -> what to do?
+    private final Map<Long, CacheItem> lastDBItems;
 
     public Storage(CacheRepository repository, Config config) {
         this.repository = repository;
@@ -34,7 +36,20 @@ public class Storage {
         historyCache = new ConcurrentHashMap<>();
         historyLoaded = ConcurrentHashMap.newKeySet();
         activeCurves = new ConcurrentHashMap<>();
-        errorBuffer = ConcurrentHashMap.newKeySet();
+        lastDBItems = new ConcurrentHashMap<>();
+    }
+
+    @PostConstruct
+    public void loadLastKeys() {
+        List<CacheDTO> allLast = repository.getAllLast();
+        allLast.forEach(dto -> {
+            CacheItem item = new CacheItem();
+            item.setKey(dto.getLast());
+            item.setType(dto.getType());
+
+            lastDBItems.put(dto.getCurveId(), item);
+        });
+        log.debug("Last items map loaded: {}", lastDBItems);
     }
 
     public void add(Long id, CacheItem item, boolean isReal) {
@@ -61,7 +76,9 @@ public class Storage {
     @Scheduled(fixedRate = 20, timeUnit = TimeUnit.SECONDS)
     private void checkActivity() {
         synchronized (activeCurves) {
+            log.debug("checkActivity synchronized on activeCurves");
             synchronized (realTimeCache) {
+                log.debug("checkActivity synchronized on realTimeCache");
                 LocalDateTime now = LocalDateTime.now();
                 activeCurves.entrySet().removeIf(entry -> {
                     boolean isNotActive = entry.getValue().isBefore(now.minusSeconds(20));
@@ -103,7 +120,6 @@ public class Storage {
             try {
                 repository.save(transferList);
             } catch (Exception e) {
-                errorBuffer.addAll(transferList);
                 log.error("Database exception: {}. Data added to errorBuffer", e.getMessage(), e);
             }
         }
@@ -117,7 +133,19 @@ public class Storage {
                 itemsBatch.add(items.poll());
             }
             transferList.add(new CacheDTO(id, itemsBatch));
+            rememberLastDbItem(id, itemsBatch.get(itemsBatch.size() - 1));
         }
+    }
+
+    private void rememberLastDbItem(Long id, CacheItem item) {
+        lastDBItems.put(id, item);
+    }
+
+    public Double getLastDbKey(Long id) {
+        if (lastDBItems.containsKey(id)) {
+            return lastDBItems.get(id).getKey();
+        }
+        return null;
     }
 
     public void mergeCache(Long id) {
@@ -150,8 +178,8 @@ public class Storage {
         int realTotal = realTimeCache.values().stream().mapToInt(PriorityQueue::size).sum();
         int historyTotal = historyCache.values().stream().mapToInt(PriorityQueue::size).sum();
 
-        return String.format("Realtime cache: curves - %d; records - %d. History cache: curves - %d; records - %d. History loaded: %s. Error buffer size: %d",
-                realTimeCache.size(), realTotal, historyCache.size(), historyTotal, historyLoaded, errorBuffer.size());
+        return String.format("Realtime cache: curves - %d; records - %d. History cache: curves - %d; records - %d. History loaded: %s",
+                realTimeCache.size(), realTotal, historyCache.size(), historyTotal, historyLoaded);
     }
 
     public Set<Long> getActiveCurves() {
@@ -160,37 +188,55 @@ public class Storage {
         }
     }
 
-    public CacheItem getFirstReal(Long id) {
+    public String getFirstRealKey(Long id) {
 
         if (realTimeCache.containsKey(id)) {
             PriorityQueue<CacheItem> items = realTimeCache.get(id);
 
             synchronized (items) {
-                return realTimeCache.get(id).peek();
+                CacheItem item = realTimeCache.get(id).peek();
+                if (item != null) {
+                    return getKeyAsString(item.getKey(), item.getType());
+                }
             }
         }
         return null;
     }
 
-    public CacheItem getLastHistory(Long id) {
+    public String getLastHistoryKey(Long id) {
 
-        CacheItem lastHistory = null;
+        CacheItem lastHistoryItem;
 
         if (historyCache.containsKey(id)) {
             PriorityQueue<CacheItem> items = historyCache.get(id);
 
             synchronized (items) {
-                lastHistory = items.stream()
+                lastHistoryItem = items.stream()
                         .max(Comparator.comparing(CacheItem::getKey))
                         .orElse(null);
             }
+        } else {
+            lastHistoryItem = lastDBItems.get(id);
         }
 
-        if (lastHistory == null) {
-            lastHistory = repository.getEmptyLast(id);
+        if (lastHistoryItem != null) {
+            return getKeyAsString(lastHistoryItem.getKey(), lastHistoryItem.getType());
         }
 
-        return lastHistory;
+        return null;
+    }
+
+    private String getKeyAsString(Double key, ItemType type) {
+
+        if (key == null || type == null) {
+            return null;
+        }
+
+        if (type == ItemType.TIME) {
+            return OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+        } else {
+            return String.valueOf(key);
+        }
     }
 
     public boolean isActiveCurve(Long id) {
@@ -253,5 +299,20 @@ public class Storage {
         }
 
         return result;
+    }
+
+    public synchronized void resetById(Long id) {
+        historyCache.remove(id);
+        realTimeCache.remove(id);
+        historyLoaded.remove(id);
+        activeCurves.remove(id);
+
+        CacheDTO lastDto = repository.getLast(id);
+        CacheItem item = new CacheItem();
+        item.setType(lastDto.getType());
+        item.setKey(lastDto.getLast());
+
+        lastDBItems.put(id, item);
+
     }
 }

@@ -26,27 +26,30 @@ public class RestService {
     private final Storage storage;
     private final CacheRepository repository;
     private final HistoryLoader loader;
+    private final DataReloader reloader;
 
     public List<CacheItem> getDataItems(Long id, Double from, Double to, Integer limit) {
 
         if (storage.isHistoryLoaded(id)) {
             log.debug("Begin response preparing for id {}", id);
 
-            List<CacheItem> result = new ArrayList<>();
-
             List<String> caches;
 
             if (from == null && to == null) {
-                caches = repository.getAll(id);
+                caches = repository.getAllCaches(id);
             } else {
                 from = from == null ? Double.MIN_VALUE : from;
                 to = to == null ? Double.MAX_VALUE : to;
                 caches = repository.getFromTo(id, from, to);
             }
 
+            log.debug("Caches from db loaded: {} records", caches.size());
+
             List<List<CacheItem>> fromDB = caches.stream()
                     .map(CacheUtils::parseCacheItems)
                     .collect(Collectors.toList());
+
+            List<CacheItem> fromStorage = storage.getFromStorage(id, from, to);
 
             if (!fromDB.isEmpty()) {
                 if (from != null) {
@@ -57,10 +60,11 @@ public class RestService {
                     Double finalTo = to;
                     fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > finalTo);
                 }
-                fromDB.forEach(result::addAll);
             }
 
-            result.addAll(storage.getFromStorage(id, from, to));
+            List<CacheItem> result = new ArrayList<>(fromDB.size() * 1000 + fromStorage.size());
+            fromDB.forEach(result::addAll);
+            result.addAll(fromStorage);
 
             if (limit != null && limit > 2) {
                 double factor = 1;
@@ -77,7 +81,7 @@ public class RestService {
             return result;
         }
 
-        loader.loadCurve(id);
+        loader.loadByRequest(id);
 
         return null;
     }
@@ -99,5 +103,9 @@ public class RestService {
         }
 
         return response == null ? null : CacheUtils.parseApiMessage(new String(response.getData()), response.getSubject());
+    }
+
+    public void reloadCurve(Long id, Double from) {
+        reloader.addForReload(id, from, 2);
     }
 }

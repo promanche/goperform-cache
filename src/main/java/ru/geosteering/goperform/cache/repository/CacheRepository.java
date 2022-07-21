@@ -4,7 +4,6 @@ import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
-import ru.geosteering.goperform.cache.model.CacheItem;
 
 import java.util.List;
 
@@ -21,7 +20,7 @@ public class CacheRepository {
 
         try {
             for (CacheDTO dto : list) {
-                mapper.save(dto);
+                mapper.saveCacheDTO(dto);
             }
 
             session.commit();
@@ -33,15 +32,27 @@ public class CacheRepository {
         }
     }
 
-    public CacheItem getEmptyLast(Long id) {
-        return mapper.getEmptyLast(id);
-    }
-
     public List<String> getFromTo(Long id, Double from, Double to) {
         return mapper.getFromTo(id, from, to);
     }
 
-    public List<String> getAll(Long id) {
-        return mapper.getAll(id);
+    public List<String> getAllCaches(Long id) {
+        return mapper.getAllCaches(id);
+    }
+
+    public List<CacheDTO> getAllLast() {
+        return mapper.getAllLast();
+    }
+
+    public CacheDTO getLast(Long id) {
+        return mapper.getLast(id);
+    }
+
+    public void delete(Long id, Double from) {
+        if (from == null) {
+            mapper.deleteAll(id);
+        } else {
+            mapper.deleteAfter(id, from);
+        }
     }
 }

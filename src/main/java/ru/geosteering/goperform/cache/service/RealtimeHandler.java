@@ -22,13 +22,17 @@ public class RealtimeHandler implements MessageHandler {
     private final Storage storage;
     private final SimpMessagingTemplate wsTemplate;
     private final Config config;
+    private final HistoryLoader loader;
+    private final DataReloader reloader;
 
     private ExecutorService messageHandler;
 
-    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config) {
+    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config, HistoryLoader loader, DataReloader reloader) {
         this.storage = storage;
         this.wsTemplate = wsTemplate;
         this.config = config;
+        this.loader = loader;
+        this.reloader = reloader;
         messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
@@ -51,9 +55,16 @@ public class RealtimeHandler implements MessageHandler {
                 if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
                     CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
                     CacheItem item = CacheItem.fromCurveDataItem(curveDataMessage.getData());
-                    storage.add(curveDataMessage.getId(), item, true);
-                    String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + CacheUtils.toJson(item) + "}";
-                    wsTemplate.convertAndSend("/websocket/AddPoint", toWs);
+
+                    if (notOld(curveDataMessage.getId(), item.getKey())) {
+                        storage.add(curveDataMessage.getId(), item, true);
+                        String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + CacheUtils.toJson(item) + "}";
+                        wsTemplate.convertAndSend("/websocket/AddPoint", toWs);
+
+                    } else {
+                        loader.applyStatus(curveDataMessage.getId(), LoadStatus.STOP);
+                        reloader.addForReload(curveDataMessage.getId(), item.getKey(), 60 * 5);
+                    }
                 }
             }
 
@@ -71,6 +82,11 @@ public class RealtimeHandler implements MessageHandler {
             log.trace("Spam detected. Subject: {}", subject);
             return false;
         }
+    }
+
+    private boolean notOld(Long id, Double key) {
+        Double lastKey = storage.getLastDbKey(id);
+        return lastKey == null || key > lastKey;
     }
 
     @PreDestroy
