@@ -1,111 +1,119 @@
 package ru.geosteering.goperform.cache.service;
 
-import io.nats.client.Message;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
-import ru.geosteering.commonModels.dataService.responses.ApiMessage;
-import ru.geosteering.goperform.cache.model.CacheItem;
-import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.repository.CacheRepository;
+import ru.geosteering.goperform.cache.model.*;
+import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.utils.CacheUtils;
+import ru.geosteering.goperform.cache.utils.MapperUtils;
 
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Service
 @Slf4j
 @AllArgsConstructor
 public class RestService {
 
-    private final NatsConnector connector;
     private final Storage storage;
-    private final CacheRepository repository;
+    private final MainRepository repository;
     private final HistoryLoader loader;
     private final DataReloader reloader;
+    private final MetaDataProcessor metaDataProcessor;
+    private final Approximator approximator;
 
-    public List<CacheItem> getDataItems(Long id, Double from, Double to, Integer limit) {
+    public Object getCurveData(Long id, Double from, Double to, Integer scale) {
 
         if (storage.isHistoryLoaded(id)) {
+
             log.debug("Begin response preparing for id {}", id);
 
-            List<String> caches;
-
-            if (from == null && to == null) {
-                caches = repository.getAllCaches(id);
-            } else {
+            if (from != null || to != null) {
                 from = from == null ? Double.MIN_VALUE : from;
                 to = to == null ? Double.MAX_VALUE : to;
-                caches = repository.getFromTo(id, from, to);
             }
 
-            log.debug("Caches from db loaded: {} records", caches.size());
+            if (scale != null && metaDataProcessor.getMetaData(id).getScaleSet().contains(scale)) {
 
-            List<List<CacheItem>> fromDB = caches.stream()
-                    .map(CacheUtils::parseCacheItems)
-                    .collect(Collectors.toList());
+                List<CurveSegment> result = repository.getLinesFromTo(id, scale, from, to)
+                        .stream()
+                        .flatMap((Function<String, Stream<CurveSegment>>) s -> MapperUtils.parseCacheLines(s).stream())
+                        .collect(Collectors.toList());
 
-            List<CacheItem> fromStorage = storage.getFromStorage(id, from, to);
+                result.addAll(approximator.getLines(id, scale, from, to));
 
-            if (!fromDB.isEmpty()) {
-                if (from != null) {
-                    Double finalFrom = from;
-                    fromDB.get(0).removeIf(i -> i.getKey() < finalFrom);
-                }
-                if (to != null) {
-                    Double finalTo = to;
-                    fromDB.get(fromDB.size() - 1).removeIf(i -> i.getKey() > finalTo);
-                }
+                addItemsFromStorage(result, id, from, to, scale);
+
+                log.info("Response for id {} prepared. Result list size: {}", id, result.size());
+
+                return result;
+
+            } else {
+
+                List<CurveItem> result = repository.getItemsFromTo(id, from, to)
+                        .stream()
+                        .flatMap((Function<String, Stream<CurveItem>>) s -> MapperUtils.parseCacheItems(s).stream())
+                        .collect(Collectors.toList());
+
+                result.addAll(storage.getFromStorage(id, from, to));
+
+                log.info("Response for id {} prepared. Result list size: {}", id, result.size());
+
+                return result;
             }
-
-            List<CacheItem> result = new ArrayList<>(fromDB.size() * 1000 + fromStorage.size());
-            fromDB.forEach(result::addAll);
-            result.addAll(fromStorage);
-
-            if (limit != null && limit > 2) {
-                double factor = 1;
-                while (result.size() > limit && factor > 0.01) {
-                    factor -= 0.01;
-                    int before = result.size();
-                    result = CacheUtils.approximate(result, factor);
-                    log.debug("Approximate step for id {}, limit{}, factor {}, before {}, after {}", id, limit, factor, before, result.size());
-                }
-            }
-
-            log.info("Response for id {} prepared. Items count: {}", id, result.size());
-
-            return result;
         }
 
+        log.debug("Curve data id {} not yet loaded", id);
         loader.loadByRequest(id);
 
         return null;
     }
 
-    public ApiMessage getCurveInfo(Long id) {
-
-        CurveDataRequest request = new CurveDataRequest();
-        request.setCurveId(id);
-        request.setInfoOnly(true);
-        request.setWithRange(true);
-
-        log.info("Curve info request: {}", request);
-
-        Message response = null;
-        try {
-            response = connector.sendRequest(CacheUtils.toBytes(request));
-        } catch (ExecutionException | InterruptedException e) {
-            log.error(e.getMessage(), e);
-        }
-
-        return response == null ? null : CacheUtils.parseApiMessage(new String(response.getData()), response.getSubject());
+    public MetaData getCurveInfo(Long id) {
+        return metaDataProcessor.getMetaData(id);
     }
 
     public void reloadCurve(Long id, Double from) {
+        loader.applyStatus(id, LoadStatus.BLOCKED);
         reloader.addForReload(id, from, 2);
+    }
+
+    private void addItemsFromStorage(List<CurveSegment> segments, Long id, Double from, Double to, int scale) {
+
+        List<CurveItem> fromStorage = storage.getFromStorage(id, from, to);
+
+        if (!fromStorage.isEmpty()) {
+
+            int secondsOnPixel = scale * 60 / 120;
+
+            CurveSegment last = segments.isEmpty() ? null : segments.get(segments.size() - 1);
+
+            for (CurveItem item : fromStorage) {
+
+                if (last != null && item.getKey() - last.getFirstKey() < (secondsOnPixel - 1) * 1000) {
+                    Double value = (Double) item.getValue();
+                    if (value > last.getMaxVal()) {
+                        last.setMaxVal(value);
+                    }
+                    if (value < last.getMinVal()) {
+                        last.setMinVal(value);
+                    }
+                    last.setLastKey(item.getKey());
+
+                } else {
+                    CurveSegment segment = new CurveSegment();
+                    segment.setFirstKey(item.getKey());
+                    segment.setLastKey(item.getKey());
+                    segment.setMinVal((Double) item.getValue());
+                    segment.setMaxVal((Double) item.getValue());
+                    segments.add(segment);
+
+                    last = segment;
+                }
+            }
+        }
     }
 }

@@ -22,6 +22,7 @@ public class NatsConnector {
     private final HistoryHandler historyHandler;
     private final HistoryLoader historyLoader;
     private final Config config;
+    private final MetaDataProcessor metaDataProcessor;
 
     private Connection connection;
     private CustomErrorListener errorListener;
@@ -30,6 +31,8 @@ public class NatsConnector {
     private void init() {
         errorListener = new CustomErrorListener(this);
         historyLoader.setConnector(this);
+        metaDataProcessor.setConnector(this);
+
         historyLoader.start();
     }
 

@@ -7,6 +7,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 import javax.validation.constraints.*;
+import java.util.List;
 
 @Component
 @ConfigurationProperties("config")
@@ -50,6 +51,9 @@ public class Config {
     @Positive
     public final int RECONNECT_TIMEOUT_SECONDS;
 
+    @NotNull
+    public final List<Integer> SCALE_MINUTES;
+
     public final String HISTORY_NUID;
 
     public Config(@Value("${subject}") String subject,
@@ -61,7 +65,8 @@ public class Config {
                   @Value("${margin-size}") int marginSize,
                   @Value("${credentials-file}") String credentialsFile,
                   @Value("${history-onetime-requests}") int historyOnetimeRequests,
-                  @Value("${reconnect-timeout-sec}") int reconnectTimeoutSeconds) {
+                  @Value("${reconnect-timeout-sec}") int reconnectTimeoutSeconds,
+                  @Value("#{${scale-minutes}}") List<Integer> scaleMinutes) {
         this.SUBJECT = subject;
         this.HOST = host;
         this.REALTIME_THREADS = realtimeThreads;
@@ -72,6 +77,7 @@ public class Config {
         this.CREDENTIALS_FILE = credentialsFile;
         this.HISTORY_ONETIME_REQUESTS = historyOnetimeRequests;
         this.RECONNECT_TIMEOUT_SECONDS = reconnectTimeoutSeconds;
+        this.SCALE_MINUTES = scaleMinutes;
 
         this.HISTORY_NUID = NUID.nextGlobal();
     }

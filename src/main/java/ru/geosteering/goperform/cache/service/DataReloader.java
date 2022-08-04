@@ -5,7 +5,7 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import ru.geosteering.goperform.cache.repository.CacheRepository;
+import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.storage.Storage;
 
 import java.time.LocalDateTime;
@@ -17,13 +17,13 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class DataReloader {
 
-    private final CacheRepository repository;
+    private final MainRepository repository;
     private final HistoryLoader loader;
     private final Storage storage;
 
     private final Map<Long, ReloadData> reloadData;
 
-    public DataReloader(CacheRepository repository, HistoryLoader loader, Storage storage) {
+    public DataReloader(MainRepository repository, HistoryLoader loader, Storage storage) {
         this.repository = repository;
         this.loader = loader;
         this.storage = storage;
@@ -53,15 +53,15 @@ public class DataReloader {
     }
 
     private void reload(Long id, Double from) {
-        log.warn("Run reload process for {}", id);
+        log.info("Run reload process for {} from {}", id, from);
 
         storage.resetById(id);
 
-        repository.delete(id, from);
+        repository.deleteItems(id, from);
 
         reloadData.remove(id);
 
-        loader.applyStatusForce(id, LoadStatus.WAIT);
+        loader.applyStatus(id, LoadStatus.WAIT, true);
     }
 
     @Getter

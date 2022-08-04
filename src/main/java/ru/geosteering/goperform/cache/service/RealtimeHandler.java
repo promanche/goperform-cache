@@ -8,9 +8,9 @@ import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.CacheItem;
+import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.utils.CacheUtils;
+import ru.geosteering.goperform.cache.utils.MapperUtils;
 
 import javax.annotation.PreDestroy;
 import java.util.concurrent.*;
@@ -24,20 +24,22 @@ public class RealtimeHandler implements MessageHandler {
     private final Config config;
     private final HistoryLoader loader;
     private final DataReloader reloader;
+    private final MetaDataProcessor metaDataProcessor;
 
     private ExecutorService messageHandler;
 
-    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config, HistoryLoader loader, DataReloader reloader) {
+    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config, HistoryLoader loader, DataReloader reloader, MetaDataProcessor metaDataProcessor) {
         this.storage = storage;
         this.wsTemplate = wsTemplate;
         this.config = config;
         this.loader = loader;
         this.reloader = reloader;
+        this.metaDataProcessor = metaDataProcessor;
         messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
     public void restart() {
-        storage.onRestartReal();
+        storage.onRestart();
         messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
@@ -50,19 +52,20 @@ public class RealtimeHandler implements MessageHandler {
         try {
             if (notSpam(msg.getSubject())) {
 
-                ApiMessage apiMessage = CacheUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
+                ApiMessage apiMessage = MapperUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
 
                 if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
                     CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
-                    CacheItem item = CacheItem.fromCurveDataItem(curveDataMessage.getData());
+                    CurveItem item = CurveItem.fromCurveDataItem(curveDataMessage.getData());
+                    metaDataProcessor.refresh(curveDataMessage.getId(), item);
 
                     if (notOld(curveDataMessage.getId(), item.getKey())) {
                         storage.add(curveDataMessage.getId(), item, true);
-                        String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + CacheUtils.toJson(item) + "}";
+                        String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + MapperUtils.toJson(item) + "}";
                         wsTemplate.convertAndSend("/websocket/AddPoint", toWs);
 
                     } else {
-                        loader.applyStatus(curveDataMessage.getId(), LoadStatus.STOP);
+                        loader.applyStatus(curveDataMessage.getId(), LoadStatus.BLOCKED);
                         reloader.addForReload(curveDataMessage.getId(), item.getKey(), 60 * 5);
                     }
                 }
@@ -85,7 +88,7 @@ public class RealtimeHandler implements MessageHandler {
     }
 
     private boolean notOld(Long id, Double key) {
-        Double lastKey = storage.getLastDbKey(id);
+        Double lastKey = metaDataProcessor.getMetaData(id).getLastDBKey();
         return lastKey == null || key > lastKey;
     }
 

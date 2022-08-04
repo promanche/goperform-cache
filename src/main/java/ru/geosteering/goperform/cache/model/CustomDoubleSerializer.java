@@ -1,0 +1,16 @@
+package ru.geosteering.goperform.cache.model;
+
+import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonSerializer;
+import com.fasterxml.jackson.databind.SerializerProvider;
+
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+
+public class CustomDoubleSerializer extends JsonSerializer<Double> {
+    @Override
+    public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
+        gen.writeNumber(new BigDecimal(value).setScale(3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
+    }
+}

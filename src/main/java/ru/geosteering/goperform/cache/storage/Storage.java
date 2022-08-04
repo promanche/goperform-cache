@@ -1,15 +1,18 @@
 package ru.geosteering.goperform.cache.storage;
 
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.CacheItem;
-import ru.geosteering.goperform.cache.model.ItemType;
-import ru.geosteering.goperform.cache.repository.CacheDTO;
-import ru.geosteering.goperform.cache.repository.CacheRepository;
+import ru.geosteering.goperform.cache.model.CurveItem;
+import ru.geosteering.goperform.cache.model.MetaData;
+import ru.geosteering.goperform.cache.repository.MainRepository;
+import ru.geosteering.goperform.cache.repository.ItemDto;
+import ru.geosteering.goperform.cache.service.Approximator;
+import ru.geosteering.goperform.cache.service.MetaDataProcessor;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
-import javax.annotation.PostConstruct;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -18,46 +21,44 @@ import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class Storage {
 
-    private final CacheRepository repository;
+    private final MainRepository repository;
     private final Config config;
+    private final MetaDataProcessor metaDataProcessor;
+    private final Approximator approximator;
 
-    private final Map<Long, PriorityQueue<CacheItem>> realTimeCache;
-    private final Map<Long, PriorityQueue<CacheItem>> historyCache;
-    private final Set<Long> historyLoaded;
-    private final Map<Long, LocalDateTime> activeCurves;
-    private final Map<Long, CacheItem> lastDBItems;
+    private final Map<Long, PriorityQueue<CurveItem>> realTimeCache = new ConcurrentHashMap<>();
+    private final Map<Long, PriorityQueue<CurveItem>> historyCache = new ConcurrentHashMap<>();
+    private final Set<Long> historyLoaded = ConcurrentHashMap.newKeySet();
+    private final Map<Long, LocalDateTime> activeCurves = new ConcurrentHashMap<>();
 
-    public Storage(CacheRepository repository, Config config) {
-        this.repository = repository;
-        this.config = config;
-        realTimeCache = new ConcurrentHashMap<>();
-        historyCache = new ConcurrentHashMap<>();
-        historyLoaded = ConcurrentHashMap.newKeySet();
-        activeCurves = new ConcurrentHashMap<>();
-        lastDBItems = new ConcurrentHashMap<>();
+    @Scheduled(fixedRate = 40, timeUnit = TimeUnit.SECONDS)
+    private void checkActivity() {
+        synchronized (activeCurves) {
+            log.debug("checkActivity synchronized on activeCurves");
+            synchronized (realTimeCache) {
+                log.debug("checkActivity synchronized on realTimeCache");
+                LocalDateTime now = LocalDateTime.now();
+                activeCurves.entrySet().removeIf(entry -> {
+                    boolean isNotActive = entry.getValue().isBefore(now.minusSeconds(40));
+                    if (isNotActive) {
+                        log.warn("Curve id {} is not active", entry.getKey());
+                        realTimeCache.remove(entry.getKey());
+                    }
+                    return isNotActive;
+                });
+            }
+        }
     }
 
-    @PostConstruct
-    public void loadLastKeys() {
-        List<CacheDTO> allLast = repository.getAllLast();
-        allLast.forEach(dto -> {
-            CacheItem item = new CacheItem();
-            item.setKey(dto.getLast());
-            item.setType(dto.getType());
+    public void add(Long id, CurveItem item, boolean isReal) {
 
-            lastDBItems.put(dto.getCurveId(), item);
-        });
-        log.debug("Last items map loaded: {}", lastDBItems);
-    }
+        Map<Long, PriorityQueue<CurveItem>> cache = isReal ? realTimeCache : historyCache;
 
-    public void add(Long id, CacheItem item, boolean isReal) {
-
-        Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
-
-        PriorityQueue<CacheItem> items =
-                cache.computeIfAbsent(id, val -> new PriorityQueue<>(config.BATCH_SIZE + config.MARGIN_SIZE, Comparator.comparing(CacheItem::getKey)));
+        PriorityQueue<CurveItem> items =
+                cache.computeIfAbsent(id, key -> new PriorityQueue<>(config.BATCH_SIZE + config.MARGIN_SIZE, Comparator.comparing(CurveItem::getKey)));
 
         synchronized (items) {
             items.add(item);
@@ -73,32 +74,13 @@ public class Storage {
         }
     }
 
-    @Scheduled(fixedRate = 20, timeUnit = TimeUnit.SECONDS)
-    private void checkActivity() {
-        synchronized (activeCurves) {
-            log.debug("checkActivity synchronized on activeCurves");
-            synchronized (realTimeCache) {
-                log.debug("checkActivity synchronized on realTimeCache");
-                LocalDateTime now = LocalDateTime.now();
-                activeCurves.entrySet().removeIf(entry -> {
-                    boolean isNotActive = entry.getValue().isBefore(now.minusSeconds(20));
-                    if (isNotActive) {
-                        log.warn("Curve id {} is not active", entry.getKey());
-                        realTimeCache.remove(entry.getKey());
-                    }
-                    return isNotActive;
-                });
-            }
-        }
-    }
-
-    public void addAll(Long id, Collection<CacheItem> collection, boolean isReal) {
+    public void addAll(Long id, Collection<CurveItem> collection, boolean isReal) {
 
         if (collection != null && !collection.isEmpty()) {
-            Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
+            Map<Long, PriorityQueue<CurveItem>> cache = isReal ? realTimeCache : historyCache;
 
-            PriorityQueue<CacheItem> items =
-                    cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing(CacheItem::getKey)));
+            PriorityQueue<CurveItem> items =
+                    cache.computeIfAbsent(id, val -> new PriorityQueue<>(collection.size(), Comparator.comparing(CurveItem::getKey)));
 
             synchronized (items) {
                 items.addAll(collection);
@@ -107,54 +89,47 @@ public class Storage {
         }
     }
 
-    private void transferIfNeed(Long id, PriorityQueue<CacheItem> items, boolean isReal) {
+    private void transferIfNeed(Long id, PriorityQueue<CurveItem> items, boolean isReal) {
         if ((isReal && !isHistoryLoaded(id)) || items.size() < config.BATCH_SIZE + config.MARGIN_SIZE) {
             return;
         }
 
-        List<CacheDTO> transferList = new ArrayList<>((items.size() - config.MARGIN_SIZE) / config.BATCH_SIZE);
+        List<ItemDto> transferList = new ArrayList<>((items.size() - config.MARGIN_SIZE) / config.BATCH_SIZE);
 
         fillTransferList(id, items, transferList);
 
         if (!transferList.isEmpty()) {
             try {
-                repository.save(transferList);
+                repository.saveItems(transferList);
             } catch (Exception e) {
-                log.error("Database exception: {}. Data added to errorBuffer", e.getMessage(), e);
+                log.error("Database exception: {}", e.getMessage(), e);
             }
         }
     }
 
-    private void fillTransferList(Long id, PriorityQueue<CacheItem> items, List<CacheDTO> transferList) {
+    private void fillTransferList(Long id, PriorityQueue<CurveItem> items, List<ItemDto> transferList) {
 
         while (items.size() >= config.BATCH_SIZE + config.MARGIN_SIZE) {
-            ArrayList<CacheItem> itemsBatch = new ArrayList<>(config.BATCH_SIZE);
+            ArrayList<CurveItem> itemsBatch = new ArrayList<>(config.BATCH_SIZE);
             for (int i = 0; i < config.BATCH_SIZE; i++) {
                 itemsBatch.add(items.poll());
             }
-            transferList.add(new CacheDTO(id, itemsBatch));
-            rememberLastDbItem(id, itemsBatch.get(itemsBatch.size() - 1));
-        }
-    }
+            transferList.add(ItemDto.fromItemsList(id, itemsBatch));
 
-    private void rememberLastDbItem(Long id, CacheItem item) {
-        lastDBItems.put(id, item);
-    }
+            metaDataProcessor
+                    .updateByItemsBatch(id, itemsBatch.get(0).getKey(), itemsBatch.get(itemsBatch.size() - 1).getKey(), itemsBatch.size());
 
-    public Double getLastDbKey(Long id) {
-        if (lastDBItems.containsKey(id)) {
-            return lastDBItems.get(id).getKey();
+            approximator.addItemsBatch(id, itemsBatch);
         }
-        return null;
     }
 
     public void mergeCache(Long id) {
 
-        PriorityQueue<CacheItem> realItems = realTimeCache.get(id);
+        PriorityQueue<CurveItem> realItems = realTimeCache.get(id);
 
         synchronized (realItems) {
 
-            PriorityQueue<CacheItem> historyItems = historyCache.get(id);
+            PriorityQueue<CurveItem> historyItems = historyCache.get(id);
 
             if (historyItems != null && !historyItems.isEmpty()) {
                 int before = historyItems.size();
@@ -191,12 +166,12 @@ public class Storage {
     public String getFirstRealKey(Long id) {
 
         if (realTimeCache.containsKey(id)) {
-            PriorityQueue<CacheItem> items = realTimeCache.get(id);
+            PriorityQueue<CurveItem> items = realTimeCache.get(id);
 
             synchronized (items) {
-                CacheItem item = realTimeCache.get(id).peek();
+                CurveItem item = realTimeCache.get(id).peek();
                 if (item != null) {
-                    return getKeyAsString(item.getKey(), item.getType());
+                    return getKeyAsString(item.getKey(), metaDataProcessor.getIndexType(id));
                 }
             }
         }
@@ -205,37 +180,43 @@ public class Storage {
 
     public String getLastHistoryKey(Long id) {
 
-        CacheItem lastHistoryItem;
+        CurveItem lastHistoryItem = null;
 
         if (historyCache.containsKey(id)) {
-            PriorityQueue<CacheItem> items = historyCache.get(id);
+            PriorityQueue<CurveItem> items = historyCache.get(id);
 
             synchronized (items) {
                 lastHistoryItem = items.stream()
-                        .max(Comparator.comparing(CacheItem::getKey))
+                        .max(Comparator.comparing(CurveItem::getKey))
                         .orElse(null);
             }
-        } else {
-            lastHistoryItem = lastDBItems.get(id);
         }
 
         if (lastHistoryItem != null) {
-            return getKeyAsString(lastHistoryItem.getKey(), lastHistoryItem.getType());
+            return getKeyAsString(lastHistoryItem.getKey(), metaDataProcessor.getIndexType(id));
+        } else {
+            MetaData metaData = metaDataProcessor.getMetaData(id);
+            return getKeyAsString(metaData.getLastDBKey(), metaData.getIndexType());
         }
-
-        return null;
     }
 
-    private String getKeyAsString(Double key, ItemType type) {
+    private String getKeyAsString(Double key, LogIndexType type) {
 
-        if (key == null || type == null) {
+        if (key == null) {
             return null;
         }
 
-        if (type == ItemType.TIME) {
-            return OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
-        } else {
-            return String.valueOf(key);
+        switch (type) {
+            case DATE_TIME: {
+                return OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+            }
+            case VERTICAL_DEPTH:
+            case MEASURED_DEPTH: {
+                return String.valueOf(key);
+            }
+            default: {
+                return null;
+            }
         }
     }
 
@@ -251,30 +232,28 @@ public class Storage {
         return historyLoaded.contains(id);
     }
 
-    public void onRestartHistory() {
-        historyCache.clear();
-        historyLoaded.clear();
-    }
-
-    public void onRestartReal() {
+    public void onRestart() {
         realTimeCache.clear();
+        historyCache.clear();
         activeCurves.clear();
+        historyLoaded.clear();
+        approximator.onRestart();
     }
 
-    public List<CacheItem> getFromStorage(Long id, Double from, Double to) {
-        List<CacheItem> result = getFromStorage(id, from, to, false);
+    public List<CurveItem> getFromStorage(Long id, Double from, Double to) {
+        List<CurveItem> result = getFromStorage(id, from, to, false);
         result.addAll(getFromStorage(id, from, to, true));
         return result;
     }
 
-    private List<CacheItem> getFromStorage(Long id, Double from, Double to, boolean isReal) {
-        ArrayList<CacheItem> result = new ArrayList<>();
+    private List<CurveItem> getFromStorage(Long id, Double from, Double to, boolean isReal) {
+        ArrayList<CurveItem> result = new ArrayList<>();
 
-        Map<Long, PriorityQueue<CacheItem>> cache = isReal ? realTimeCache : historyCache;
+        Map<Long, PriorityQueue<CurveItem>> cache = isReal ? realTimeCache : historyCache;
 
         if (cache.containsKey(id)) {
 
-            PriorityQueue<CacheItem> items = cache.get(id);
+            PriorityQueue<CurveItem> items = cache.get(id);
 
             synchronized (items) {
 
@@ -295,7 +274,7 @@ public class Storage {
         }
 
         if (!result.isEmpty()) {
-            result.sort(Comparator.comparing(CacheItem::getKey));
+            result.sort(Comparator.comparing(CurveItem::getKey));
         }
 
         return result;
@@ -306,13 +285,6 @@ public class Storage {
         realTimeCache.remove(id);
         historyLoaded.remove(id);
         activeCurves.remove(id);
-
-        CacheDTO lastDto = repository.getLast(id);
-        CacheItem item = new CacheItem();
-        item.setType(lastDto.getType());
-        item.setKey(lastDto.getLast());
-
-        lastDBItems.put(id, item);
-
+        approximator.resetById(id);
     }
 }

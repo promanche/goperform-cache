@@ -8,9 +8,10 @@ import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.utils.CacheUtils;
+import ru.geosteering.goperform.cache.utils.MapperUtils;
 
 import javax.annotation.PreDestroy;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -47,7 +48,17 @@ public class HistoryLoader {
 
     public void restart() {
         requestAllowed.set(config.HISTORY_ONETIME_REQUESTS);
+
+        HashMap<Long, LoadStatus> copy = new HashMap<>(loadInfo);
         loadInfo.clear();
+        copy.forEach((k, v) -> {
+            if (v == LoadStatus.REQUEST) {
+                applyStatus(k, LoadStatus.WAIT);
+            } else {
+                applyStatus(k, v);
+            }
+        });
+
         start();
     }
 
@@ -97,10 +108,10 @@ public class HistoryLoader {
         return id;
     }
 
-    public void applyStatus(Long id, LoadStatus status) {
+    public void applyStatus(Long id, LoadStatus status, boolean rewriteBlocked) {
 
-        if (loadInfo.get(id) == LoadStatus.STOP) {
-            log.warn("Unable to change STOP status for id {}", id);
+        if (!rewriteBlocked && loadInfo.get(id) == LoadStatus.BLOCKED) {
+            log.warn("Unable to change BLOCKED status for id {}", id);
             return;
         }
 
@@ -126,11 +137,8 @@ public class HistoryLoader {
         }
     }
 
-    public void applyStatusForce(Long id, LoadStatus status) {
-        synchronized (loadInfo) {
-            loadInfo.remove(id);
-            applyStatus(id, status);
-        }
+    public void applyStatus(Long id, LoadStatus status) {
+        applyStatus(id, status, false);
     }
 
     private void onStatusRequest(Long id) {
@@ -143,7 +151,7 @@ public class HistoryLoader {
         log.info("Request: {}", request);
 
         try {
-            connector.sendRequest(CacheUtils.toBytes(request));
+            connector.sendRequest(MapperUtils.toBytes(request));
         } catch (Exception e) {
             log.error("Send request exception: {}", e.getMessage(), e);
             applyStatus(id, LoadStatus.ERROR);

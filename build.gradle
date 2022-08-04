@@ -25,6 +25,7 @@ dependencies {
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     implementation 'org.postgresql:postgresql'
     implementation 'ru.geosteering:common-models:1.7.0'
+    implementation 'ru.geosteering:witsml-library:1.1.8'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
 }
 

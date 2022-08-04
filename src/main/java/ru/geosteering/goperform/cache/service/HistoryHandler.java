@@ -6,9 +6,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.CacheItem;
+import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.utils.CacheUtils;
+import ru.geosteering.goperform.cache.utils.MapperUtils;
 
 import javax.annotation.PreDestroy;
 import java.util.Map;
@@ -23,14 +23,16 @@ public class HistoryHandler implements MessageHandler {
     private final Storage storage;
     private final HistoryLoader historyLoader;
     private final Map<Long, AtomicInteger> receivedCount;
-    private final Map<Long, Set<CacheItem>> buffer;
+    private final Map<Long, Set<CurveItem>> buffer;
     private final Config config;
+    private final MetaDataProcessor metaDataProcessor;
     private ExecutorService messageHandler;
 
-    public HistoryHandler(Storage storage, HistoryLoader historyLoader, Config config) {
+    public HistoryHandler(Storage storage, HistoryLoader historyLoader, Config config, MetaDataProcessor metaDataProcessor) {
         this.storage = storage;
         this.historyLoader = historyLoader;
         this.config = config;
+        this.metaDataProcessor = metaDataProcessor;
         receivedCount = new ConcurrentHashMap<>();
         buffer = new ConcurrentHashMap<>();
         messageHandler = Executors.newFixedThreadPool(config.HISTORY_THREADS);
@@ -39,7 +41,7 @@ public class HistoryHandler implements MessageHandler {
     public void restart() {
         receivedCount.clear();
         buffer.clear();
-        storage.onRestartHistory();
+        storage.onRestart();
         messageHandler = Executors.newFixedThreadPool(config.HISTORY_THREADS);
     }
 
@@ -51,7 +53,7 @@ public class HistoryHandler implements MessageHandler {
     private void handleMessage(Message msg) {
 
         try {
-            ApiMessage apiMessage = CacheUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
+            ApiMessage apiMessage = MapperUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
 
             if (apiMessage != null) {
                 ApiMessage.MessageType type = apiMessage.getType();
@@ -79,16 +81,20 @@ public class HistoryHandler implements MessageHandler {
 
     private void processCurveData(CurveDataMessage curveDataMessage) {
 
+        CurveItem item = CurveItem.fromCurveDataItem(curveDataMessage.getData());
+
         buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(config.HISTORY_REQUEST_LIMIT))
-                .add(CacheItem.fromCurveDataItem(curveDataMessage.getData()));
+                .add(item);
 
         receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
                 .incrementAndGet();
+
+        metaDataProcessor.refresh(curveDataMessage.getId(), item);
     }
 
     private void processDataEnd(DataEndMessage dataEndMessage, String subject) {
 
-        Long id = CacheUtils.getIdFromSubject(subject);
+        Long id = MapperUtils.getIdFromSubject(subject);
 
         try {
             Thread.sleep(100);
@@ -97,6 +103,7 @@ public class HistoryHandler implements MessageHandler {
             int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : -1;
 
             if (sent == 0) {
+                log.info("Data loaded: id {}, message {}", id, dataEndMessage);
                 historyLoader.applyStatus(id, LoadStatus.DONE);
 
             } else if (sent != received) {
