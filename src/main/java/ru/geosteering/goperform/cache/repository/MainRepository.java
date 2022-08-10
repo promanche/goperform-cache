@@ -1,17 +1,18 @@
 package ru.geosteering.goperform.cache.repository;
 
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperform.cache.model.MetaData;
+import ru.geosteering.goperform.cache.repository.dto.*;
 import ru.geosteering.goperform.cache.utils.MapperUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @Repository
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Slf4j
 public class MainRepository {
 
@@ -48,12 +49,28 @@ public class MainRepository {
         return itemsMapper.getAll(id);
     }
 
+    public List<Long> getAllItemIds() {
+        return itemsMapper.getAllIds();
+    }
+
     public void deleteItems(Long id, Double from) {
         if (from == null) {
             itemsMapper.deleteAll(id);
         } else {
             itemsMapper.deleteAfter(id, from);
         }
+    }
+
+    public Double getFirstItemKey(Long id) {
+        return itemsMapper.getFirst(id);
+    }
+
+    public Double getLastItemKey(Long id) {
+        return itemsMapper.getLast(id);
+    }
+
+    public int getItemsRecords(Long id) {
+        return itemsMapper.getRecordsCount(id);
     }
 
     public void saveOrUpdateMetaData(MetaData metaData) {
@@ -66,22 +83,34 @@ public class MainRepository {
 
     public List<MetaData> getAllMetaData() {
         return metaDataMapper.getAll().stream()
-                .map(MapperUtils::parseMetaData)
+                .map(str -> MapperUtils.parseObject(str, MetaData.class))
                 .collect(Collectors.toList());
     }
 
-    public void saveLines(SegmentDto segmentDto) {
+    public void saveSegments(SegmentDto segmentDto) {
         segmentsMapper.save(segmentDto);
     }
 
-    public List<String> getLinesFromTo(Long id, int scale, Double from, Double to) {
+    public List<String> getSegmentsFromTo(Long id, int scale, Double from, Double to) {
         if (from == null && to == null) {
-            return getAllLines(id, scale);
+            return getAllSegments(id, scale);
         }
         return segmentsMapper.getFromTo(id, scale, from, to);
     }
 
-    private List<String> getAllLines(Long id, int scale) {
+    private List<String> getAllSegments(Long id, int scale) {
         return segmentsMapper.getAll(id, scale);
+    }
+
+    public Double getLastSegment(Long id, int scale) {
+        return segmentsMapper.getLast(id, scale);
+    }
+
+    public void deleteSegments(Long id, Double from) {
+        if (from == null) {
+            segmentsMapper.deleteAll(id);
+        } else {
+            segmentsMapper.deleteAfter(id, from);
+        }
     }
 }

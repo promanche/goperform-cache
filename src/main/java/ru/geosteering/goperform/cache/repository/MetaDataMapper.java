@@ -1,6 +1,7 @@
 package ru.geosteering.goperform.cache.repository;
 
 import org.apache.ibatis.annotations.*;
+import ru.geosteering.goperform.cache.repository.dto.MetaDataDto;
 
 import java.util.List;
 

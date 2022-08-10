@@ -8,7 +8,7 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.repository.MainRepository;
-import ru.geosteering.goperform.cache.repository.ItemDto;
+import ru.geosteering.goperform.cache.repository.dto.ItemDto;
 import ru.geosteering.goperform.cache.service.Approximator;
 import ru.geosteering.goperform.cache.service.MetaDataProcessor;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
@@ -34,19 +34,23 @@ public class Storage {
     private final Set<Long> historyLoaded = ConcurrentHashMap.newKeySet();
     private final Map<Long, LocalDateTime> activeCurves = new ConcurrentHashMap<>();
 
-    @Scheduled(fixedRate = 40, timeUnit = TimeUnit.SECONDS)
+    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.MINUTES)
     private void checkActivity() {
+
         synchronized (activeCurves) {
-            log.debug("checkActivity synchronized on activeCurves");
             synchronized (realTimeCache) {
-                log.debug("checkActivity synchronized on realTimeCache");
+
                 LocalDateTime now = LocalDateTime.now();
+
                 activeCurves.entrySet().removeIf(entry -> {
-                    boolean isNotActive = entry.getValue().isBefore(now.minusSeconds(40));
+
+                    boolean isNotActive = entry.getValue().isBefore(now.minusMinutes(1));
+
                     if (isNotActive) {
-                        log.warn("Curve id {} is not active", entry.getKey());
+                        log.info("Curve id {} is not active", entry.getKey());
                         realTimeCache.remove(entry.getKey());
                     }
+
                     return isNotActive;
                 });
             }
@@ -119,7 +123,7 @@ public class Storage {
             metaDataProcessor
                     .updateByItemsBatch(id, itemsBatch.get(0).getKey(), itemsBatch.get(itemsBatch.size() - 1).getKey(), itemsBatch.size());
 
-            approximator.addItemsBatch(id, itemsBatch);
+            approximator.collectItemsBatch(id, itemsBatch);
         }
     }
 
@@ -232,12 +236,14 @@ public class Storage {
         return historyLoaded.contains(id);
     }
 
-    public void onRestart() {
-        realTimeCache.clear();
+    public synchronized void clearHistoryData() {
         historyCache.clear();
-        activeCurves.clear();
         historyLoaded.clear();
-        approximator.onRestart();
+    }
+
+    public synchronized void clearRealTimeData() {
+        realTimeCache.clear();
+        activeCurves.clear();
     }
 
     public List<CurveItem> getFromStorage(Long id, Double from, Double to) {
@@ -280,11 +286,10 @@ public class Storage {
         return result;
     }
 
-    public synchronized void resetById(Long id) {
+    public void resetById(Long id) {
         historyCache.remove(id);
         realTimeCache.remove(id);
         historyLoaded.remove(id);
         activeCurves.remove(id);
-        approximator.resetById(id);
     }
 }

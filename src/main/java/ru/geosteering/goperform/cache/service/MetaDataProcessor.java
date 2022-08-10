@@ -2,12 +2,12 @@ package ru.geosteering.goperform.cache.service;
 
 import io.nats.client.Message;
 import lombok.RequiredArgsConstructor;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveInfoMessage;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
@@ -19,7 +19,6 @@ import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 import javax.annotation.PostConstruct;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 
 @Service
 @Slf4j
@@ -27,28 +26,28 @@ import java.util.concurrent.ExecutionException;
 public class MetaDataProcessor {
 
     private final MainRepository repository;
+    private final Config config;
     private final Map<Long, MetaData> dataMap = new ConcurrentHashMap<>();
-
-    @Setter
-    private NatsConnector connector;
 
     @PostConstruct
     private void loadFromDB() {
         repository.getAllMetaData()
                 .forEach(metaData -> dataMap.put(metaData.getId(), metaData));
+
+        log.info("MetaData loaded");
     }
 
     public MetaData getMetaData(Long id) {
         return dataMap.computeIfAbsent(id, this::requestInfo);
     }
 
-    public void refresh(Long id, CurveItem item) {
+    public void updateByNewItem(Long id, CurveItem item) {
 
         MetaData metaData = getMetaData(id);
 
         synchronized (metaData) {
             LogDataType typeLogData = metaData.getTypeLogData();
-            if (typeLogData == LogDataType.DOUBLE) {
+            if (typeLogData == LogDataType.DOUBLE || typeLogData == LogDataType.LONG) {
 
                 Double value = (Double) item.getValue();
 
@@ -79,17 +78,10 @@ public class MetaDataProcessor {
         request.setInfoOnly(true);
         request.setWithRange(true);
 
-        log.info("Curve info request: {}", request);
-
-        Message response = null;
-        try {
-            response = connector.sendRequest(MapperUtils.toBytes(request));
-        } catch (ExecutionException | InterruptedException e) {
-            log.error(e.getMessage(), e);
-        }
+        Message response = NatsConnector.sendRequest(config.SUBJECT, MapperUtils.toBytes(request));
 
         if (response != null) {
-            ApiMessage apiMessage = MapperUtils.parseApiMessage(new String(response.getData()), response.getSubject());
+            ApiMessage apiMessage = MapperUtils.parseObject(new String(response.getData()), ApiMessage.class);
             if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_INFO) {
                 metaData = new MetaData(((CurveInfoMessage) apiMessage).getCurveInfo());
             }
@@ -108,6 +100,21 @@ public class MetaDataProcessor {
                 metaData.setFirstDBKey(firstKey);
             }
             metaData.setItemsInDB(metaData.getItemsInDB() + count);
+
+            repository.saveOrUpdateMetaData(metaData);
+        }
+    }
+
+    public void reloadById(Long id) {
+
+        MetaData metaData = getMetaData(id);
+
+        synchronized (metaData) {
+
+            metaData.setFirstDBKey(repository.getFirstItemKey(id));
+            metaData.setLastDBKey(repository.getLastItemKey(id));
+            metaData.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
+            metaData.getScaleSet().clear();
 
             repository.saveOrUpdateMetaData(metaData);
         }

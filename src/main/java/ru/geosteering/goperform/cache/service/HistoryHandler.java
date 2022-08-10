@@ -21,16 +21,16 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class HistoryHandler implements MessageHandler {
 
     private final Storage storage;
-    private final HistoryLoader historyLoader;
+    private final DataLoader dataLoader;
     private final Map<Long, AtomicInteger> receivedCount;
     private final Map<Long, Set<CurveItem>> buffer;
     private final Config config;
     private final MetaDataProcessor metaDataProcessor;
     private ExecutorService messageHandler;
 
-    public HistoryHandler(Storage storage, HistoryLoader historyLoader, Config config, MetaDataProcessor metaDataProcessor) {
+    public HistoryHandler(Storage storage, DataLoader dataLoader, Config config, MetaDataProcessor metaDataProcessor) {
         this.storage = storage;
-        this.historyLoader = historyLoader;
+        this.dataLoader = dataLoader;
         this.config = config;
         this.metaDataProcessor = metaDataProcessor;
         receivedCount = new ConcurrentHashMap<>();
@@ -41,7 +41,6 @@ public class HistoryHandler implements MessageHandler {
     public void restart() {
         receivedCount.clear();
         buffer.clear();
-        storage.onRestart();
         messageHandler = Executors.newFixedThreadPool(config.HISTORY_THREADS);
     }
 
@@ -53,7 +52,7 @@ public class HistoryHandler implements MessageHandler {
     private void handleMessage(Message msg) {
 
         try {
-            ApiMessage apiMessage = MapperUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
+            ApiMessage apiMessage = MapperUtils.parseObject(new String(msg.getData()), ApiMessage.class);
 
             if (apiMessage != null) {
                 ApiMessage.MessageType type = apiMessage.getType();
@@ -89,12 +88,12 @@ public class HistoryHandler implements MessageHandler {
         receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
                 .incrementAndGet();
 
-        metaDataProcessor.refresh(curveDataMessage.getId(), item);
+        metaDataProcessor.updateByNewItem(curveDataMessage.getId(), item);
     }
 
     private void processDataEnd(DataEndMessage dataEndMessage, String subject) {
 
-        Long id = MapperUtils.getIdFromSubject(subject);
+        Long id = parseId(subject);
 
         try {
             Thread.sleep(100);
@@ -104,26 +103,37 @@ public class HistoryHandler implements MessageHandler {
 
             if (sent == 0) {
                 log.info("Data loaded: id {}, message {}", id, dataEndMessage);
-                historyLoader.applyStatus(id, LoadStatus.DONE);
+                dataLoader.onLoadFull(id);
 
             } else if (sent != received) {
                 log.error("Received count '{}' not equals to sent '{}'", received, sent);
-                historyLoader.applyStatus(id, LoadStatus.ERROR);
+                dataLoader.onLoadError(id);
 
             } else {
                 log.info("History part received: id {}, message {}", id, dataEndMessage);
                 drainToStorage(id);
-                historyLoader.applyStatus(id, LoadStatus.PART);
+                dataLoader.onLoadPart(id);
             }
 
             buffer.remove(id);
 
         } catch (Exception e) {
             log.error("DataEndMessage processing exception: {}", e.getMessage(), e);
-            historyLoader.applyStatus(id, LoadStatus.ERROR);
+            dataLoader.onLoadError(id);
 
         } finally {
-            historyLoader.onEndMessage();
+            dataLoader.onEndMessage();
+        }
+    }
+
+    private Long parseId(String subject) {
+
+        try {
+            String[] arr = subject.split("\\.");
+            return Long.parseLong(arr[arr.length - 1]);
+        } catch (Exception e) {
+            log.error("Parsing id from subject exception: {}", subject, e);
+            return null;
         }
     }
 
@@ -148,5 +158,7 @@ public class HistoryHandler implements MessageHandler {
         } catch (Exception e) {
             log.error(getClass().getSimpleName() + "messageHandler shutdown exception: {}", e.getMessage(), e);
         }
+
+        storage.clearHistoryData();
     }
 }

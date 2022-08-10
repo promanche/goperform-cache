@@ -2,6 +2,7 @@ package ru.geosteering.goperform.cache.model;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.*;
+import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
 
 @Getter
 @Setter
@@ -13,4 +14,22 @@ public class CurveSegment {
     private Double lastKey;
     private Double minVal;
     private Double maxVal;
+
+    public void addItem(CurveItem item) {
+
+        if (item != null) {
+            Double value = (Double) item.getValue();
+
+            if (maxVal == null || value > maxVal) {
+                maxVal = value;
+            }
+            if (minVal == null || value < minVal) {
+                minVal = value;
+            }
+            if (firstKey == null) {
+                firstKey = item.getKey();
+            }
+            lastKey = item.getKey();
+        }
+    }
 }

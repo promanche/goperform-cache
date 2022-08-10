@@ -3,10 +3,9 @@ package ru.geosteering.goperform.cache.temp;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.*;
 import io.nats.client.impl.NatsMessage;
-import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
+import ru.geosteering.goperform.cache.auth.model.JwtRequest;
 
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.concurrent.ExecutionException;
 
 public class TestRequest {
@@ -17,7 +16,6 @@ public class TestRequest {
         String nuid = NUID.nextGlobal();
 
         Options options = new Options.Builder()
-                .connectionName("goperform-cache")
                 .connectionListener((connection, events) -> System.out.println("Nats connection status: {}" + connection.getStatus()))
                 .noReconnect()
                 .authHandler(Nats.credentials("app.creds"))
@@ -26,21 +24,23 @@ public class TestRequest {
 
         Connection connection = Nats.connect(options);
 
-        Dispatcher dispatcher = connection.createDispatcher();
+//        Dispatcher dispatcher = connection.createDispatcher();
+//
+//        dispatcher.subscribe("gostream.curves" + "." + nuid + ".msgExample", msg -> {
+//            String json = new String(msg.getData());
+//            System.out.println("Message: " + json + ", bytes: " + msg.getData().length);
+//            System.out.println(Arrays.toString(msg.getData()));
+//        });
 
-        dispatcher.subscribe("gostream.curves" + "." + nuid + ".msgExample", msg -> {
-            String json = new String(msg.getData());
-            System.out.println("Message: " + json + ", bytes: " + msg.getData().length);
-            System.out.println(Arrays.toString(msg.getData()));
-        });
+        //CurveDataRequest request = new CurveDataRequest(24896L, null, null, null, false, false, 1, nuid + ".msgExample");
 
-        CurveDataRequest request = new CurveDataRequest(24896L, null, null, null, false, false, 1, nuid + ".msgExample");
+        JwtRequest request = new JwtRequest("brakhimov", "YD38hd0Dcjs$");
 
-        Message msgExample = NatsMessage.builder()
-                .subject("gostream.curves")
+        Message response = NatsMessage.builder()
+                .subject("gostream.auth")
                 .data(mapper.writeValueAsBytes(request))
                 .build();
 
-        System.out.println(new String(connection.request(msgExample).get().getData()));
+        System.out.println(new String(connection.request(response).get().getData()));
     }
 }

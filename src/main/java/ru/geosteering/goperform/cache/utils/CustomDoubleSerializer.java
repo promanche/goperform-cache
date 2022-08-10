@@ -1,4 +1,4 @@
-package ru.geosteering.goperform.cache.model;
+package ru.geosteering.goperform.cache.utils;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonSerializer;

@@ -1,4 +1,4 @@
-package ru.geosteering.goperform.cache.repository;
+package ru.geosteering.goperform.cache.repository.dto;
 
 import lombok.*;
 import ru.geosteering.goperform.cache.model.CurveItem;

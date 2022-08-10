@@ -1,6 +1,6 @@
 package ru.geosteering.goperform.cache.service;
 
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.geosteering.goperform.cache.model.*;
@@ -15,13 +15,12 @@ import java.util.stream.Stream;
 
 @Service
 @Slf4j
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class RestService {
 
     private final Storage storage;
     private final MainRepository repository;
-    private final HistoryLoader loader;
-    private final DataReloader reloader;
+    private final DataLoader loader;
     private final MetaDataProcessor metaDataProcessor;
     private final Approximator approximator;
 
@@ -38,14 +37,14 @@ public class RestService {
 
             if (scale != null && metaDataProcessor.getMetaData(id).getScaleSet().contains(scale)) {
 
-                List<CurveSegment> result = repository.getLinesFromTo(id, scale, from, to)
+                List<CurveSegment> result = repository.getSegmentsFromTo(id, scale, from, to)
                         .stream()
-                        .flatMap((Function<String, Stream<CurveSegment>>) s -> MapperUtils.parseCacheLines(s).stream())
+                        .flatMap((Function<String, Stream<CurveSegment>>) str -> MapperUtils.parseListOf(str, CurveSegment.class).stream())
                         .collect(Collectors.toList());
 
-                result.addAll(approximator.getLines(id, scale, from, to));
+                List<CurveItem> fromStorage = storage.getFromStorage(id, from, to);
 
-                addItemsFromStorage(result, id, from, to, scale);
+                result.addAll(approximator.getAndCompleteSegmentsFromMemory(id, scale, from, to, fromStorage));
 
                 log.info("Response for id {} prepared. Result list size: {}", id, result.size());
 
@@ -55,7 +54,7 @@ public class RestService {
 
                 List<CurveItem> result = repository.getItemsFromTo(id, from, to)
                         .stream()
-                        .flatMap((Function<String, Stream<CurveItem>>) s -> MapperUtils.parseCacheItems(s).stream())
+                        .flatMap((Function<String, Stream<CurveItem>>) str -> MapperUtils.parseListOf(str, CurveItem.class).stream())
                         .collect(Collectors.toList());
 
                 result.addAll(storage.getFromStorage(id, from, to));
@@ -77,43 +76,6 @@ public class RestService {
     }
 
     public void reloadCurve(Long id, Double from) {
-        loader.applyStatus(id, LoadStatus.BLOCKED);
-        reloader.addForReload(id, from, 2);
-    }
-
-    private void addItemsFromStorage(List<CurveSegment> segments, Long id, Double from, Double to, int scale) {
-
-        List<CurveItem> fromStorage = storage.getFromStorage(id, from, to);
-
-        if (!fromStorage.isEmpty()) {
-
-            int secondsOnPixel = scale * 60 / 120;
-
-            CurveSegment last = segments.isEmpty() ? null : segments.get(segments.size() - 1);
-
-            for (CurveItem item : fromStorage) {
-
-                if (last != null && item.getKey() - last.getFirstKey() < (secondsOnPixel - 1) * 1000) {
-                    Double value = (Double) item.getValue();
-                    if (value > last.getMaxVal()) {
-                        last.setMaxVal(value);
-                    }
-                    if (value < last.getMinVal()) {
-                        last.setMinVal(value);
-                    }
-                    last.setLastKey(item.getKey());
-
-                } else {
-                    CurveSegment segment = new CurveSegment();
-                    segment.setFirstKey(item.getKey());
-                    segment.setLastKey(item.getKey());
-                    segment.setMinVal((Double) item.getValue());
-                    segment.setMaxVal((Double) item.getValue());
-                    segments.add(segment);
-
-                    last = segment;
-                }
-            }
-        }
+        loader.addForReload(id, from, 10);
     }
 }

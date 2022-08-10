@@ -8,7 +8,6 @@ import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.service.*;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
@@ -20,21 +19,10 @@ public class NatsConnector {
 
     private final RealtimeHandler realtimeHandler;
     private final HistoryHandler historyHandler;
-    private final HistoryLoader historyLoader;
+    private final DataLoader dataLoader;
     private final Config config;
-    private final MetaDataProcessor metaDataProcessor;
 
-    private Connection connection;
-    private CustomErrorListener errorListener;
-
-    @PostConstruct
-    private void init() {
-        errorListener = new CustomErrorListener(this);
-        historyLoader.setConnector(this);
-        metaDataProcessor.setConnector(this);
-
-        historyLoader.start();
-    }
+    private static Connection connection;
 
     public void connect() {
 
@@ -42,7 +30,7 @@ public class NatsConnector {
                 .connectionName("goperform-cache")
                 .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", config.HOST, connection.getStatus()))
                 .noReconnect()
-                .errorListener(errorListener)
+                .errorListener(new CustomErrorListener(this))
                 .authHandler(Nats.credentials(config.CREDENTIALS_FILE))
                 .server(config.HOST)
                 .build();
@@ -53,27 +41,44 @@ public class NatsConnector {
             log.error("Connection exception: {}", e.getMessage(), e);
         }
 
-        if (connection != null) {
+        if (connection != null && connection.getStatus() == Connection.Status.CONNECTED) {
             Dispatcher dispatcher = connection.createDispatcher();
             dispatcher.subscribe(config.SUBJECT + ".*", realtimeHandler);
             dispatcher.subscribe(config.SUBJECT + "." + config.HISTORY_NUID + ".*", historyHandler);
+
+            dataLoader.start();
         }
     }
 
-    public Message sendRequest(byte[] data) throws ExecutionException, InterruptedException {
-        Message message = NatsMessage.builder()
-                .subject(config.SUBJECT)
-                .data(data)
-                .build();
+    public static Message sendRequest(String subject, byte[] data) {
 
-        Message response = connection.request(message).get();
-        log.info("Response: {}", new String(response.getData()));
+        Message response = null;
+
+        if (connection != null && connection.getStatus() == Connection.Status.CONNECTED) {
+
+            try {
+
+                Message request = NatsMessage.builder()
+                        .subject(subject)
+                        .data(data)
+                        .build();
+
+                log.info("Request: {}", new String(data));
+
+                response = connection.request(request).get();
+
+                log.info("Response: {}", new String(response.getData()));
+
+            } catch (InterruptedException | ExecutionException e) {
+                log.error("Send request exception: {}", e.getMessage(), e);
+            }
+        }
 
         return response;
     }
 
     private void onError() {
-        historyLoader.stop();
+        dataLoader.stop();
         realtimeHandler.stop();
         historyHandler.stop();
     }
@@ -81,7 +86,7 @@ public class NatsConnector {
     private void onReconnect() {
         realtimeHandler.restart();
         historyHandler.restart();
-        historyLoader.restart();
+        dataLoader.restart();
     }
 
     @PreDestroy

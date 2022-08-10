@@ -22,24 +22,21 @@ public class RealtimeHandler implements MessageHandler {
     private final Storage storage;
     private final SimpMessagingTemplate wsTemplate;
     private final Config config;
-    private final HistoryLoader loader;
-    private final DataReloader reloader;
+    private final DataLoader loader;
     private final MetaDataProcessor metaDataProcessor;
 
     private ExecutorService messageHandler;
 
-    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config, HistoryLoader loader, DataReloader reloader, MetaDataProcessor metaDataProcessor) {
+    public RealtimeHandler(Storage storage, SimpMessagingTemplate wsTemplate, Config config, DataLoader loader, MetaDataProcessor metaDataProcessor) {
         this.storage = storage;
         this.wsTemplate = wsTemplate;
         this.config = config;
         this.loader = loader;
-        this.reloader = reloader;
         this.metaDataProcessor = metaDataProcessor;
         messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
     public void restart() {
-        storage.onRestart();
         messageHandler = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
@@ -52,21 +49,20 @@ public class RealtimeHandler implements MessageHandler {
         try {
             if (notSpam(msg.getSubject())) {
 
-                ApiMessage apiMessage = MapperUtils.parseApiMessage(new String(msg.getData()), msg.getSubject());
+                ApiMessage apiMessage = MapperUtils.parseObject(new String(msg.getData()), ApiMessage.class);
 
                 if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
                     CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
                     CurveItem item = CurveItem.fromCurveDataItem(curveDataMessage.getData());
-                    metaDataProcessor.refresh(curveDataMessage.getId(), item);
+                    metaDataProcessor.updateByNewItem(curveDataMessage.getId(), item);
 
                     if (notOld(curveDataMessage.getId(), item.getKey())) {
                         storage.add(curveDataMessage.getId(), item, true);
                         String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + MapperUtils.toJson(item) + "}";
-                        wsTemplate.convertAndSend("/websocket/AddPoint", toWs);
+                        wsTemplate.convertAndSend("/curve/" + curveDataMessage.getId() + "/new-point", toWs);
 
                     } else {
-                        loader.applyStatus(curveDataMessage.getId(), LoadStatus.BLOCKED);
-                        reloader.addForReload(curveDataMessage.getId(), item.getKey(), 60 * 5);
+                        loader.addForReload(curveDataMessage.getId(), item.getKey(), 60 * 5);
                     }
                 }
             }
@@ -104,5 +100,7 @@ public class RealtimeHandler implements MessageHandler {
         } catch (InterruptedException e) {
             log.error(getClass().getSimpleName() + "messageHandler shutdown exception: {}", e.getMessage(), e);
         }
+
+        storage.clearRealTimeData();
     }
 }

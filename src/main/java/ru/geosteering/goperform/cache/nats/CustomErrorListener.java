@@ -1,11 +1,11 @@
 package ru.geosteering.goperform.cache.nats;
 
 import io.nats.client.*;
-import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-@AllArgsConstructor
+@RequiredArgsConstructor
 public class CustomErrorListener implements ErrorListener {
 
     private final NatsConnector connector;
