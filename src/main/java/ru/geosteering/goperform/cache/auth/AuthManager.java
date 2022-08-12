@@ -45,7 +45,18 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
     public boolean checkObjectAccess(Authentication auth, long id) {
 
-        CheckObjectAccessRequest request = new CheckObjectAccessRequest(auth.getName(), id, CheckObjectAccessRequest.Permissions.READ);
+        String userName = auth.getName();
+
+        if (
+                userName == null
+                        || userName.isEmpty()
+                        || userName.equalsIgnoreCase("anonymousUser")
+                        || userName.equalsIgnoreCase("anonymous")) {
+
+            return false;
+        }
+
+        CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, CheckObjectAccessRequest.Permissions.READ);
 
         Message response = NatsConnector.sendRequest("gostream.auth", MapperUtils.toBytes(request));
 
