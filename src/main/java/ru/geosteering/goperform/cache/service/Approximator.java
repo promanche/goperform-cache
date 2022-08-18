@@ -7,7 +7,7 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.*;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
@@ -62,7 +62,7 @@ public class Approximator {
 
             List<CurveItem> items = repository.getItemsFromTo(id, from, Double.MAX_VALUE)
                     .stream()
-                    .flatMap((Function<String, Stream<CurveItem>>) str -> MapperUtils.parseListOf(str, CurveItem.class).stream())
+                    .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .collect(Collectors.toList());
 
             scaleLast.forEach((scale, last) -> {

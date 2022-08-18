@@ -16,7 +16,7 @@ import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.socket.config.annotation.*;
 import ru.geosteering.goperform.cache.auth.AuthManager;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -71,7 +71,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Bean
     ObjectMapper objectMapper() {
-        return MapperUtils.getMapper();
+        return StaticMapper.getMapper();
     }
 
     @Bean

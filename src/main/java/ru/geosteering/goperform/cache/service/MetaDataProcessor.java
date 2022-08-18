@@ -12,7 +12,7 @@ import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
@@ -81,10 +81,10 @@ public class MetaDataProcessor {
         request.setInfoOnly(true);
         request.setWithRange(withRange);
 
-        Message response = NatsConnector.sendRequest(config.SUBJECT, MapperUtils.toBytes(request));
+        Message response = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
 
         if (response != null) {
-            ApiMessage apiMessage = MapperUtils.parseObject(new String(response.getData()), ApiMessage.class);
+            ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
             if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_INFO) {
                 metaData = new MetaData(((CurveInfoMessage) apiMessage).getCurveInfo());
             }

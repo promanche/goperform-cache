@@ -1,11 +1,13 @@
 package ru.geosteering.goperform.cache.nats;
 
 import io.nats.client.*;
+import io.nats.client.impl.ErrorListenerLoggerImpl;
 import io.nats.client.impl.NatsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.model.event.NatsConnectionStatus;
 import ru.geosteering.goperform.cache.service.*;
 
 import javax.annotation.PreDestroy;
@@ -28,9 +30,15 @@ public class NatsConnector {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
-                .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", config.HOST, connection.getStatus()))
+                .connectionListener((conn, status) -> {
+                    log.info("Nats connection status: {}", status.name());
+                    EventBus.post(new NatsConnectionStatus(status));
+                    if (status == ConnectionListener.Events.CLOSED || status == ConnectionListener.Events.DISCONNECTED) {
+                        reconnect();
+                    }
+                })
                 .noReconnect()
-                .errorListener(new CustomErrorListener(this))
+                .errorListener(new ErrorListenerLoggerImpl())
                 .authHandler(Nats.credentials(config.CREDENTIALS_FILE))
                 .server(config.HOST)
                 .build();

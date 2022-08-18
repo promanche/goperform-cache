@@ -17,7 +17,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import ru.geosteering.goperform.cache.auth.model.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -59,9 +59,9 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
         CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, CheckObjectAccessRequest.Permissions.READ);
 
-        Message response = NatsConnector.sendRequest("gostream.auth", MapperUtils.toBytes(request));
+        Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
 
-        ApiResult apiResult = MapperUtils.parseObject(new String(response.getData()), ApiResult.class);
+        ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
         return apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK;
     }
@@ -82,9 +82,9 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
             TokenRequest request = new TokenRequest(jwt);
 
-            Message response = NatsConnector.sendRequest("gostream.auth", MapperUtils.toBytes(request));
+            Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
 
-            ApiResult apiResult = MapperUtils.parseObject(new String(response.getData()), ApiResult.class);
+            ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
             if (apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK) {
 

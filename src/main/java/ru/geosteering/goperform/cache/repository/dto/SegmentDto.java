@@ -2,7 +2,7 @@ package ru.geosteering.goperform.cache.repository.dto;
 
 import lombok.*;
 import ru.geosteering.goperform.cache.model.CurveSegment;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.util.List;
 
@@ -24,7 +24,7 @@ public class SegmentDto {
         segmentDto.setScale(scale);
         segmentDto.setFirst(lines.get(0).getFirstKey());
         segmentDto.setLast(lines.get(lines.size() - 1).getLastKey());
-        segmentDto.setData(MapperUtils.toJson(lines));
+        segmentDto.setData(StaticMapper.toJson(lines));
 
         return segmentDto;
     }

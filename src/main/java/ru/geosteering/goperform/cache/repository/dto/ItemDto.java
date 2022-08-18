@@ -2,7 +2,7 @@ package ru.geosteering.goperform.cache.repository.dto;
 
 import lombok.*;
 import ru.geosteering.goperform.cache.model.CurveItem;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.util.List;
 
@@ -21,7 +21,7 @@ public class ItemDto {
         itemDto.setCurveId(curveId);
         itemDto.setFirst(list.get(0).getKey());
         itemDto.setLast(list.get(list.size() - 1).getKey());
-        itemDto.setData(MapperUtils.toJson(list));
+        itemDto.setData(StaticMapper.toJson(list));
 
         return itemDto;
     }

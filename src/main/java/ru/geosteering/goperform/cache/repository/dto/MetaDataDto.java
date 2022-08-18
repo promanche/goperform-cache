@@ -2,7 +2,7 @@ package ru.geosteering.goperform.cache.repository.dto;
 
 import lombok.*;
 import ru.geosteering.goperform.cache.model.MetaData;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 @Getter
 @Setter
@@ -16,7 +16,7 @@ public class MetaDataDto {
     public static MetaDataDto fromMetaData(MetaData metaData) {
         MetaDataDto metaDataDto = new MetaDataDto();
         metaDataDto.setCurveId(metaData.getId());
-        metaDataDto.setData(MapperUtils.toJson(metaData));
+        metaDataDto.setData(StaticMapper.toJson(metaData));
 
         return metaDataDto;
     }

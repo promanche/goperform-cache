@@ -9,13 +9,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.model.CurveItem;
+import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import javax.annotation.PreDestroy;
-import java.time.LocalDateTime;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.*;
@@ -153,15 +157,58 @@ public class DataLoader {
 
     private void onStatusRequest(Long id) {
 
-        String from = storage.getLastHistoryKey(id);
-        String to = storage.getFirstRealKey(id);
+        String from = findFrom(id);
+        String to = findTo(id);
 
         CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, config.HISTORY_REQUEST_LIMIT, config.HISTORY_NUID + "." + id);
 
-        Message message = NatsConnector.sendRequest(config.SUBJECT, MapperUtils.toBytes(request));
+        Message message = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
 
         if (message == null) {
             applyStatus(id, LoadStatus.WAIT);
+        }
+    }
+
+    private String findFrom(Long id) {
+
+        CurveItem lastHistory = storage.getLastHistoryItem(id);
+
+        if (lastHistory != null) {
+            return getKeyAsString(lastHistory.getKey(), metaDataProcessor.getIndexType(id));
+        } else {
+            MetaData metaData = metaDataProcessor.getMetaData(id);
+            return getKeyAsString(metaData.getLastDBKey(), metaData.getIndexType());
+        }
+    }
+
+    private String findTo(Long id) {
+
+        CurveItem firstReal = storage.getFirstRealItem(id);
+
+        if (firstReal != null) {
+            return getKeyAsString(firstReal.getKey(), metaDataProcessor.getIndexType(id));
+        }
+
+        return null;
+    }
+
+    private String getKeyAsString(Double key, LogIndexType type) {
+
+        if (key == null) {
+            return null;
+        }
+
+        switch (type) {
+            case DATE_TIME: {
+                return OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+            }
+            case VERTICAL_DEPTH:
+            case MEASURED_DEPTH: {
+                return String.valueOf(key);
+            }
+            default: {
+                return null;
+            }
         }
     }
 

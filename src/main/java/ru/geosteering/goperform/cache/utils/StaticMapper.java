@@ -8,7 +8,7 @@ import java.util.Collections;
 import java.util.List;
 
 @Slf4j
-public class MapperUtils {
+public class StaticMapper {
 
     private final static ObjectMapper mapper = new ObjectMapper();
 

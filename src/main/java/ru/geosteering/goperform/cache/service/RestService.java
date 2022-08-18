@@ -6,7 +6,7 @@ import org.springframework.stereotype.Service;
 import ru.geosteering.goperform.cache.model.*;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.storage.Storage;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.util.List;
 import java.util.function.Function;
@@ -39,7 +39,7 @@ public class RestService {
 
                 List<CurveSegment> result = repository.getSegmentsFromTo(id, scale, from, to)
                         .stream()
-                        .flatMap((Function<String, Stream<CurveSegment>>) str -> MapperUtils.parseListOf(str, CurveSegment.class).stream())
+                        .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
                         .collect(Collectors.toList());
 
                 List<CurveItem> fromStorage = storage.getFromStorage(id, from, to);
@@ -54,7 +54,7 @@ public class RestService {
 
                 List<CurveItem> result = repository.getItemsFromTo(id, from, to)
                         .stream()
-                        .flatMap((Function<String, Stream<CurveItem>>) str -> MapperUtils.parseListOf(str, CurveItem.class).stream())
+                        .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                         .collect(Collectors.toList());
 
                 result.addAll(storage.getFromStorage(id, from, to));
