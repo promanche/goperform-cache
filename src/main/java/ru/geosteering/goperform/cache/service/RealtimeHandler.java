@@ -11,6 +11,7 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import javax.annotation.PreDestroy;
 import java.util.concurrent.*;
@@ -52,23 +53,28 @@ public class RealtimeHandler implements MessageHandler {
                 ApiMessage apiMessage = MapperUtils.parseObject(new String(msg.getData()), ApiMessage.class);
 
                 if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
-                    CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
-                    CurveItem item = CurveItem.fromCurveDataItem(curveDataMessage.getData());
-                    metaDataProcessor.updateByNewItem(curveDataMessage.getId(), item);
 
-                    if (notOld(curveDataMessage.getId(), item.getKey())) {
-                        storage.add(curveDataMessage.getId(), item, true);
-                        String toWs = "{\"id\":" + curveDataMessage.getId() + ",\"point\":" + MapperUtils.toJson(item) + "}";
-                        wsTemplate.convertAndSend("/curve/" + curveDataMessage.getId() + "/new-point", toWs);
+                    CurveDataMessage curveDataMessage = (CurveDataMessage) apiMessage;
+                    Long id = curveDataMessage.getId();
+
+                    CurveItem item = CurveItem.fromAbstractDataItem(curveDataMessage.getData(),
+                            metaDataProcessor.getIndexType(id) != LogIndexType.MEASURED_DEPTH);
+
+                    metaDataProcessor.updateByNewItem(id, item);
+
+                    if (notOld(id, item.getKey())) {
+                        storage.add(id, item, true);
+                        String toWs = "{\"id\":" + id + ",\"point\":" + MapperUtils.toJson(item) + "}";
+                        wsTemplate.convertAndSend("/curve/" + id + "/new-point", toWs);
 
                     } else {
-                        loader.addForReload(curveDataMessage.getId(), item.getKey(), 60 * 5);
+                        loader.addForReload(id, item.getKey(), 60 * 5);
                     }
                 }
             }
 
         } catch (Exception e) {
-            log.error(e.getMessage(), e);
+            log.error("Message: {}", new String(msg.getData()), e);
         }
     }
 

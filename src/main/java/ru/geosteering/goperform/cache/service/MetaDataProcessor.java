@@ -27,18 +27,18 @@ public class MetaDataProcessor {
 
     private final MainRepository repository;
     private final Config config;
-    private final Map<Long, MetaData> dataMap = new ConcurrentHashMap<>();
+    private final Map<Long, MetaData> metaDataMap = new ConcurrentHashMap<>();
 
     @PostConstruct
     private void loadFromDB() {
         repository.getAllMetaData()
-                .forEach(metaData -> dataMap.put(metaData.getId(), metaData));
+                .forEach(metaData -> metaDataMap.put(metaData.getId(), metaData));
 
         log.info("MetaData loaded");
     }
 
     public MetaData getMetaData(Long id) {
-        return dataMap.computeIfAbsent(id, this::requestInfo);
+        return metaDataMap.computeIfAbsent(id, this::requestInfo);
     }
 
     public void updateByNewItem(Long id, CurveItem item) {
@@ -46,7 +46,9 @@ public class MetaDataProcessor {
         MetaData metaData = getMetaData(id);
 
         synchronized (metaData) {
+
             LogDataType typeLogData = metaData.getTypeLogData();
+
             if (typeLogData == LogDataType.DOUBLE || typeLogData == LogDataType.LONG) {
 
                 Double value = (Double) item.getValue();
@@ -66,17 +68,13 @@ public class MetaDataProcessor {
         return getMetaData(id).getIndexType();
     }
 
-    public LogDataType getDataType(Long id) {
-        return getMetaData(id).getTypeLogData();
-    }
-
     private MetaData requestInfo(Long id) {
+
         MetaData metaData = null;
 
         CurveDataRequest request = new CurveDataRequest();
         request.setCurveId(id);
         request.setInfoOnly(true);
-        request.setWithRange(true);
 
         Message response = NatsConnector.sendRequest(config.SUBJECT, MapperUtils.toBytes(request));
 
@@ -91,8 +89,11 @@ public class MetaDataProcessor {
     }
 
     public void updateByItemsBatch(Long id, Double firstKey, Double lastKey, int count) {
+
         MetaData metaData = getMetaData(id);
+
         synchronized (metaData) {
+
             if (metaData.getLastDBKey() == null || metaData.getLastDBKey() < lastKey) {
                 metaData.setLastDBKey(lastKey);
             }

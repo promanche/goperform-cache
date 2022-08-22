@@ -13,6 +13,8 @@ import ru.geosteering.goperform.cache.service.Approximator;
 import ru.geosteering.goperform.cache.service.MetaDataProcessor;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -47,8 +49,9 @@ public class Storage {
                     boolean isNotActive = entry.getValue().isBefore(now.minusMinutes(1));
 
                     if (isNotActive) {
-                        log.info("Curve id {} is not active", entry.getKey());
+                        log.info("Curve {} is not active. Last item time: {}", entry.getKey(), entry.getValue());
                         realTimeCache.remove(entry.getKey());
+                        historyLoaded.remove(entry.getKey());
                     }
 
                     return isNotActive;
@@ -62,17 +65,18 @@ public class Storage {
         Map<Long, PriorityQueue<CurveItem>> cache = isReal ? realTimeCache : historyCache;
 
         PriorityQueue<CurveItem> items =
-                cache.computeIfAbsent(id, key -> new PriorityQueue<>(config.BATCH_SIZE + config.MARGIN_SIZE, Comparator.comparing(CurveItem::getKey)));
+                cache.computeIfAbsent(id, key -> new PriorityQueue<>(config.BATCH_SIZE + config.MARGIN_SIZE,
+                        Comparator.comparing(CurveItem::getKey)));
 
         synchronized (items) {
             items.add(item);
-            transferIfNeed(id, items, isReal);
+            save(id, items, isReal);
         }
 
         if (isReal) {
             if (!activeCurves.containsKey(id)) {
                 historyLoaded.remove(id);
-                log.info("New active curve id {}", id);
+                log.info("New active curve {}", id);
             }
             activeCurves.put(id, LocalDateTime.now());
         }
@@ -88,43 +92,45 @@ public class Storage {
 
             synchronized (items) {
                 items.addAll(collection);
-                transferIfNeed(id, items, isReal);
+                save(id, items, isReal);
             }
         }
     }
 
-    private void transferIfNeed(Long id, PriorityQueue<CurveItem> items, boolean isReal) {
-        if ((isReal && !isHistoryLoaded(id)) || items.size() < config.BATCH_SIZE + config.MARGIN_SIZE) {
+    private void save(Long id, PriorityQueue<CurveItem> items, boolean isReal) {
+        if ((isReal && !isHistoryLoaded(id))) {
             return;
         }
 
-        List<ItemDto> transferList = new ArrayList<>((items.size() - config.MARGIN_SIZE) / config.BATCH_SIZE);
+        List<ItemDto> itemDtoList = getDtoList(id, items, isReal);
 
-        fillTransferList(id, items, transferList);
-
-        if (!transferList.isEmpty()) {
-            try {
-                repository.saveItems(transferList);
-            } catch (Exception e) {
-                log.error("Database exception: {}", e.getMessage(), e);
-            }
+        if (!itemDtoList.isEmpty()) {
+            repository.saveItems(itemDtoList);
         }
     }
 
-    private void fillTransferList(Long id, PriorityQueue<CurveItem> items, List<ItemDto> transferList) {
+    private List<ItemDto> getDtoList(Long id, PriorityQueue<CurveItem> items, boolean isReal) {
 
-        while (items.size() >= config.BATCH_SIZE + config.MARGIN_SIZE) {
+        List<ItemDto> itemDtoList = new ArrayList<>(items.size() / config.BATCH_SIZE);
+
+        int limit = isReal ? config.BATCH_SIZE + config.MARGIN_SIZE : config.BATCH_SIZE;
+
+        while (items.size() >= limit) {
+
             ArrayList<CurveItem> itemsBatch = new ArrayList<>(config.BATCH_SIZE);
             for (int i = 0; i < config.BATCH_SIZE; i++) {
                 itemsBatch.add(items.poll());
             }
-            transferList.add(ItemDto.fromItemsList(id, itemsBatch));
+
+            itemDtoList.add(ItemDto.fromItemsList(id, itemsBatch));
 
             metaDataProcessor
                     .updateByItemsBatch(id, itemsBatch.get(0).getKey(), itemsBatch.get(itemsBatch.size() - 1).getKey(), itemsBatch.size());
 
             approximator.collectItemsBatch(id, itemsBatch);
         }
+
+        return itemDtoList;
     }
 
     public void mergeCache(Long id) {
@@ -145,7 +151,7 @@ public class Storage {
                 realItems.addAll(historyItems);
                 historyItems.clear();
 
-                transferIfNeed(id, realItems, true);
+                save(id, realItems, true);
             }
         }
 
@@ -157,8 +163,9 @@ public class Storage {
         int realTotal = realTimeCache.values().stream().mapToInt(PriorityQueue::size).sum();
         int historyTotal = historyCache.values().stream().mapToInt(PriorityQueue::size).sum();
 
-        return String.format("Realtime cache: curves - %d; records - %d. History cache: curves - %d; records - %d. History loaded: %s",
-                realTimeCache.size(), realTotal, historyCache.size(), historyTotal, historyLoaded);
+        return String.format("Realtime cache: curves - %d; records - %d. History cache: curves - %d; records - %d. " +
+                        "History loaded: count - %d, curves - %s",
+                realTimeCache.size(), realTotal, historyCache.size(), historyTotal, historyLoaded.size(), historyLoaded);
     }
 
     public Set<Long> getActiveCurves() {
@@ -210,18 +217,9 @@ public class Storage {
             return null;
         }
 
-        switch (type) {
-            case DATE_TIME: {
-                return OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
-            }
-            case VERTICAL_DEPTH:
-            case MEASURED_DEPTH: {
-                return String.valueOf(key);
-            }
-            default: {
-                return null;
-            }
-        }
+        return type == LogIndexType.MEASURED_DEPTH ?
+                new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() :
+                OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
     }
 
     public boolean isActiveCurve(Long id) {

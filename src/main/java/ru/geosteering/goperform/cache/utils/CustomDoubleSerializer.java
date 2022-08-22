@@ -11,6 +11,6 @@ import java.math.RoundingMode;
 public class CustomDoubleSerializer extends JsonSerializer<Double> {
     @Override
     public void serialize(Double value, JsonGenerator gen, SerializerProvider serializers) throws IOException {
-        gen.writeNumber(new BigDecimal(value).setScale(3, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
+        gen.writeNumber(new BigDecimal(value).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString());
     }
 }

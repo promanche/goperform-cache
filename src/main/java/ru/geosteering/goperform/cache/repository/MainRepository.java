@@ -21,7 +21,7 @@ public class MainRepository {
     private final SegmentsMapper segmentsMapper;
     private final SqlSessionFactory sessionFactory;
 
-    public void saveItems(List<ItemDto> list) throws Exception {
+    public void saveItems(List<ItemDto> list) {
         SqlSession session = sessionFactory.openSession(ExecutorType.BATCH);
 
         try {
@@ -32,7 +32,7 @@ public class MainRepository {
             session.commit();
         } catch (Exception e) {
             session.rollback();
-            throw new Exception(e);
+            log.error("Database exception: {}", e.getMessage(), e);
         } finally {
             session.close();
         }

@@ -11,12 +11,12 @@ import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
 public class CurveItem {
 
     @JsonSerialize(using = CustomDoubleSerializer.class)
-    Double key;
-    Object value;
+    private Double key;
+    private Object value;
 
-    public static CurveItem fromCurveDataItem(AbstractDataItem dataItem) {
+    public static CurveItem fromAbstractDataItem(AbstractDataItem dataItem, boolean isDateTimeCurve) {
         CurveItem curveItem = new CurveItem();
-        curveItem.key = dataItem.getTime() == null ? dataItem.getDepth() : dataItem.getTime().toInstant().toEpochMilli();
+        curveItem.key = isDateTimeCurve ? dataItem.getTime().toInstant().toEpochMilli() : dataItem.getDepth();
         curveItem.value = dataItem.getValue();
         return curveItem;
     }

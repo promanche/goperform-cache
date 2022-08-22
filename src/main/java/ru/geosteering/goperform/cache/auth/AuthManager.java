@@ -51,7 +51,8 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
                 userName == null
                         || userName.isEmpty()
                         || userName.equalsIgnoreCase("anonymousUser")
-                        || userName.equalsIgnoreCase("anonymous")) {
+                        || userName.equalsIgnoreCase("anonymous")
+        ) {
 
             return false;
         }
@@ -67,7 +68,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
     public Authentication getAuthentication(String jwt) {
 
-        if (jwt == null) {
+        if (jwt == null || jwt.isEmpty()) {
             return null;
         }
 

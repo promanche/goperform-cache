@@ -146,6 +146,8 @@ public class DataLoader {
                 default:
                     break;
             }
+        } else {
+            log.debug("Curve {} blocked", id);
         }
     }
 
@@ -225,7 +227,7 @@ public class DataLoader {
     }
 
     private void reload(Long id, Double from) {
-        log.info("Run reload process for {} from {}", id, from);
+        log.info("Run reload process for curve {} from {}", id, from);
 
         storage.resetById(id);
         approximator.resetById(id);

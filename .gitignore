@@ -32,7 +32,7 @@ build/
 ### VS Code ###
 .vscode/
 
-/app.creds
+*.creds
 /.gradle/
 /logs/
 /test

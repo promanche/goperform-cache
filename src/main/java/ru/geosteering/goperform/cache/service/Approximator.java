@@ -32,20 +32,22 @@ public class Approximator {
     private void loadLostItems() {
 
         List<Long> ids = repository.getAllItemIds();
-        log.info("Try to load lost items. Loaded {} ids from db", ids.size());
+        log.info("Start loading lost items. {} ids in db found", ids.size());
 
         for (Long id : ids) {
             loadLostById(id);
         }
+
+        log.info("Finish loading lost items");
     }
 
     public void loadLostById(Long id) {
 
-        if (isDateTimeCurve(id)) {
+        if (isApproximatedCurve(id)) {
 
             CurveApproximator approximator = approximators.computeIfAbsent(id, k -> new CurveApproximator(id));
 
-            Map<Integer, Double> scaleLast = new HashMap<>();
+            Map<Integer, Double> scaleLast = new HashMap<>();  // scale / lastKey
 
             for (Integer scale : config.SCALE_MINUTES) {
 
@@ -64,10 +66,12 @@ public class Approximator {
                     .collect(Collectors.toList());
 
             scaleLast.forEach((scale, last) -> {
+
                 List<CurveItem> lost = items.stream()
                         .filter(i -> i.getKey() >= last)
                         .collect(Collectors.toList());
 
+                approximator.lastItems.put(scale, lost.get(0));
                 approximator.collectItems(lost, scale, findItemsOnPixel(id, scale));
             });
 
@@ -75,8 +79,12 @@ public class Approximator {
         }
     }
 
-    private boolean isDateTimeCurve(Long id) {
-        return metaDataProcessor.getMetaData(id).getIndexType() == LogIndexType.DATE_TIME;
+    private boolean isApproximatedCurve(Long id) {
+
+        MetaData metaData = metaDataProcessor.getMetaData(id);
+
+        return metaData.getIndexType() != LogIndexType.MEASURED_DEPTH
+                && (metaData.getTypeLogData() == LogDataType.DOUBLE || metaData.getTypeLogData() == LogDataType.LONG);
     }
 
     private int findItemsOnPixel(Long id, int scale) {
@@ -96,10 +104,7 @@ public class Approximator {
 
     public void collectItemsBatch(Long id, List<CurveItem> items) {
 
-        LogIndexType indexType = metaDataProcessor.getIndexType(id);
-        LogDataType dataType = metaDataProcessor.getDataType(id);
-
-        if (indexType == LogIndexType.DATE_TIME && (dataType == LogDataType.DOUBLE || dataType == LogDataType.LONG)) {
+        if (isApproximatedCurve(id)) {
 
             CurveApproximator curveApproximator = approximators.computeIfAbsent(id, k -> new CurveApproximator(id));
 
@@ -129,7 +134,7 @@ public class Approximator {
 
         private final Long curveId;
         private final Map<Integer, List<CurveSegment>> collector; // scale / segments
-        private final Map<Integer, CurveItem> lastItems;
+        private final Map<Integer, CurveItem> lastItems;  // scale / lastItem
 
         public CurveApproximator(Long curveId) {
             this.curveId = curveId;
@@ -143,20 +148,17 @@ public class Approximator {
 
         private void collectItemsBatch(List<CurveItem> items) {
 
-            if (isDateTimeCurve(curveId)) {
+            for (Map.Entry<Integer, List<CurveSegment>> entry : collector.entrySet()) {
 
-                for (Map.Entry<Integer, List<CurveSegment>> entry : collector.entrySet()) {
+                Integer scale = entry.getKey();
+                int itemsOnPixel = findItemsOnPixel(curveId, scale);
 
-                    Integer scale = entry.getKey();
-                    int itemsOnPixel = findItemsOnPixel(curveId, scale);
+                if (isApproximatedScale(itemsOnPixel)) {
 
-                    if (isApproximatedScale(itemsOnPixel)) {
+                    collectItems(items, scale, itemsOnPixel);
 
-                        collectItems(items, scale, itemsOnPixel);
-
-                    } else {
-                        log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", curveId, items.size(), scale, itemsOnPixel);
-                    }
+                } else {
+                    log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", curveId, items.size(), scale, itemsOnPixel);
                 }
             }
         }
@@ -168,7 +170,6 @@ public class Approximator {
             CurveSegment lastSegment = segments.isEmpty() ? null : segments.get(segments.size() - 1);
 
             int secondsOnPixel = scale * 60 / 120;
-            int linesBatch = Math.min(1000, 10_000 / itemsOnPixel);
 
             for (CurveItem item : items) {
 
@@ -177,12 +178,6 @@ public class Approximator {
                     lastSegment.addItem(item);
 
                 } else {
-
-                    if (segments.size() >= linesBatch) {
-                        repository.saveSegments(SegmentDto.fromLinesList(curveId, scale, segments));
-                        log.debug("{} lines saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), curveId, scale, secondsOnPixel, itemsOnPixel);
-                        segments.clear();
-                    }
 
                     CurveSegment segment = new CurveSegment();
 
@@ -199,6 +194,17 @@ public class Approximator {
                 }
 
                 lastItems.put(scale, item);
+            }
+
+            if (segments.size() > 1) {
+
+                segments.remove(segments.size() - 1);
+
+                repository.saveSegments(SegmentDto.fromLinesList(curveId, scale, segments));
+                log.debug("{} lines saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), curveId, scale, secondsOnPixel, itemsOnPixel);
+                segments.clear();
+
+                segments.add(lastSegment);
             }
 
             metaDataProcessor.getMetaData(curveId).getScaleSet().add(scale);

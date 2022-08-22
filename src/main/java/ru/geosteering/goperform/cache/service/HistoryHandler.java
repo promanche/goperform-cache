@@ -9,6 +9,7 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.storage.Storage;
 import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import javax.annotation.PreDestroy;
 import java.util.Map;
@@ -74,21 +75,24 @@ public class HistoryHandler implements MessageHandler {
             }
 
         } catch (Exception e) {
-            log.error(e.getMessage(), e);
+            log.error("Message: {}", new String(msg.getData()), e);
         }
     }
 
     private void processCurveData(CurveDataMessage curveDataMessage) {
 
-        CurveItem item = CurveItem.fromCurveDataItem(curveDataMessage.getData());
+        Long id = curveDataMessage.getId();
 
-        buffer.computeIfAbsent(curveDataMessage.getId(), v -> ConcurrentHashMap.newKeySet(config.HISTORY_REQUEST_LIMIT))
+        CurveItem item = CurveItem.fromAbstractDataItem(curveDataMessage.getData(),
+                metaDataProcessor.getIndexType(id) != LogIndexType.MEASURED_DEPTH);
+
+        buffer.computeIfAbsent(id, v -> ConcurrentHashMap.newKeySet(config.HISTORY_REQUEST_LIMIT))
                 .add(item);
 
-        receivedCount.computeIfAbsent(curveDataMessage.getId(), v -> new AtomicInteger(0))
+        receivedCount.computeIfAbsent(id, v -> new AtomicInteger(0))
                 .incrementAndGet();
 
-        metaDataProcessor.updateByNewItem(curveDataMessage.getId(), item);
+        metaDataProcessor.updateByNewItem(id, item);
     }
 
     private void processDataEnd(DataEndMessage dataEndMessage, String subject) {
@@ -118,7 +122,7 @@ public class HistoryHandler implements MessageHandler {
             buffer.remove(id);
 
         } catch (Exception e) {
-            log.error("DataEndMessage processing exception: {}", e.getMessage(), e);
+            log.error("DataEndMessage {} processing exception: {}", dataEndMessage, e.getMessage(), e);
             dataLoader.onLoadError(id);
 
         } finally {

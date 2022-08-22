@@ -33,7 +33,7 @@ public class MainController {
         log.info("Incoming by-time request id {}, from {}, to {}, scale {}", id, from, to, scale);
 
         LogIndexType indexType = metaDataProcessor.getIndexType(id);
-        if (indexType != LogIndexType.DATE_TIME) {
+        if (indexType == LogIndexType.MEASURED_DEPTH) {
             log.info("Invalid indextype {} for id {}", indexType, id);
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
@@ -60,7 +60,7 @@ public class MainController {
         log.info("Incoming by-depth request id {}", id);
 
         LogIndexType indexType = metaDataProcessor.getIndexType(id);
-        if (indexType != LogIndexType.MEASURED_DEPTH && indexType != LogIndexType.VERTICAL_DEPTH) {
+        if (indexType != LogIndexType.MEASURED_DEPTH) {
             log.info("Invalid indextype {} for id {}", indexType, id);
             return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
         }
