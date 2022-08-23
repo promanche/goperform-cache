@@ -38,12 +38,16 @@ public class MetaDataProcessor {
     }
 
     public MetaData getMetaData(Long id) {
-        return metaDataMap.computeIfAbsent(id, this::requestInfo);
+        return metaDataMap.computeIfAbsent(id, k -> requestInfo(k, false));
     }
 
     public void updateByNewItem(Long id, CurveItem item) {
 
         MetaData metaData = getMetaData(id);
+
+        if (metaData.getAxisDefinition() != null) {
+            return;
+        }
 
         synchronized (metaData) {
 
@@ -68,13 +72,14 @@ public class MetaDataProcessor {
         return getMetaData(id).getIndexType();
     }
 
-    private MetaData requestInfo(Long id) {
+    private MetaData requestInfo(Long id, boolean withRange) {
 
         MetaData metaData = null;
 
         CurveDataRequest request = new CurveDataRequest();
         request.setCurveId(id);
         request.setInfoOnly(true);
+        request.setWithRange(withRange);
 
         Message response = NatsConnector.sendRequest(config.SUBJECT, MapperUtils.toBytes(request));
 
@@ -83,6 +88,10 @@ public class MetaDataProcessor {
             if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_INFO) {
                 metaData = new MetaData(((CurveInfoMessage) apiMessage).getCurveInfo());
             }
+        }
+
+        if (metaData != null) {
+            repository.saveOrUpdateMetaData(metaData);
         }
 
         return metaData;
@@ -108,16 +117,15 @@ public class MetaDataProcessor {
 
     public void reloadById(Long id) {
 
-        MetaData metaData = getMetaData(id);
+        MetaData metaData = requestInfo(id, true);
 
-        synchronized (metaData) {
+        metaData.setFirstDBKey(repository.getFirstItemKey(id));
+        metaData.setLastDBKey(repository.getLastItemKey(id));
+        metaData.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
+        metaData.setScaleSet(repository.getSegmentsScales(id));
 
-            metaData.setFirstDBKey(repository.getFirstItemKey(id));
-            metaData.setLastDBKey(repository.getLastItemKey(id));
-            metaData.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
-            metaData.getScaleSet().clear();
+        metaDataMap.compute(id, (k, v) -> metaData);
 
-            repository.saveOrUpdateMetaData(metaData);
-        }
+        repository.saveOrUpdateMetaData(metaData);
     }
 }

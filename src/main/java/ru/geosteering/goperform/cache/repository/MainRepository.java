@@ -9,6 +9,7 @@ import ru.geosteering.goperform.cache.repository.dto.*;
 import ru.geosteering.goperform.cache.utils.MapperUtils;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Repository
@@ -112,5 +113,9 @@ public class MainRepository {
         } else {
             segmentsMapper.deleteAfter(id, from);
         }
+    }
+
+    public Set<Integer> getSegmentsScales(Long id) {
+        return segmentsMapper.getScales(id);
     }
 }

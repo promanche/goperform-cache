@@ -2,7 +2,6 @@ package ru.geosteering.goperform.cache.storage;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CurveItem;
@@ -19,7 +18,6 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
@@ -35,30 +33,6 @@ public class Storage {
     private final Map<Long, PriorityQueue<CurveItem>> historyCache = new ConcurrentHashMap<>();
     private final Set<Long> historyLoaded = ConcurrentHashMap.newKeySet();
     private final Map<Long, LocalDateTime> activeCurves = new ConcurrentHashMap<>();
-
-    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.MINUTES)
-    private void checkActivity() {
-
-        synchronized (activeCurves) {
-            synchronized (realTimeCache) {
-
-                LocalDateTime now = LocalDateTime.now();
-
-                activeCurves.entrySet().removeIf(entry -> {
-
-                    boolean isNotActive = entry.getValue().isBefore(now.minusMinutes(1));
-
-                    if (isNotActive) {
-                        log.info("Curve {} is not active. Last item time: {}", entry.getKey(), entry.getValue());
-                        realTimeCache.remove(entry.getKey());
-                        historyLoaded.remove(entry.getKey());
-                    }
-
-                    return isNotActive;
-                });
-            }
-        }
-    }
 
     public void add(Long id, CurveItem item, boolean isReal) {
 

@@ -83,7 +83,7 @@ public class Approximator {
 
         MetaData metaData = metaDataProcessor.getMetaData(id);
 
-        return metaData.getIndexType() != LogIndexType.MEASURED_DEPTH
+        return metaData.getIndexType() != LogIndexType.MEASURED_DEPTH && metaData.getAxisDefinition() == null
                 && (metaData.getTypeLogData() == LogDataType.DOUBLE || metaData.getTypeLogData() == LogDataType.LONG);
     }
 
