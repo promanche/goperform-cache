@@ -6,7 +6,7 @@ import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.repository.dto.*;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.util.List;
 import java.util.Set;
@@ -76,7 +76,7 @@ public class MainRepository {
 
     public void saveOrUpdateMetaData(MetaData metaData) {
         if (metaDataMapper.exists(metaData.getId())) {
-            metaDataMapper.update(MapperUtils.toJson(metaData), metaData.getId());
+            metaDataMapper.update(StaticMapper.toJson(metaData), metaData.getId());
         } else {
             metaDataMapper.save(MetaDataDto.fromMetaData(metaData));
         }
@@ -84,7 +84,7 @@ public class MainRepository {
 
     public List<MetaData> getAllMetaData() {
         return metaDataMapper.getAll().stream()
-                .map(str -> MapperUtils.parseObject(str, MetaData.class))
+                .map(str -> StaticMapper.parseObject(str, MetaData.class))
                 .collect(Collectors.toList());
     }
 

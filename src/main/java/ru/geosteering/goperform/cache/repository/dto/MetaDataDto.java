@@ -10,12 +10,12 @@ import ru.geosteering.goperform.cache.utils.StaticMapper;
 @EqualsAndHashCode
 public class MetaDataDto {
 
-    private Long curveId;
+    private Long id;
     private String data;
 
     public static MetaDataDto fromMetaData(MetaData metaData) {
         MetaDataDto metaDataDto = new MetaDataDto();
-        metaDataDto.setCurveId(metaData.getId());
+        metaDataDto.setId(metaData.getId());
         metaDataDto.setData(StaticMapper.toJson(metaData));
 
         return metaDataDto;

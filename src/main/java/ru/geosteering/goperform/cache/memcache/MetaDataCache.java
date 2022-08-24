@@ -10,10 +10,10 @@ import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveInfoMessage;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.MetaData;
-import ru.geosteering.goperform.cache.model.event.*;
+import ru.geosteering.goperform.cache.model.event.curve.NewActiveCurve;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
+import ru.geosteering.goperform.cache.processor.EventBus;
 import ru.geosteering.goperform.cache.repository.MainRepository;
-import ru.geosteering.goperform.cache.service.EventBus;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
@@ -30,6 +30,8 @@ public class MetaDataCache {
 
     private final Config config;
     private final MainRepository repository;
+    private final EventBus eventBus;
+
     private final Map<Long, MetaData> metaDataMap = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> activeCurves = new ConcurrentHashMap<>();
     private final Set<Long> historyLoaded = ConcurrentHashMap.newKeySet();
@@ -42,30 +44,8 @@ public class MetaDataCache {
         log.info("MetaData loaded");
     }
 
-    @Scheduled(fixedRate = 1, timeUnit = TimeUnit.MINUTES)
-    private void checkCurveActivity() {
-
-        synchronized (activeCurves) {
-
-            LocalDateTime now = LocalDateTime.now();
-
-            activeCurves.entrySet().removeIf(entry -> {
-
-                boolean isNotActive = entry.getValue().isBefore(now.minusMinutes(1));
-
-                if (isNotActive) {
-                    log.info("Curve {} is not active", entry.getKey());
-                    historyLoaded.remove(entry.getKey());
-                    EventBus.post(new CurveNotActive(entry.getKey()));
-                }
-
-                return isNotActive;
-            });
-        }
-    }
-
     public MetaData getMetaData(Long id) {
-        return metaDataMap.computeIfAbsent(id, this::requestInfo);
+        return metaDataMap.computeIfAbsent(id, k -> requestInfo(id, false));
     }
 
     public void addActiveCurve(Long id) {
@@ -74,7 +54,7 @@ public class MetaDataCache {
 
         if (previous == null) {
             historyLoaded.remove(id);
-            EventBus.post(new NewActiveCurve(id));
+            eventBus.post(new NewActiveCurve(id));
         }
     }
 
@@ -91,14 +71,14 @@ public class MetaDataCache {
     }
 
 
-    private MetaData requestInfo(Long id) {
+    private MetaData requestInfo(Long id, boolean withRange) {
 
         MetaData metaData = null;
 
         CurveDataRequest request = new CurveDataRequest();
         request.setCurveId(id);
         request.setInfoOnly(true);
-        request.setWithRange(true);
+        request.setWithRange(withRange);
 
         Message response = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
 
@@ -109,6 +89,30 @@ public class MetaDataCache {
             }
         }
 
+        if (metaData != null) {
+            repository.saveOrUpdateMetaData(metaData);
+        }
+
         return metaData;
+    }
+
+    public void reloadById(Long id) {
+
+        MetaData metaData = requestInfo(id, true);
+
+        metaData.setFirstDBKey(repository.getFirstItemKey(id));
+        metaData.setLastDBKey(repository.getLastItemKey(id));
+        metaData.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
+        metaData.setScaleSet(repository.getSegmentsScales(id));
+
+        metaDataMap.compute(id, (k, v) -> metaData);
+
+        repository.saveOrUpdateMetaData(metaData);
+    }
+
+    @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
+    private void heartbeat() {
+
+        log.info("Curves info: active {}, history loaded {}", activeCurves.size(), historyLoaded.size());
     }
 }

@@ -12,7 +12,9 @@ public class CurveSegment {
     private Double firstKey;
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double lastKey;
+    @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double minVal;
+    @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double maxVal;
 
     public void addItem(CurveItem item) {

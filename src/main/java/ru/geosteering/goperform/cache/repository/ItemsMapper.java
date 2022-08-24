@@ -8,7 +8,7 @@ import java.util.List;
 @Mapper
 public interface ItemsMapper {
 
-    @Insert("insert into items (curve_id, first, last, data) values (#{curveId}, #{first}, #{last}, #{data}::jsonb)")
+    @Insert("insert into items (curve_id, first, last, data) values (#{id}, #{first}, #{last}, #{data}::jsonb)")
     void save(ItemDto itemDto);
 
     @Select("select data from items where curve_id=${id} and ((${from} <= last) and (${to} >= first)) order by first")
@@ -21,7 +21,7 @@ public interface ItemsMapper {
     void deleteAfter(@Param("id") Long id, @Param("key") Double key);
 
     @Delete("delete from items where curve_id=${id}")
-    void deleteAll(Long id);
+    void deleteAll(@Param("id") Long id);
 
     @Select("select distinct curve_id from items")
     List<Long> getAllIds();

@@ -7,8 +7,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.event.NatsConnectionStatus;
-import ru.geosteering.goperform.cache.service.*;
+import ru.geosteering.goperform.cache.model.event.natsconnection.NatsConnectionStatus;
+import ru.geosteering.goperform.cache.processor.EventBus;
 
 import javax.annotation.PreDestroy;
 import java.io.IOException;
@@ -19,10 +19,10 @@ import java.util.concurrent.ExecutionException;
 @RequiredArgsConstructor
 public class NatsConnector {
 
-    private final RealtimeHandler realtimeHandler;
-    private final HistoryHandler historyHandler;
-    private final DataLoader dataLoader;
+    private final RealtimeMessageHandler realtimeHandler;
+    private final HistoryMessageHandler historyHandler;
     private final Config config;
+    private final EventBus eventBus;
 
     private static Connection connection;
 
@@ -30,13 +30,16 @@ public class NatsConnector {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
-                .connectionListener((conn, status) -> {
-                    log.info("Nats connection status: {}", status.name());
-                    EventBus.post(new NatsConnectionStatus(status));
-                    if (status == ConnectionListener.Events.CLOSED || status == ConnectionListener.Events.DISCONNECTED) {
-                        reconnect();
-                    }
-                })
+                .connectionListener
+                        ((conn, status) -> {
+                                    log.info("Nats connection status: {}", status.name());
+                                    eventBus.post(new NatsConnectionStatus(status));
+                                    if (status == ConnectionListener.Events.CLOSED
+                                            || status == ConnectionListener.Events.DISCONNECTED) {
+                                        reconnect();
+                                    }
+                                }
+                        )
                 .noReconnect()
                 .errorListener(new ErrorListenerLoggerImpl())
                 .authHandler(Nats.credentials(config.CREDENTIALS_FILE))
@@ -53,8 +56,6 @@ public class NatsConnector {
             Dispatcher dispatcher = connection.createDispatcher();
             dispatcher.subscribe(config.SUBJECT + ".*", realtimeHandler);
             dispatcher.subscribe(config.SUBJECT + "." + config.HISTORY_NUID + ".*", historyHandler);
-
-            dataLoader.start();
         }
     }
 
@@ -85,18 +86,6 @@ public class NatsConnector {
         return response;
     }
 
-    private void onError() {
-        dataLoader.stop();
-        realtimeHandler.stop();
-        historyHandler.stop();
-    }
-
-    private void onReconnect() {
-        realtimeHandler.restart();
-        historyHandler.restart();
-        dataLoader.restart();
-    }
-
     @PreDestroy
     private void closeConnection() {
         if (connection != null) {
@@ -111,7 +100,7 @@ public class NatsConnector {
     void reconnect() {
         new Thread(() -> {
             try {
-                onError();
+
                 closeConnection();
 
                 int seconds = config.RECONNECT_TIMEOUT_SECONDS;
@@ -122,7 +111,7 @@ public class NatsConnector {
                 }
 
                 connect();
-                onReconnect();
+
             } catch (InterruptedException e) {
                 log.error(e.getMessage(), e);
             }

@@ -12,15 +12,15 @@ import java.util.List;
 @EqualsAndHashCode
 public class SegmentDto {
 
-    private Long curveId;
+    private Long id;
     private Integer scale;
     private Double first;
     private Double last;
     private String data;
 
-    public static SegmentDto fromLinesList(Long curveId, Integer scale, List<CurveSegment> lines) {
+    public static SegmentDto fromLinesList(Long id, Integer scale, List<CurveSegment> lines) {
         SegmentDto segmentDto = new SegmentDto();
-        segmentDto.setCurveId(curveId);
+        segmentDto.setId(id);
         segmentDto.setScale(scale);
         segmentDto.setFirst(lines.get(0).getFirstKey());
         segmentDto.setLast(lines.get(lines.size() - 1).getLastKey());

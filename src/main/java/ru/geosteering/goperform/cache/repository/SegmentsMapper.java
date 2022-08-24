@@ -9,7 +9,7 @@ import java.util.Set;
 @Mapper
 public interface SegmentsMapper {
 
-    @Insert("insert into segments (curve_id, scale, first, last, data) values (#{curveId}, #{scale}, #{first}, #{last}, #{data}::jsonb)")
+    @Insert("insert into segments (curve_id, scale, first, last, data) values (#{id}, #{scale}, #{first}, #{last}, #{data}::jsonb)")
     void save(SegmentDto segmentDto);
 
     @Select("select data from segments where curve_id=${id} and scale=${scale} and ((${from} <= last) and (${to} >= first)) order by first")
