@@ -56,6 +56,7 @@ public class MetaDataProcessor {
             if (typeLogData == LogDataType.DOUBLE || typeLogData == LogDataType.LONG) {
 
                 Double value = (Double) item.getValue();
+                Double key = item.getKey();
 
                 if (metaData.getMinValue() == null || metaData.getMinValue() > value) {
                     metaData.setMinValue(value);
@@ -63,6 +64,14 @@ public class MetaDataProcessor {
 
                 if (metaData.getMaxValue() == null || metaData.getMaxValue() < value) {
                     metaData.setMaxValue(value);
+                }
+
+                if (metaData.getMinKey() == null || metaData.getMinKey() > key) {
+                    metaData.setMinKey(key);
+                }
+
+                if (metaData.getMaxKey() == null || metaData.getMaxKey() < key) {
+                    metaData.setMaxKey(key);
                 }
             }
         }

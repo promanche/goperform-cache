@@ -17,6 +17,10 @@ public class MetaData extends CurveInfo {
     private Double maxValue;
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double minValue;
+    @JsonSerialize(using = CustomDoubleSerializer.class)
+    private Double maxKey;
+    @JsonSerialize(using = CustomDoubleSerializer.class)
+    private Double minKey;
     private int itemsInDB;
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double firstDBKey;

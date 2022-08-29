@@ -71,8 +71,10 @@ public class Approximator {
                         .filter(i -> i.getKey() >= last)
                         .collect(Collectors.toList());
 
-                approximator.lastItems.put(scale, lost.get(0));
-                approximator.collectItems(lost, scale, findItemsOnPixel(id, scale));
+                if (!lost.isEmpty()) {
+                    approximator.lastItems.put(scale, lost.get(0));
+                    approximator.collectItems(lost, scale, findItemsOnPixel(id, scale));
+                }
             });
 
             log.debug("{} lost items for id {} loaded", items.size(), id);
