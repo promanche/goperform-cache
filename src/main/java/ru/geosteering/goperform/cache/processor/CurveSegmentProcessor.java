@@ -6,9 +6,6 @@ import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.memcache.MetaDataCache;
 import ru.geosteering.goperform.cache.model.*;
-import ru.geosteering.goperform.cache.model.event.Event;
-import ru.geosteering.goperform.cache.model.event.item.*;
-import ru.geosteering.goperform.cache.model.event.task.ClearTask;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
@@ -25,44 +22,15 @@ import java.util.stream.Stream;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class CurveSegmentProcessor implements EventProcessor {
+public class CurveSegmentProcessor implements DefaultEventProcessor {
 
     private final Config config;
     private final MetaDataCache metaDataCache;
-    private final EventBus eventBus;
     private final MainRepository repository;
 
     private final Map<Long, SingleCurveSegmenter> segmenters = new ConcurrentHashMap<>();
 
     @PostConstruct
-    private void register() {
-        eventBus.register(
-                List.of(
-                        Event.EventType.ITEMS_BATCH,
-                        Event.EventType.CLEAR_TASK
-                ),
-                this);
-
-        loadLostItems();
-    }
-
-    @Override
-    public void processEvent(Event event) {
-
-        Event.EventType eventType = event.getType();
-
-        switch (eventType) {
-            case ITEMS_BATCH:
-                collectItemsBatch((ItemsBatch) event);
-                break;
-            case CLEAR_TASK:
-                remove((ClearTask) event);
-                break;
-            default:
-                break;
-        }
-    }
-
     private void loadLostItems() {
 
         List<Long> ids = repository.getAllItemIds();
@@ -76,8 +44,30 @@ public class CurveSegmentProcessor implements EventProcessor {
 
     }
 
+    @Override
+    public void setEventDispatcher(EventDispatcher eventDispatcher) {
+    }
+
+    @Override
+    public void onItemsBatch(Long id, List<CurveItem> items) {
+        if (isApproximatedCurve(id)) {
+
+            SingleCurveSegmenter segmenter = segmenters.computeIfAbsent(id, k -> new SingleCurveSegmenter(id));
+
+            synchronized (segmenter) {
+                segmenter.collectItemsBatch(items);
+            }
+        }
+    }
+
+    @Override
+    public void onReloadData(Long id) {
+        segmenters.remove(id);
+        loadLostById(id);
+    }
+
     public void loadLostById(Long id) {
-        log.info("1");
+
         if (isApproximatedCurve(id)) {
 
             SingleCurveSegmenter segmenter = segmenters.computeIfAbsent(id, k -> new SingleCurveSegmenter(id));
@@ -92,7 +82,7 @@ public class CurveSegmentProcessor implements EventProcessor {
                     scaleLast.put(scale, last);
                 }
             }
-            log.info("2");
+
             Double from = scaleLast.values().stream().min(Double::compareTo).orElse(Double.MIN_VALUE);
 
             List<CurveItem> items = repository.getItemsFromTo(id, from, Double.MAX_VALUE)
@@ -108,23 +98,8 @@ public class CurveSegmentProcessor implements EventProcessor {
                 segmenter.lastItems.put(scale, lost.get(0));
                 segmenter.collectItems(lost, scale, findItemsOnPixel(id, scale));
             });
-            log.info("3");
+
             log.debug("{} lost items for id {} loaded", items.size(), id);
-        }
-    }
-
-    private void collectItemsBatch(ItemsBatch event) {
-
-        Long id = event.getId();
-        List<CurveItem> items = event.getItems();
-
-        if (isApproximatedCurve(id)) {
-
-            SingleCurveSegmenter segmenter = segmenters.computeIfAbsent(id, k -> new SingleCurveSegmenter(id));
-
-            synchronized (segmenter) {
-                segmenter.collectItemsBatch(items);
-            }
         }
     }
 
@@ -160,14 +135,6 @@ public class CurveSegmentProcessor implements EventProcessor {
         }
 
         return Collections.emptyList();
-    }
-
-    private void remove(ClearTask event) {
-        Long id = event.getId();
-
-        segmenters.remove(id);
-
-        loadLostById(id);
     }
 
     private class SingleCurveSegmenter {

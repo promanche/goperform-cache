@@ -5,14 +5,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.geosteering.goperform.cache.memcache.*;
 import ru.geosteering.goperform.cache.model.*;
-import ru.geosteering.goperform.cache.model.event.task.LoadITask;
-import ru.geosteering.goperform.cache.model.event.task.ReloadTask;
+import ru.geosteering.goperform.cache.processor.CurveDataLoadProcessor;
 import ru.geosteering.goperform.cache.processor.CurveSegmentProcessor;
-import ru.geosteering.goperform.cache.processor.EventBus;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -28,7 +25,7 @@ public class CurveService {
     private final HistoryDataCache historyDataCache;
     private final RealtimeDataCache realtimeDataCache;
     private final CurveSegmentProcessor segmentProcessor;
-    private final EventBus eventBus;
+    private final CurveDataLoadProcessor dataLoadProcessor;
 
     public Object getCurveData(Long id, Double from, Double to, Integer scale) {
 
@@ -74,7 +71,6 @@ public class CurveService {
         }
 
         log.debug("Curve data id {} not yet loaded", id);
-        eventBus.post(new LoadITask(id));
 
         return null;
     }
@@ -84,6 +80,6 @@ public class CurveService {
     }
 
     public void reloadCurve(Long id, Double from) {
-        eventBus.post(new ReloadTask(id, from, LocalDateTime.now().plusMinutes(1)));
+        dataLoadProcessor.reloadByRequest(id, from);
     }
 }

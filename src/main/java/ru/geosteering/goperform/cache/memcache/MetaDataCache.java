@@ -10,14 +10,11 @@ import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveInfoMessage;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.MetaData;
-import ru.geosteering.goperform.cache.model.event.curve.NewActiveCurve;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.processor.EventBus;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
-import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -30,10 +27,9 @@ public class MetaDataCache {
 
     private final Config config;
     private final MainRepository repository;
-    private final EventBus eventBus;
 
     private final Map<Long, MetaData> metaDataMap = new ConcurrentHashMap<>();
-    private final Map<Long, LocalDateTime> activeCurves = new ConcurrentHashMap<>();
+    private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private final Set<Long> historyLoaded = ConcurrentHashMap.newKeySet();
 
     @PostConstruct
@@ -49,21 +45,19 @@ public class MetaDataCache {
     }
 
     public void addActiveCurve(Long id) {
-
-        LocalDateTime previous = activeCurves.put(id, LocalDateTime.now());
-
-        if (previous == null) {
-            historyLoaded.remove(id);
-            eventBus.post(new NewActiveCurve(id));
-        }
+        activeCurves.add(id);
     }
 
     public boolean isActive(Long id) {
-        return activeCurves.containsKey(id);
+        return activeCurves.contains(id);
     }
 
     public void addHistoryLoaded(Long id) {
         historyLoaded.add(id);
+    }
+
+    public void removeFromLoaded(Long id) {
+        historyLoaded.remove(id);
     }
 
     public boolean isHistoryLoaded(Long id) {
@@ -98,16 +92,19 @@ public class MetaDataCache {
 
     public void reloadById(Long id) {
 
-        MetaData metaData = requestInfo(id, true);
+        metaDataMap.compute(id, (aLong, metaData) -> {
 
-        metaData.setFirstDBKey(repository.getFirstItemKey(id));
-        metaData.setLastDBKey(repository.getLastItemKey(id));
-        metaData.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
-        metaData.setScaleSet(repository.getSegmentsScales(id));
+            MetaData newMeta = requestInfo(id, true);
 
-        metaDataMap.compute(id, (k, v) -> metaData);
+            newMeta.setFirstDBKey(repository.getFirstItemKey(id));
+            newMeta.setLastDBKey(repository.getLastItemKey(id));
+            newMeta.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
+            newMeta.setScaleSet(repository.getSegmentsScales(id));
 
-        repository.saveOrUpdateMetaData(metaData);
+            repository.saveOrUpdateMetaData(newMeta);
+
+            return newMeta;
+        });
     }
 
     @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)

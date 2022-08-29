@@ -1,49 +1,32 @@
 package ru.geosteering.goperform.cache.nats;
 
-import io.nats.client.*;
+import io.nats.client.Message;
+import io.nats.client.MessageHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.processor.EventBus;
-import ru.geosteering.goperform.cache.processor.EventProcessor;
-import ru.geosteering.goperform.cache.model.event.Event;
-import ru.geosteering.goperform.cache.model.event.apimessage.RealtimeApiMessage;
-import ru.geosteering.goperform.cache.model.event.natsconnection.NatsConnectionStatus;
+import ru.geosteering.goperform.cache.processor.EventDispatcher;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
-import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class RealtimeMessageHandler implements MessageHandler, EventProcessor {
+public class RealtimeMessageHandler implements MessageHandler {
 
     private final Config config;
-    private final EventBus eventBus;
+    private final EventDispatcher dispatcher;
 
     private ExecutorService executor;
 
     @PostConstruct
-    private void register() {
-        eventBus.register(List.of(Event.EventType.NATS_CONNECTION_STATUS), this);
-    }
-
-    @Override
-    public void processEvent(Event event) {
-
-        ConnectionListener.Events status = ((NatsConnectionStatus) event).getStatus();
-
-        if (status == ConnectionListener.Events.CONNECTED) {
-            start();
-        }
-
-        if (status == ConnectionListener.Events.DISCONNECTED || status == ConnectionListener.Events.CLOSED) {
-            stop();
-        }
+    public void initExecutor() {
+        executor = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
     @Override
@@ -59,7 +42,7 @@ public class RealtimeMessageHandler implements MessageHandler, EventProcessor {
                 ApiMessage apiMessage = StaticMapper.parseObject(new String(msg.getData()), ApiMessage.class);
 
                 if (apiMessage != null) {
-                    eventBus.post(new RealtimeApiMessage(apiMessage));
+                    dispatcher.onRealtimeApiMessage(apiMessage);
                 }
             }
 
@@ -81,24 +64,14 @@ public class RealtimeMessageHandler implements MessageHandler, EventProcessor {
         }
     }
 
-    private void start() {
-        executor = Executors.newFixedThreadPool(config.REALTIME_THREADS);
-    }
-
-    private void stop() {
-
+    public void waitTerminated(){
         try {
             executor.shutdown();
-
-            if (!executor.awaitTermination(1500, TimeUnit.MILLISECONDS)) {
-                log.warn(getClass().getSimpleName() + " executor shutdown timeout");
-                executor.shutdownNow();
-            } else {
-                log.info(getClass().getSimpleName() + " executor shutdown");
+            while (!executor.isTerminated()) {
+                Thread.sleep(100);
             }
-
-        } catch (InterruptedException e) {
-            log.error(getClass().getSimpleName() + "executor shutdown exception: {}", e.getMessage(), e);
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
         }
     }
 }

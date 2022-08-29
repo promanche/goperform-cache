@@ -1,6 +1,5 @@
 package ru.geosteering.goperform.cache.processor;
 
-import io.nats.client.ConnectionListener;
 import io.nats.client.Message;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -11,17 +10,11 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.memcache.*;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.MetaData;
-import ru.geosteering.goperform.cache.model.event.Event;
-import ru.geosteering.goperform.cache.model.event.apimessage.DataEndMessage;
-import ru.geosteering.goperform.cache.model.event.curve.NewActiveCurve;
-import ru.geosteering.goperform.cache.model.event.natsconnection.NatsConnectionStatus;
-import ru.geosteering.goperform.cache.model.event.task.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
-import javax.annotation.PostConstruct;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
@@ -33,158 +26,33 @@ import java.util.concurrent.atomic.AtomicInteger;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class CurveDataLoadProcessor implements EventProcessor {
+public class CurveDataLoadProcessor implements DefaultEventProcessor {
 
     private final Config config;
     private final MetaDataCache metaDataCache;
     private final RealtimeDataCache realtimeDataCache;
-    private final EventBus eventBus;
     private final HistoryDataCache historyDataCache;
     private final MainRepository repository;
 
     private final Map<Long, LoadStatus> loadMap = new ConcurrentHashMap<>();
     private final Map<Long, ReloadData> reloadMap = new ConcurrentHashMap<>();
+    private final Set<Long> waitingBlock = ConcurrentHashMap.newKeySet();
     private final AtomicInteger requestAllowed = new AtomicInteger();
+
+    private EventDispatcher eventDispatcher;
     private ScheduledExecutorService scheduler;
 
-    @PostConstruct
-    private void register() {
-        eventBus.register(
-                List.of(
-                        Event.EventType.NEW_ACTIVE_CURVE,
-                        Event.EventType.NATS_CONNECTION_STATUS,
-                        Event.EventType.DATA_END_MESSAGE,
-                        Event.EventType.RELOAD_TASK,
-                        Event.EventType.LOAD_TASK
-                ),
-                this);
+    @Override
+    public void setEventDispatcher(EventDispatcher eventDispatcher) {
+        this.eventDispatcher = eventDispatcher;
     }
 
     @Override
-    public void processEvent(Event event) {
+    public void onConnect() {
 
-        Event.EventType eventType = event.getType();
-
-        switch (eventType) {
-            case NEW_ACTIVE_CURVE:
-                addForLoad(((NewActiveCurve) event).getId());
-                break;
-            case LOAD_TASK:
-                addForLoad(((LoadITask) event).getId());
-                break;
-            case NATS_CONNECTION_STATUS:
-                onConnectionStatus((NatsConnectionStatus) event);
-                break;
-            case DATA_END_MESSAGE:
-                onEndMessage((DataEndMessage) event);
-                break;
-            case RELOAD_TASK:
-                addForReload((ReloadTask) event);
-                break;
-            default:
-                break;
-        }
-    }
-
-    @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.SECONDS)
-    public void reload() {
-
-        if (!reloadMap.isEmpty()) {
-
-            LocalDateTime now = LocalDateTime.now();
-
-            Set.copyOf(reloadMap.keySet()).forEach(id -> {
-
-                ReloadData reloadData = reloadMap.remove(id);
-
-                if (reloadData.getReloadTime().isBefore(now)) {
-
-                    repository.deleteItems(id, reloadData.getFrom());
-                    repository.deleteSegments(id, reloadData.getFrom());
-
-                    Future<?> future = eventBus.post(new ClearTask(id));
-
-                    try {
-                        future.get();
-                        loadMap.put(id, LoadStatus.IN_QUEUE);
-                    } catch (InterruptedException | ExecutionException e) {
-                        log.error(e.getMessage(), e);
-                    }
-                }
-            });
-        }
-    }
-
-    private void addForLoad(Long id) {
-        loadMap.putIfAbsent(id, LoadStatus.IN_QUEUE);
-    }
-
-    private void onConnectionStatus(NatsConnectionStatus event) {
-
-        ConnectionListener.Events status = event.getStatus();
-
-        if (status == ConnectionListener.Events.CONNECTED) {
-            start();
-        }
-
-        if (status == ConnectionListener.Events.DISCONNECTED || status == ConnectionListener.Events.CLOSED) {
-            stop();
-        }
-    }
-
-    private void onEndMessage(DataEndMessage event) {
-
-        DataEndMessage.Result result = event.getResult();
-        Long id = event.getId();
-
-        if (result == DataEndMessage.Result.DONE) {
-
-            metaDataCache.addHistoryLoaded(id);
-
-            if (metaDataCache.isActive(id)) {
-                List<CurveItem> items = historyDataCache.drain(id);
-                realtimeDataCache.merge(id, items);
-            }
-
-            loadMap.computeIfPresent(id, (aLong, loadStatus) -> loadStatus == LoadStatus.BLOCKED ? loadStatus : null);
-
-        } else {
-
-            loadMap.computeIfPresent(id, (aLong, loadStatus) -> loadStatus == LoadStatus.BLOCKED ? loadStatus : LoadStatus.IN_QUEUE);
-        }
-
-        requestAllowed.incrementAndGet();
-    }
-
-    private void addForReload(ReloadTask event) {
-
-        loadMap.put(event.getId(), LoadStatus.BLOCKED);
-
-        Double from = event.getFrom();
-        LocalDateTime reloadTime = LocalDateTime.now().plusMinutes(5);
-
-        reloadMap.compute(event.getId(), (aLong, reloadData) -> {
-
-            if (reloadData != null) {
-                reloadData.setReloadTime(reloadTime);
-                if (Double.compare(reloadData.getFrom(), from) > 0) {
-                    reloadData.setFrom(from);
-                }
-                return reloadData;
-
-            } else {
-                ReloadData newData = new ReloadData();
-                newData.setReloadTime(reloadTime);
-                newData.setFrom(from);
-                return newData;
-            }
-        });
-    }
-
-    private void start() {
         loadMap.entrySet()
                 .forEach(entry -> {
-                    if (entry.getValue() != LoadStatus.BLOCKED) {
+                    if (entry.getValue() != LoadStatus.BLOCKED || !reloadMap.containsKey(entry.getKey())) {
                         entry.setValue(LoadStatus.IN_QUEUE);
                     }
                 });
@@ -196,21 +64,70 @@ public class CurveDataLoadProcessor implements EventProcessor {
         scheduler.scheduleAtFixedRate(this::load, 30000, 100, TimeUnit.MILLISECONDS);
     }
 
-    private void stop() {
+    @Override
+    public void onDisconnect() {
+        scheduler.shutdownNow();
+    }
 
-        try {
-            scheduler.shutdown();
+    @Override
+    public void onRealtimeCurveItem(Long id, CurveItem item) {
+        if (!metaDataCache.isHistoryLoaded(id)) {
+            loadMap.putIfAbsent(id, LoadStatus.IN_QUEUE);
+        }
+    }
 
-            if (!scheduler.awaitTermination(2000, TimeUnit.MILLISECONDS)) {
-                log.warn(getClass().getSimpleName() + " scheduler shutdown timeout");
-                scheduler.shutdownNow();
+    @Override
+    public void onOldItem(Long id, CurveItem item) {
+
+        block(id);
+
+        LocalDateTime reloadTime = LocalDateTime.now().plusMinutes(5);
+        Double from = item.getKey();
+
+        addReloadData(id, reloadTime, from);
+    }
+
+    @Override
+    public void onLoadResult(Long id, LoadResult result) {
+
+        if (result == LoadResult.DONE) {
+
+            metaDataCache.addHistoryLoaded(id);
+
+            if (metaDataCache.isActive(id)) {
+
+                List<CurveItem> items = historyDataCache.drain(id);
+                realtimeDataCache.merge(id, items);
             }
 
-            log.info(getClass().getSimpleName() + " scheduler shutdown");
+            loadMap.computeIfPresent(id, (aLong, loadStatus) -> {
 
-        } catch (InterruptedException e) {
-            log.error(getClass().getSimpleName() + "scheduler shutdown exception: {}", e.getMessage(), e);
+                if (waitingBlock.contains(id)) {
+
+                    waitingBlock.remove(id);
+                    log.info("{} blocked", id);
+                    return LoadStatus.BLOCKED;
+                }
+
+                return null;
+            });
+
+        } else {
+
+            loadMap.computeIfPresent(id, (aLong, loadStatus) -> {
+
+                if (waitingBlock.contains(id)) {
+
+                    waitingBlock.remove(id);
+                    log.info("{} blocked", id);
+                    return LoadStatus.BLOCKED;
+                }
+
+                return LoadStatus.IN_QUEUE;
+            });
         }
+
+        requestAllowed.incrementAndGet();
     }
 
     private void load() {
@@ -225,14 +142,18 @@ public class CurveDataLoadProcessor implements EventProcessor {
                             .findFirst().orElse(null);
 
                     if (entry != null) {
+
                         entry.setValue(LoadStatus.IN_PROGRESS);
                         loadCurveData(entry.getKey());
+
                     } else {
+
                         requestAllowed.incrementAndGet();
                     }
                 }
 
             } else {
+
                 requestAllowed.incrementAndGet();
             }
         } catch (Exception e) {
@@ -291,6 +212,129 @@ public class CurveDataLoadProcessor implements EventProcessor {
         return type == LogIndexType.MEASURED_DEPTH ?
                 new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() :
                 OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+    }
+
+    private void block(Long id) {
+
+        loadMap.compute(id, (aLong, loadStatus) -> {
+
+            if (loadStatus == LoadStatus.IN_PROGRESS) {
+
+                waitingBlock.add(id);
+                return loadStatus;
+
+            } else {
+
+                log.info("{} blocked", id);
+                return LoadStatus.BLOCKED;
+            }
+        });
+    }
+
+
+    private void addReloadData(Long id, LocalDateTime reloadTime, Double from) {
+
+        reloadMap.compute(id, (aLong, reloadData) -> {
+
+            if (reloadData != null) {
+
+                reloadData.setReloadTime(reloadTime);
+
+                if (Double.compare(reloadData.getFrom(), from) > 0) {
+                    reloadData.setFrom(from);
+                }
+
+                return reloadData;
+
+            } else {
+
+                ReloadData newData = new ReloadData();
+                newData.setReloadTime(reloadTime);
+                newData.setFrom(from);
+
+                return newData;
+            }
+        });
+    }
+
+    @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.SECONDS)
+    public void reload() {
+
+        if (!reloadMap.isEmpty()) {
+
+            LocalDateTime now = LocalDateTime.now();
+
+            Set.copyOf(reloadMap.keySet()).forEach(id -> {
+
+                ReloadData reloadData = reloadMap.get(id);
+
+                if (reloadData.getReloadTime().isBefore(now) && loadMap.get(id) == LoadStatus.BLOCKED) {
+
+                    log.info("{} start reload process from {}", id, reloadData.getFrom());
+
+                    metaDataCache.removeFromLoaded(id);
+
+                    repository.deleteItems(id, reloadData.getFrom());
+                    repository.deleteSegments(id, reloadData.getFrom());
+
+                    eventDispatcher.onReloadData(id);
+
+                    reloadMap.remove(id);
+
+                    loadMap.put(id, LoadStatus.IN_QUEUE);
+                }
+            });
+        }
+    }
+
+    public void reloadByRequest(Long id, Double from) {
+
+        try {
+
+            block(id);
+
+            while (loadMap.get(id) != LoadStatus.BLOCKED) {
+                log.info("{} block waiting", id);
+                Thread.sleep(100);
+            }
+
+            addReloadData(id, LocalDateTime.now(), from);
+
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+        }
+    }
+
+    @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
+    private void heartbeat() {
+        AtomicInteger inProgress = new AtomicInteger();
+        AtomicInteger inQueue = new AtomicInteger();
+        AtomicInteger blocked = new AtomicInteger();
+
+        synchronized (loadMap) {
+            loadMap.values().forEach(v -> {
+                switch (v) {
+                    case IN_QUEUE:
+                        inQueue.getAndIncrement();
+                        break;
+
+                    case IN_PROGRESS:
+                        inProgress.getAndIncrement();
+                        break;
+
+                    case BLOCKED:
+                        blocked.getAndIncrement();
+                        break;
+
+                    default:
+                        break;
+                }
+            });
+        }
+
+        log.info("Load info: IN_PROGRESS - {}, IN_QUEUE - {}, BLOCKED - {}", inProgress, inQueue, blocked);
+
+        log.info("Reload info: {}", reloadMap);
     }
 
     private enum LoadStatus {
