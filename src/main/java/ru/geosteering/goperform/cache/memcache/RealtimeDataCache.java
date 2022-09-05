@@ -41,19 +41,22 @@ public class RealtimeDataCache extends AbstractCurveItemCache {
 
     public void merge(Long id, Collection<CurveItem> histItems) {
 
-        PriorityQueue<CurveItem> queue = cache.get(id);
+        if (histItems != null && !histItems.isEmpty()) {
+            PriorityQueue<CurveItem> queue =
+                    cache.computeIfAbsent(id, k -> new PriorityQueue<>(config.HISTORY_REQUEST_LIMIT, Comparator.comparing(CurveItem::getKey)));
 
-        synchronized (queue) {
+            synchronized (queue) {
 
-            int before = queue.size();
-            log.info("Curve {}. Before merging caches: real_size={}, hist_size={}", id, before, histItems.size());
+                int before = queue.size();
+                log.info("Curve {}. Before merging caches: real_size={}, hist_size={}", id, before, histItems.size());
 
-            queue.removeAll(histItems);
-            int after = queue.size();
-            queue.addAll(histItems);
-            log.info("Found {} duplicates. After merging caches: real_size={}", before - after, queue.size());
+                queue.removeAll(histItems);
+                int after = queue.size();
+                queue.addAll(histItems);
+                log.info("Found {} duplicates. After merging caches: real_size={}", before - after, queue.size());
 
-            save(id, queue);
+                save(id, queue);
+            }
         }
     }
 }
