@@ -18,13 +18,6 @@ public class RealtimeDataProcessor implements DefaultEventProcessor {
     private final MetaDataCache metaDataCache;
     private final RealtimeDataCache realTimeCache;
 
-    private EventDispatcher eventDispatcher;
-
-    @Override
-    public void setEventDispatcher(EventDispatcher eventDispatcher) {
-        this.eventDispatcher = eventDispatcher;
-    }
-
     @Override
     public void onRealtimeApiMessage(ApiMessage apiMessage) {
 
@@ -40,11 +33,11 @@ public class RealtimeDataProcessor implements DefaultEventProcessor {
             if (notOld(id, item.getKey())) {
 
                 realTimeCache.add(id, item);
-                eventDispatcher.onRealtimeCurveItem(id, item);
+                EventDispatcher.getInstance().onRealtimeCurveItem(id, item);
 
             } else {
 
-                eventDispatcher.onOldItem(id, item);
+                EventDispatcher.getInstance().onOldItem(id, item);
             }
         } else {
 
@@ -53,7 +46,7 @@ public class RealtimeDataProcessor implements DefaultEventProcessor {
     }
 
     @Override
-    public void onReloadData(Long id) {
+    public void onReloadData(Long id, Double from) {
         realTimeCache.remove(id);
     }
 

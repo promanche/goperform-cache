@@ -20,7 +20,6 @@ import java.util.concurrent.Executors;
 public class RealtimeMessageHandler implements MessageHandler {
 
     private final Config config;
-    private final EventDispatcher dispatcher;
 
     private ExecutorService executor;
 
@@ -42,7 +41,7 @@ public class RealtimeMessageHandler implements MessageHandler {
                 ApiMessage apiMessage = StaticMapper.parseObject(new String(msg.getData()), ApiMessage.class);
 
                 if (apiMessage != null) {
-                    dispatcher.onRealtimeApiMessage(apiMessage);
+                    EventDispatcher.getInstance().onRealtimeApiMessage(apiMessage);
                 }
             }
 
@@ -64,7 +63,7 @@ public class RealtimeMessageHandler implements MessageHandler {
         }
     }
 
-    public void waitTerminated(){
+    public void waitTerminated() {
         try {
             executor.shutdown();
             while (!executor.isTerminated()) {

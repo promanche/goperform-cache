@@ -2,7 +2,6 @@ package ru.geosteering.goperform.cache.processor;
 
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.goperform.cache.model.CurveItem;
-import ru.geosteering.goperform.cache.processor.LoadResult;
 
 import java.util.List;
 
@@ -20,7 +19,7 @@ public interface EventProcessor {
 
     void onOldItem(Long id, CurveItem item);
 
-    void onReloadData(Long id);
+    void onReloadData(Long id, Double from);
 
     void onConnect();
 

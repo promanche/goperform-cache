@@ -21,7 +21,6 @@ public class NatsConnector {
     private final RealtimeMessageHandler realtimeHandler;
     private final HistoryMessageHandler historyHandler;
     private final Config config;
-    private final EventDispatcher eventDispatcher;
 
     private static Connection connection;
 
@@ -38,13 +37,13 @@ public class NatsConnector {
 
                                         realtimeHandler.waitTerminated();
                                         historyHandler.waitTerminated();
-                                        eventDispatcher.onDisconnect();
+                                        EventDispatcher.getInstance().onDisconnect();
                                         reconnect();
                                     }
 
                                     if (status == ConnectionListener.Events.CONNECTED) {
 
-                                        eventDispatcher.onConnect();
+                                        EventDispatcher.getInstance().onConnect();
                                     }
                                 }).start()
                         )

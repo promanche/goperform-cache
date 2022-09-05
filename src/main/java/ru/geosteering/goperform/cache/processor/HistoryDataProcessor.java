@@ -27,13 +27,6 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
     private final Map<Long, AtomicInteger> receivedCount = new ConcurrentHashMap<>();
     private final Map<Long, Set<CurveItem>> buffer = new ConcurrentHashMap<>();
 
-    private EventDispatcher eventDispatcher;
-
-    @Override
-    public void setEventDispatcher(EventDispatcher eventDispatcher) {
-        this.eventDispatcher = eventDispatcher;
-    }
-
     @Override
     public void onHistoryApiMessage(ApiMessage apiMessage, String subject) {
 
@@ -53,7 +46,7 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
     }
 
     @Override
-    public void onReloadData(Long id) {
+    public void onReloadData(Long id, Double from) {
         historyCache.remove(id);
     }
 
@@ -77,7 +70,7 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
         receivedCount.computeIfAbsent(id, key -> new AtomicInteger(0))
                 .incrementAndGet();
 
-        eventDispatcher.onHistoryCurveItem(id, item);
+        EventDispatcher.getInstance().onHistoryCurveItem(id, item);
     }
 
     private void processDataEnd(DataEndMessage dataEndMessage, String subject) {
@@ -94,17 +87,17 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
         int received = receivedCount.containsKey(id) ? receivedCount.remove(id).get() : -1;
 
         if (sent == 0) {
-            log.info("{} data loaded, {}", id, dataEndMessage);
-            eventDispatcher.onLoadResult(id, LoadResult.DONE);
+            log.info("Curve {} data loaded, {}", id, dataEndMessage);
+            EventDispatcher.getInstance().onLoadResult(id, LoadResult.DONE);
 
         } else if (sent != received) {
             log.error("Received count {} not equals to sent {}", received, sent);
-            eventDispatcher.onLoadResult(id, LoadResult.ERROR);
+            EventDispatcher.getInstance().onLoadResult(id, LoadResult.ERROR);
 
         } else {
-            log.info("{} history part received, {}", id, dataEndMessage);
+            log.info("Curve {} history part received, {}", id, dataEndMessage);
             drainToCache(id);
-            eventDispatcher.onLoadResult(id, LoadResult.PART);
+            EventDispatcher.getInstance().onLoadResult(id, LoadResult.PART);
         }
 
         buffer.remove(id);
@@ -122,7 +115,7 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
     }
 
     private void drainToCache(Long id) {
-        log.info("Drain buffer to historyCache. Curve: {}, items: {}", id, buffer.get(id).size());
+        log.info("Drain buffer to cache. Curve: {}, items: {}", id, buffer.get(id).size());
         historyCache.addAll(id, buffer.get(id));
     }
 }

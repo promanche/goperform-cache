@@ -21,11 +21,6 @@ public class WebSocketMessageProcessor implements DefaultEventProcessor {
     private final SimpUserRegistry userRegistry;
 
     @Override
-    public void setEventDispatcher(EventDispatcher eventDispatcher) {
-
-    }
-
-    @Override
     public void onRealtimeCurveItem(Long id, CurveItem item) {
         String toWs = "{\"id\":" + id + ",\"point\":" + StaticMapper.toJson(item) + "}";
         template.convertAndSend("/curve/" + id + "/new-point", toWs);

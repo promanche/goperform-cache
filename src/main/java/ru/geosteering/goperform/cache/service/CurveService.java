@@ -1,15 +1,31 @@
 package ru.geosteering.goperform.cache.service;
 
+import io.nats.client.Message;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import ru.geosteering.commonModels.EResult;
+import ru.geosteering.commonModels.dataService.CurveInfo;
+import ru.geosteering.commonModels.dataService.requests.*;
+import ru.geosteering.commonModels.dataService.responses.ApiMessage;
+import ru.geosteering.commonModels.dataService.responses.StatusMessage;
+import ru.geosteering.commonModels.wits.RecordIndex;
 import ru.geosteering.goperform.cache.memcache.*;
-import ru.geosteering.goperform.cache.model.*;
+import ru.geosteering.goperform.cache.model.CurveItem;
+import ru.geosteering.goperform.cache.model.CurveSegment;
+import ru.geosteering.goperform.cache.model.rest.Comment;
+import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
+import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDataLoadProcessor;
 import ru.geosteering.goperform.cache.processor.CurveSegmentProcessor;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -70,16 +86,112 @@ public class CurveService {
             }
         }
 
+        dataLoadProcessor.loadByRequest(id);
+
         log.debug("Curve data id {} not yet loaded", id);
 
         return null;
     }
 
-    public MetaData getCurveInfo(Long id) {
-        return metaDataCache.getMetaData(id);
-    }
-
     public void reloadCurve(Long id, Double from) {
         dataLoadProcessor.reloadByRequest(id, from);
+    }
+
+    public Long createCurve(Long parentId, CreateCurveRequest req, String user) {
+
+        CurveInfo info = new CurveInfo();
+        info.setMnemonic(req.getCurveName());
+        info.setClassWitsml(req.getTypeCurve().name());
+
+        CurveAddRequest request = new CurveAddRequest();
+        request.setParentId(parentId);
+        request.setCurveInfo(info);
+        request.setUser(user);
+
+        Message message = NatsConnector.sendRequest("gostream.curvesAdd", StaticMapper.toBytes(request));
+
+        ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+
+        if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
+
+            StatusMessage statusMessage = (StatusMessage) apiMessage;
+
+            if (statusMessage.getStatus() == EResult.OK) {
+                return Long.valueOf(statusMessage.getMessage());
+            }
+        }
+
+        return null;
+    }
+
+    public boolean writeComment(Long id, Comment comment, String user, boolean update) {
+
+        CurveDataStoreRequest.CurveStoreData data = new CurveDataStoreRequest.CurveStoreData();
+        data.setCurveId(id);
+
+        if (comment.getRecordIndex() == RecordIndex.TIME) {
+            data.setDatetime(ZonedDateTime.ofInstant(Instant.ofEpochMilli(comment.getKey().longValue()), ZoneOffset.UTC));
+        } else if (comment.getRecordIndex() == RecordIndex.DEPTH) {
+            data.setDepth((int) (comment.getKey() * 10000));
+        }
+
+        data.setValue(StaticMapper.toJson(comment));
+
+        CurveDataStoreRequest request = new CurveDataStoreRequest();
+        request.setIndex(comment.getRecordIndex());
+        request.setData(List.of(data));
+        request.setUser(user);
+        request.setUpdate(update);
+
+        Message message = NatsConnector.sendRequest("gostream.curvesStore", StaticMapper.toBytes(request));
+
+        ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+
+        boolean written = false;
+
+        if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
+
+            StatusMessage statusMessage = (StatusMessage) apiMessage;
+
+            written = statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0;
+
+            if (update & written) {
+                reloadCurve(id, comment.getKey());
+            }
+        }
+
+        return written;
+    }
+
+    public boolean removeComment(Long id, Double key, String user) {
+
+        String from = metaDataCache.getMetaData(id).getIndexType() == LogIndexType.MEASURED_DEPTH ?
+                new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() :
+                OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+
+        CurveDataClearRequest request = new CurveDataClearRequest();
+        request.setCurveId(id);
+        request.setFrom(from);
+        request.setTo(from);
+        request.setUser(user);
+
+        Message message = NatsConnector.sendRequest("gostream.curvesClear", StaticMapper.toBytes(request));
+
+        ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+
+        boolean removed = false;
+
+        if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
+
+            StatusMessage statusMessage = (StatusMessage) apiMessage;
+
+            removed = statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0;
+
+            if (removed) {
+                reloadCurve(id, key);
+            }
+        }
+
+        return removed;
     }
 }

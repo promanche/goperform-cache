@@ -3,7 +3,6 @@ package ru.geosteering.goperform.cache.memcache;
 import lombok.RequiredArgsConstructor;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.CurveItem;
-import ru.geosteering.goperform.cache.processor.EventDispatcher;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 
 import java.util.*;
@@ -14,7 +13,6 @@ public abstract class AbstractCurveItemCache {
 
     protected final MainRepository repository;
     protected final Config config;
-    protected final EventDispatcher eventDispatcher;
 
     protected final Map<Long, PriorityQueue<CurveItem>> cache = new ConcurrentHashMap<>();
 

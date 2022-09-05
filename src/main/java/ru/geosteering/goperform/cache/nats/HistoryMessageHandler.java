@@ -20,7 +20,6 @@ import java.util.concurrent.Executors;
 public class HistoryMessageHandler implements MessageHandler {
 
     private final Config config;
-    private final EventDispatcher dispatcher;
 
     private ExecutorService executor;
 
@@ -41,7 +40,7 @@ public class HistoryMessageHandler implements MessageHandler {
             ApiMessage apiMessage = StaticMapper.parseObject(new String(msg.getData()), ApiMessage.class);
 
             if (apiMessage != null) {
-                dispatcher.onHistoryApiMessage(apiMessage, msg.getSubject());
+                EventDispatcher.getInstance().onHistoryApiMessage(apiMessage, msg.getSubject());
             }
 
         } catch (Exception e) {
@@ -49,7 +48,7 @@ public class HistoryMessageHandler implements MessageHandler {
         }
     }
 
-    public void waitTerminated(){
+    public void waitTerminated() {
         try {
             executor.shutdown();
             while (!executor.isTerminated()) {

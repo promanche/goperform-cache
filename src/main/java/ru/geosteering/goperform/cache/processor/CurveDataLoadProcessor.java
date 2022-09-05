@@ -39,13 +39,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
     private final Set<Long> waitingBlock = ConcurrentHashMap.newKeySet();
     private final AtomicInteger requestAllowed = new AtomicInteger();
 
-    private EventDispatcher eventDispatcher;
     private ScheduledExecutorService scheduler;
-
-    @Override
-    public void setEventDispatcher(EventDispatcher eventDispatcher) {
-        this.eventDispatcher = eventDispatcher;
-    }
 
     @Override
     public void onConnect() {
@@ -277,7 +271,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
                     repository.deleteItems(id, reloadData.getFrom());
                     repository.deleteSegments(id, reloadData.getFrom());
 
-                    eventDispatcher.onReloadData(id);
+                    EventDispatcher.getInstance().onReloadData(id, reloadData.getFrom());
 
                     reloadMap.remove(id);
 
@@ -303,6 +297,10 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
+    }
+
+    public void loadByRequest(Long id) {
+        loadMap.putIfAbsent(id, LoadStatus.IN_QUEUE);
     }
 
     @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
@@ -343,6 +341,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
 
     @Getter
     @Setter
+    @ToString
     private static class ReloadData {
         private Double from;
         private LocalDateTime reloadTime;

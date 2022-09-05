@@ -20,11 +20,6 @@ public class MetaDataProcessor implements DefaultEventProcessor {
     private final MainRepository repository;
 
     @Override
-    public void setEventDispatcher(EventDispatcher eventDispatcher) {
-
-    }
-
-    @Override
     public void onRealtimeCurveItem(Long id, CurveItem item) {
         updateByNewItem(id, item, true);
     }
@@ -59,7 +54,7 @@ public class MetaDataProcessor implements DefaultEventProcessor {
     }
 
     @Override
-    public void onReloadData(Long id) {
+    public void onReloadData(Long id, Double from) {
         metaDataCache.reloadById(id);
     }
 
@@ -67,11 +62,21 @@ public class MetaDataProcessor implements DefaultEventProcessor {
 
         MetaData metaData = metaDataCache.getMetaData(id);
 
-        if (metaData.getAxisDefinition() != null) {
-            return;
-        }
-
         synchronized (metaData) {
+
+            Double key = item.getKey();
+
+            if (metaData.getMinKey() == null || Double.compare(metaData.getMinKey(), key) > 0) {
+                metaData.setMinKey(key);
+            }
+
+            if (metaData.getMaxKey() == null || Double.compare(metaData.getMaxKey(), key) < 0) {
+                metaData.setMaxKey(key);
+            }
+
+            if (metaData.getAxisDefinition() != null) {
+                return;
+            }
 
             LogDataType typeLogData = metaData.getTypeLogData();
 

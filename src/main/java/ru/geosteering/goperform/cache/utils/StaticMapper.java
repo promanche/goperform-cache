@@ -1,6 +1,7 @@
 package ru.geosteering.goperform.cache.utils;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,6 +15,7 @@ public class StaticMapper {
 
     static {
         mapper.findAndRegisterModules();
+        mapper.enable(MapperFeature.ACCEPT_CASE_INSENSITIVE_ENUMS);
     }
 
     public static ObjectMapper getMapper() {

@@ -13,6 +13,7 @@ import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import javax.annotation.PostConstruct;
 import java.util.Map;
@@ -41,7 +42,11 @@ public class MetaDataCache {
     }
 
     public MetaData getMetaData(Long id) {
-        return metaDataMap.computeIfAbsent(id, k -> requestInfo(id, false));
+        return metaDataMap.computeIfAbsent(id, aLong -> {
+            MetaData metaData = requestInfo(id, false);
+            repository.saveOrUpdateMetaData(metaData);
+            return metaData;
+        });
     }
 
     public void addActiveCurve(Long id) {
@@ -83,27 +88,41 @@ public class MetaDataCache {
             }
         }
 
-        if (metaData != null) {
-            repository.saveOrUpdateMetaData(metaData);
-        }
-
         return metaData;
     }
 
     public void reloadById(Long id) {
 
-        metaDataMap.compute(id, (aLong, metaData) -> {
+        metaDataMap.compute(id, (aLong, oldMeta) -> {
 
             MetaData newMeta = requestInfo(id, true);
 
-            newMeta.setFirstDBKey(repository.getFirstItemKey(id));
-            newMeta.setLastDBKey(repository.getLastItemKey(id));
-            newMeta.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
-            newMeta.setScaleSet(repository.getSegmentsScales(id));
+            if (oldMeta == null) {
+                oldMeta = newMeta;
+            }
 
-            repository.saveOrUpdateMetaData(newMeta);
+            oldMeta.setFirstDBKey(repository.getFirstItemKey(id));
+            oldMeta.setLastDBKey(repository.getLastItemKey(id));
+            oldMeta.setItemsInDB(repository.getItemsRecords(id) * config.BATCH_SIZE);
+            oldMeta.setScaleSet(repository.getSegmentsScales(id));
 
-            return newMeta;
+            Double minKey;
+            Double maxKey;
+
+            if (newMeta.getIndexType() == LogIndexType.MEASURED_DEPTH) {
+                minKey = newMeta.getMdMin();
+                maxKey = newMeta.getMdMax();
+            } else {
+                minKey = (double) newMeta.getTimeMin().toInstant().toEpochMilli();
+                maxKey = (double) newMeta.getTimeMin().toInstant().toEpochMilli();
+            }
+
+            oldMeta.setMinKey(minKey);
+            oldMeta.setMaxKey(maxKey);
+
+            repository.saveOrUpdateMetaData(oldMeta);
+
+            return oldMeta;
         });
     }
 

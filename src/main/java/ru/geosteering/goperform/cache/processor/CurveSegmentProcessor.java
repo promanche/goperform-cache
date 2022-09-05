@@ -45,10 +45,6 @@ public class CurveSegmentProcessor implements DefaultEventProcessor {
     }
 
     @Override
-    public void setEventDispatcher(EventDispatcher eventDispatcher) {
-    }
-
-    @Override
     public void onItemsBatch(Long id, List<CurveItem> items) {
         if (isApproximatedCurve(id)) {
 
@@ -61,7 +57,7 @@ public class CurveSegmentProcessor implements DefaultEventProcessor {
     }
 
     @Override
-    public void onReloadData(Long id) {
+    public void onReloadData(Long id, Double from) {
         segmenters.remove(id);
         loadLostById(id);
     }
@@ -72,14 +68,11 @@ public class CurveSegmentProcessor implements DefaultEventProcessor {
 
             SingleCurveSegmenter segmenter = segmenters.computeIfAbsent(id, k -> new SingleCurveSegmenter(id));
 
-            Map<Integer, Double> scaleLast = new HashMap<>();
+            Map<Integer, Double> scaleLast = repository.getScalesLast(id);
 
             for (Integer scale : config.SCALE_MINUTES) {
-
                 if (isApproximatedScale(findItemsOnPixel(id, scale))) {
-                    Double last = repository.getLastSegment(id, scale);
-                    last = last == null ? Double.MIN_VALUE : last;
-                    scaleLast.put(scale, last);
+                    scaleLast.putIfAbsent(scale, Double.MIN_VALUE);
                 }
             }
 
@@ -90,16 +83,18 @@ public class CurveSegmentProcessor implements DefaultEventProcessor {
                     .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .collect(Collectors.toList());
 
+            log.info("{} lost items for id {} loaded", items.size(), id);
+
             scaleLast.forEach((scale, last) -> {
                 List<CurveItem> lost = items.stream()
                         .filter(i -> Double.compare(i.getKey(), last) >= 0)
                         .collect(Collectors.toList());
 
-                segmenter.lastItems.put(scale, lost.get(0));
-                segmenter.collectItems(lost, scale, findItemsOnPixel(id, scale));
+                if (!lost.isEmpty()) {
+                    segmenter.lastItems.put(scale, lost.get(0));
+                    segmenter.collectItems(lost, scale, findItemsOnPixel(id, scale));
+                }
             });
-
-            log.debug("{} lost items for id {} loaded", items.size(), id);
         }
     }
 
@@ -205,14 +200,32 @@ public class CurveSegmentProcessor implements DefaultEventProcessor {
 
                 segments.remove(segments.size() - 1);
 
-                repository.saveSegments(SegmentDto.fromLinesList(id, scale, segments));
-                log.debug("{} lines saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), id, scale, secondsOnPixel, itemsOnPixel);
+                save(segments, id, scale);
+
+                log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), id, scale, secondsOnPixel, itemsOnPixel);
+
                 segments.clear();
 
                 segments.add(lastSegment);
             }
 
             metaDataCache.getMetaData(id).getScaleSet().add(scale);
+        }
+
+        private void save(List<CurveSegment> segments, Long id, int scale) {
+
+            List<SegmentDto> transfer = new ArrayList<>();
+
+            int first = 0;
+
+            while (segments.size() - first > config.BATCH_SIZE) {
+                transfer.add(SegmentDto.fromLinesList(id, scale, segments.subList(first, first + config.BATCH_SIZE)));
+                first = first + config.BATCH_SIZE;
+            }
+
+            transfer.add(SegmentDto.fromLinesList(id, scale, segments.subList(first, segments.size())));
+
+            repository.saveSegments(transfer);
         }
 
         private List<CurveSegment> getAndCompleteSegments(int scale, Double from, Double to, List<CurveItem> items) {

@@ -25,7 +25,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         (auth) -> auth
                                 .antMatchers("/ws").permitAll()
-                                .antMatchers("/curve/**").access(authManager)
+                                .antMatchers("/curve/{id}/**").access(authManager)
                                 .anyRequest().denyAll()
                 )
                 .addFilterBefore(authManager, FilterSecurityInterceptor.class)

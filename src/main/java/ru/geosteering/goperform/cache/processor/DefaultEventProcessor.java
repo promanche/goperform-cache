@@ -7,8 +7,6 @@ import java.util.List;
 
 public interface DefaultEventProcessor extends EventProcessor {
 
-    void setEventDispatcher(EventDispatcher eventDispatcher);
-
     @Override
     default void onRealtimeApiMessage(ApiMessage apiMessage) {
 
@@ -40,7 +38,7 @@ public interface DefaultEventProcessor extends EventProcessor {
     }
 
     @Override
-    default void onReloadData(Long id) {
+    default void onReloadData(Long id, Double from) {
 
     }
 

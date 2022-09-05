@@ -14,8 +14,8 @@ import java.util.*;
 @Slf4j
 public class HistoryDataCache extends AbstractCurveItemCache {
 
-    public HistoryDataCache(MainRepository repository, Config config, EventDispatcher eventDispatcher) {
-        super(repository, config, eventDispatcher);
+    public HistoryDataCache(MainRepository repository, Config config) {
+        super(repository, config);
     }
 
     protected void save(Long id, PriorityQueue<CurveItem> items) {
@@ -32,7 +32,7 @@ public class HistoryDataCache extends AbstractCurveItemCache {
 
             transfer.add(ItemDto.fromItemsList(id, itemsBatch));
 
-            eventDispatcher.onItemsBatch(id, itemsBatch);
+            EventDispatcher.getInstance().onItemsBatch(id, itemsBatch);
         }
 
         repository.saveItems(transfer);
@@ -42,12 +42,17 @@ public class HistoryDataCache extends AbstractCurveItemCache {
 
         PriorityQueue<CurveItem> items = cache.remove(id);
 
-        List<CurveItem> result = new ArrayList<>(items.size());
+        if (items != null) {
 
-        while (!items.isEmpty()) {
-            result.add(items.poll());
+            List<CurveItem> result = new ArrayList<>(items.size());
+
+            while (!items.isEmpty()) {
+                result.add(items.poll());
+            }
+
+            return result;
         }
 
-        return result;
+        return Collections.emptyList();
     }
 }

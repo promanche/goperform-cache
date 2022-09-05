@@ -16,8 +16,8 @@ public class RealtimeDataCache extends AbstractCurveItemCache {
 
     private final MetaDataCache metaDataCache;
 
-    public RealtimeDataCache(MainRepository repository, Config config, EventDispatcher eventDispatcher, MetaDataCache metaDataCache) {
-        super(repository, config, eventDispatcher);
+    public RealtimeDataCache(MainRepository repository, Config config, MetaDataCache metaDataCache) {
+        super(repository, config);
         this.metaDataCache = metaDataCache;
     }
 
@@ -34,7 +34,7 @@ public class RealtimeDataCache extends AbstractCurveItemCache {
 
                 repository.saveItems(List.of(ItemDto.fromItemsList(id, itemsBatch)));
 
-                eventDispatcher.onItemsBatch(id, itemsBatch);
+                EventDispatcher.getInstance().onItemsBatch(id, itemsBatch);
             }
         }
     }
@@ -46,13 +46,12 @@ public class RealtimeDataCache extends AbstractCurveItemCache {
         synchronized (items) {
 
             int before = items.size();
-            log.info("Curve {}. Before merging caches: real_size={}, hist_size={}", curveId, items.size(), before);
+            log.info("Curve {}. Before merging caches: real_size={}, hist_size={}", curveId, before, histItems.size());
 
             items.removeAll(histItems);
-
-            log.info("Curve {}. Found {} duplicates. After merging caches: real_size={}", curveId, before - items.size(), items.size());
-
+            int after = items.size();
             items.addAll(histItems);
+            log.info("Found {} duplicates. After merging caches: real_size={}", before - after, items.size());
 
             save(curveId, items);
         }
