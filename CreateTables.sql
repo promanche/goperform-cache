@@ -25,4 +25,10 @@ create table segments
     last     numeric not null,
     data     jsonb   not null
 
-)
+);
+
+create index on items(curve_id);
+
+create index on meta_data(curve_id);
+
+create index on segments(curve_id);
