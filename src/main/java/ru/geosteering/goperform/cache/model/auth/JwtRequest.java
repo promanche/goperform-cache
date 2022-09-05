@@ -1,4 +1,4 @@
-package ru.geosteering.goperform.cache.auth.model;
+package ru.geosteering.goperform.cache.model.auth;
 
 import lombok.*;
 

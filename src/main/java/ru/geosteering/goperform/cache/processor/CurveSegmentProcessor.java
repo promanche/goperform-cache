@@ -1,13 +1,14 @@
-package ru.geosteering.goperform.cache.service;
+package ru.geosteering.goperform.cache.processor;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
+import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.memcache.MetaDataCache;
 import ru.geosteering.goperform.cache.model.*;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
@@ -18,15 +19,16 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-@Service
-@Slf4j
+@Component
 @RequiredArgsConstructor
-public class Approximator {
+@Slf4j
+public class CurveSegmentProcessor implements DefaultEventProcessor {
 
     private final Config config;
+    private final MetaDataCache metaDataCache;
     private final MainRepository repository;
-    private final MetaDataProcessor metaDataProcessor;
-    private final Map<Long, CurveApproximator> approximators = new ConcurrentHashMap<>();
+
+    private final Map<Long, SingleCurveSegmenter> segmenters = new ConcurrentHashMap<>();
 
     @PostConstruct
     private void loadLostItems() {
@@ -39,51 +41,66 @@ public class Approximator {
         }
 
         log.info("Finish loading lost items");
+
+    }
+
+    @Override
+    public void onItemsBatch(Long id, List<CurveItem> items) {
+        if (isApproximatedCurve(id)) {
+
+            SingleCurveSegmenter segmenter = segmenters.computeIfAbsent(id, k -> new SingleCurveSegmenter(id));
+
+            synchronized (segmenter) {
+                segmenter.collectItemsBatch(items);
+            }
+        }
+    }
+
+    @Override
+    public void onReloadData(Long id, Double from) {
+        segmenters.remove(id);
+        loadLostById(id);
     }
 
     public void loadLostById(Long id) {
 
         if (isApproximatedCurve(id)) {
 
-            CurveApproximator approximator = approximators.computeIfAbsent(id, k -> new CurveApproximator(id));
+            SingleCurveSegmenter segmenter = segmenters.computeIfAbsent(id, k -> new SingleCurveSegmenter(id));
 
-            Map<Integer, Double> scaleLast = new HashMap<>();  // scale / lastKey
+            Map<Integer, Double> scaleLast = repository.getScalesLast(id);
 
             for (Integer scale : config.SCALE_MINUTES) {
-
                 if (isApproximatedScale(findItemsOnPixel(id, scale))) {
-                    Double last = repository.getLastSegment(id, scale);
-                    last = last == null ? 0 : last;
-                    scaleLast.put(scale, last);
+                    scaleLast.putIfAbsent(scale, Double.MIN_VALUE);
                 }
             }
 
-            Double from = scaleLast.values().stream().min(Double::compareTo).orElse(0.0);
+            Double from = scaleLast.values().stream().min(Double::compareTo).orElse(Double.MIN_VALUE);
 
             List<CurveItem> items = repository.getItemsFromTo(id, from, Double.MAX_VALUE)
                     .stream()
-                    .flatMap((Function<String, Stream<CurveItem>>) str -> MapperUtils.parseListOf(str, CurveItem.class).stream())
+                    .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .collect(Collectors.toList());
 
-            scaleLast.forEach((scale, last) -> {
+            log.info("{} lost items for id {} loaded", items.size(), id);
 
+            scaleLast.forEach((scale, last) -> {
                 List<CurveItem> lost = items.stream()
-                        .filter(i -> i.getKey() >= last)
+                        .filter(i -> Double.compare(i.getKey(), last) >= 0)
                         .collect(Collectors.toList());
 
                 if (!lost.isEmpty()) {
-                    approximator.lastItems.put(scale, lost.get(0));
-                    approximator.collectItems(lost, scale, findItemsOnPixel(id, scale));
+                    segmenter.lastItems.put(scale, lost.get(0));
+                    segmenter.collectItems(lost, scale, findItemsOnPixel(id, scale));
                 }
             });
-
-            log.debug("{} lost items for id {} loaded", items.size(), id);
         }
     }
 
     private boolean isApproximatedCurve(Long id) {
 
-        MetaData metaData = metaDataProcessor.getMetaData(id);
+        MetaData metaData = metaDataCache.getMetaData(id);
 
         return metaData.getIndexType() != LogIndexType.MEASURED_DEPTH && metaData.getAxisDefinition() == null
                 && (metaData.getTypeLogData() == LogDataType.DOUBLE || metaData.getTypeLogData() == LogDataType.LONG);
@@ -91,7 +108,7 @@ public class Approximator {
 
     private int findItemsOnPixel(Long id, int scale) {
 
-        MetaData metaData = metaDataProcessor.getMetaData(id);
+        MetaData metaData = metaDataCache.getMetaData(id);
 
         int totalSeconds = (int) ((metaData.getLastDBKey() - metaData.getFirstDBKey()) / 1000);
         int totalItems = metaData.getItemsInDB();
@@ -104,44 +121,25 @@ public class Approximator {
         return itemsOnPixel >= 5;
     }
 
-    public void collectItemsBatch(Long id, List<CurveItem> items) {
-
-        if (isApproximatedCurve(id)) {
-
-            CurveApproximator curveApproximator = approximators.computeIfAbsent(id, k -> new CurveApproximator(id));
-
-            synchronized (curveApproximator) {
-                curveApproximator.collectItemsBatch(items);
-            }
-        }
-    }
-
     public List<CurveSegment> getAndCompleteSegmentsFromMemory(Long id, int scale, Double from, Double to, List<CurveItem> items) {
 
-        if (approximators.containsKey(id)) {
+        if (segmenters.containsKey(id)) {
 
-            return approximators.get(id)
+            return segmenters.get(id)
                     .getAndCompleteSegments(scale, from, to, items);
         }
 
         return Collections.emptyList();
     }
 
-    public void resetById(Long id) {
-        approximators.remove(id);
-        loadLostById(id);
-    }
+    private class SingleCurveSegmenter {
 
-    private class CurveApproximator {
+        private final Long id;
+        private final Map<Integer, List<CurveSegment>> collector = new HashMap<>(); // scale -> segments
+        private final Map<Integer, CurveItem> lastItems = new HashMap<>(); // scale -> lastItem
 
-        private final Long curveId;
-        private final Map<Integer, List<CurveSegment>> collector; // scale / segments
-        private final Map<Integer, CurveItem> lastItems;  // scale / lastItem
-
-        public CurveApproximator(Long curveId) {
-            this.curveId = curveId;
-            this.collector = new HashMap<>();
-            this.lastItems = new HashMap<>();
+        public SingleCurveSegmenter(Long id) {
+            this.id = id;
 
             for (int i : config.SCALE_MINUTES) {
                 collector.put(i, new ArrayList<>());
@@ -153,14 +151,14 @@ public class Approximator {
             for (Map.Entry<Integer, List<CurveSegment>> entry : collector.entrySet()) {
 
                 Integer scale = entry.getKey();
-                int itemsOnPixel = findItemsOnPixel(curveId, scale);
+                int itemsOnPixel = findItemsOnPixel(id, scale);
 
                 if (isApproximatedScale(itemsOnPixel)) {
 
                     collectItems(items, scale, itemsOnPixel);
 
                 } else {
-                    log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", curveId, items.size(), scale, itemsOnPixel);
+                    log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", id, items.size(), scale, itemsOnPixel);
                 }
             }
         }
@@ -202,14 +200,32 @@ public class Approximator {
 
                 segments.remove(segments.size() - 1);
 
-                repository.saveSegments(SegmentDto.fromLinesList(curveId, scale, segments));
-                log.debug("{} lines saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), curveId, scale, secondsOnPixel, itemsOnPixel);
+                save(segments, id, scale);
+
+                log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), id, scale, secondsOnPixel, itemsOnPixel);
+
                 segments.clear();
 
                 segments.add(lastSegment);
             }
 
-            metaDataProcessor.getMetaData(curveId).getScaleSet().add(scale);
+            metaDataCache.getMetaData(id).getScaleSet().add(scale);
+        }
+
+        private void save(List<CurveSegment> segments, Long id, int scale) {
+
+            List<SegmentDto> transfer = new ArrayList<>();
+
+            int first = 0;
+
+            while (segments.size() - first > config.BATCH_SIZE) {
+                transfer.add(SegmentDto.fromLinesList(id, scale, segments.subList(first, first + config.BATCH_SIZE)));
+                first = first + config.BATCH_SIZE;
+            }
+
+            transfer.add(SegmentDto.fromLinesList(id, scale, segments.subList(first, segments.size())));
+
+            repository.saveSegments(transfer);
         }
 
         private List<CurveSegment> getAndCompleteSegments(int scale, Double from, Double to, List<CurveItem> items) {
@@ -232,17 +248,17 @@ public class Approximator {
                         double finalFrom = from == null ? Double.MIN_VALUE : from;
                         double finalTo = to == null ? Double.MAX_VALUE : to;
 
-                        if (!segments.isEmpty() && segments.get(0).getFirstKey() <= finalTo) {
+                        if (!segments.isEmpty() && Double.compare(segments.get(0).getFirstKey(), finalTo) <= 0) {
 
                             segments.stream()
-                                    .filter(seg -> seg.getFirstKey() <= finalTo && seg.getLastKey() >= finalFrom)
+                                    .filter(seg -> Double.compare(seg.getFirstKey(), finalTo) <= 0 && Double.compare(seg.getLastKey(), finalFrom) >= 0)
                                     .forEach(result::add);
                         }
 
-                        if (!items.isEmpty() && items.get(0).getKey() <= finalTo) {
+                        if (!items.isEmpty() && Double.compare(items.get(0).getKey(), finalTo) <= 0) {
 
                             List<CurveItem> collect = items.stream()
-                                    .filter(item -> item.getKey() <= finalTo && item.getKey() >= finalFrom)
+                                    .filter(item -> Double.compare(item.getKey(), finalTo) <= 0 && Double.compare(item.getKey(), finalFrom) >= 0)
                                     .collect(Collectors.toList());
 
                             addItemsToSegmentList(result, collect, scale);

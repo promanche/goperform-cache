@@ -15,9 +15,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
-import ru.geosteering.goperform.cache.auth.model.*;
+import ru.geosteering.goperform.cache.model.auth.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.servlet.FilterChain;
 import javax.servlet.ServletException;
@@ -38,12 +38,23 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
     public AuthorizationDecision check(Supplier<Authentication> authentication, RequestAuthorizationContext object) {
 
         Authentication auth = authentication.get();
-        long id = Long.parseLong(object.getRequest().getServletPath().split("/")[2]);
+        long id = Long.parseLong(object.getVariables().get("id"));
 
-        return new AuthorizationDecision(checkObjectAccess(auth, id));
+        String method = object.getRequest().getMethod().toUpperCase();
+
+        switch (method) {
+            case "GET":
+                return new AuthorizationDecision(checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ));
+            case "POST":
+            case "PUT":
+            case "DELETE":
+                return new AuthorizationDecision(checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE));
+            default:
+                return new AuthorizationDecision(false);
+        }
     }
 
-    public boolean checkObjectAccess(Authentication auth, long id) {
+    private boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
 
         String userName = auth.getName();
 
@@ -57,11 +68,11 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
             return false;
         }
 
-        CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, CheckObjectAccessRequest.Permissions.READ);
+        CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
 
-        Message response = NatsConnector.sendRequest("gostream.auth", MapperUtils.toBytes(request));
+        Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
 
-        ApiResult apiResult = MapperUtils.parseObject(new String(response.getData()), ApiResult.class);
+        ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
         return apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK;
     }
@@ -82,9 +93,9 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
             TokenRequest request = new TokenRequest(jwt);
 
-            Message response = NatsConnector.sendRequest("gostream.auth", MapperUtils.toBytes(request));
+            Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
 
-            ApiResult apiResult = MapperUtils.parseObject(new String(response.getData()), ApiResult.class);
+            ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
             if (apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK) {
 

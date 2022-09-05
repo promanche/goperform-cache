@@ -3,13 +3,12 @@ package ru.geosteering.goperform.cache.repository;
 import org.apache.ibatis.annotations.*;
 import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
 
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 
 @Mapper
 public interface SegmentsMapper {
 
-    @Insert("insert into segments (curve_id, scale, first, last, data) values (#{curveId}, #{scale}, #{first}, #{last}, #{data}::jsonb)")
+    @Insert("insert into segments (curve_id, scale, first, last, data) values (#{id}, #{scale}, #{first}, #{last}, #{data}::jsonb)")
     void save(SegmentDto segmentDto);
 
     @Select("select data from segments where curve_id=${id} and scale=${scale} and ((${from} <= last) and (${to} >= first)) order by first")
@@ -29,4 +28,8 @@ public interface SegmentsMapper {
 
     @Select("select distinct scale from segments where curve_id=${id}")
     Set<Integer> getScales(@Param("id") Long id);
+
+    @Select("select scale, max(last) as last from segments where curve_id=${id} group by scale")
+    @MapKey("scale")
+    Map<Integer, SegmentDto> getScalesLast(@Param("id") Long id);
 }

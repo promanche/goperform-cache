@@ -1,12 +1,13 @@
 package ru.geosteering.goperform.cache.nats;
 
 import io.nats.client.*;
+import io.nats.client.impl.ErrorListenerLoggerImpl;
 import io.nats.client.impl.NatsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.service.*;
+import ru.geosteering.goperform.cache.processor.EventDispatcher;
 
 import javax.annotation.PreDestroy;
 import java.io.IOException;
@@ -17,9 +18,8 @@ import java.util.concurrent.ExecutionException;
 @RequiredArgsConstructor
 public class NatsConnector {
 
-    private final RealtimeHandler realtimeHandler;
-    private final HistoryHandler historyHandler;
-    private final DataLoader dataLoader;
+    private final RealtimeMessageHandler realtimeHandler;
+    private final HistoryMessageHandler historyHandler;
     private final Config config;
 
     private static Connection connection;
@@ -28,9 +28,27 @@ public class NatsConnector {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
-                .connectionListener((connection, events) -> log.info("Nats connection {} status: {}", config.HOST, connection.getStatus()))
+                .connectionListener
+                        ((conn, status) -> new Thread(() -> {
+                                    log.info("Nats connection status: {}", status.name());
+
+                                    if (status == ConnectionListener.Events.CLOSED
+                                            || status == ConnectionListener.Events.DISCONNECTED) {
+
+                                        realtimeHandler.waitTerminated();
+                                        historyHandler.waitTerminated();
+                                        EventDispatcher.getInstance().onDisconnect();
+                                        reconnect();
+                                    }
+
+                                    if (status == ConnectionListener.Events.CONNECTED) {
+
+                                        EventDispatcher.getInstance().onConnect();
+                                    }
+                                }).start()
+                        )
                 .noReconnect()
-                .errorListener(new CustomErrorListener(this))
+                .errorListener(new ErrorListenerLoggerImpl())
                 .authHandler(Nats.credentials(config.CREDENTIALS_FILE))
                 .server(config.HOST)
                 .build();
@@ -41,20 +59,22 @@ public class NatsConnector {
             log.error("Connection exception: {}", e.getMessage(), e);
         }
 
-        if (connection != null && connection.getStatus() == Connection.Status.CONNECTED) {
+        if (isConnected()) {
             Dispatcher dispatcher = connection.createDispatcher();
             dispatcher.subscribe(config.SUBJECT + ".*", realtimeHandler);
             dispatcher.subscribe(config.SUBJECT + "." + config.HISTORY_NUID + ".*", historyHandler);
-
-            dataLoader.start();
         }
+    }
+
+    private static boolean isConnected() {
+        return connection != null && connection.getStatus() == Connection.Status.CONNECTED;
     }
 
     public static Message sendRequest(String subject, byte[] data) {
 
         Message response = null;
 
-        if (connection != null && connection.getStatus() == Connection.Status.CONNECTED) {
+        if (isConnected()) {
 
             try {
 
@@ -77,47 +97,33 @@ public class NatsConnector {
         return response;
     }
 
-    private void onError() {
-        dataLoader.stop();
-        realtimeHandler.stop();
-        historyHandler.stop();
-    }
-
-    private void onReconnect() {
-        realtimeHandler.restart();
-        historyHandler.restart();
-        dataLoader.restart();
-    }
-
     @PreDestroy
     private void closeConnection() {
-        if (connection != null) {
-            try {
-                connection.close();
-            } catch (Exception e) {
-                log.error("Exception while closing: {}", e.getMessage(), e);
-            }
+        try {
+            connection.close();
+        } catch (Exception e) {
+            log.error("Exception while closing connection: {}", e.getMessage(), e);
         }
     }
 
     void reconnect() {
-        new Thread(() -> {
-            try {
-                onError();
-                closeConnection();
+        try {
 
-                int seconds = config.RECONNECT_TIMEOUT_SECONDS;
-                while (seconds > 0) {
-                    log.info("Reconnect waiting... " + seconds);
-                    Thread.sleep(1000);
-                    seconds--;
-                }
+            closeConnection();
 
-                connect();
-                onReconnect();
-            } catch (InterruptedException e) {
-                log.error(e.getMessage(), e);
+            int seconds = config.RECONNECT_TIMEOUT_SECONDS;
+            while (seconds > 0) {
+                log.info("Reconnect waiting... " + seconds);
+                Thread.sleep(1000);
+                seconds--;
             }
-        }).start();
+
+            realtimeHandler.initExecutor();
+            historyHandler.initExecutor();
+            connect();
+
+        } catch (InterruptedException e) {
+            log.error(e.getMessage(), e);
+        }
     }
 }

@@ -6,10 +6,9 @@ import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.goperform.cache.repository.dto.*;
-import ru.geosteering.goperform.cache.utils.MapperUtils;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
 
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Repository
@@ -76,7 +75,7 @@ public class MainRepository {
 
     public void saveOrUpdateMetaData(MetaData metaData) {
         if (metaDataMapper.exists(metaData.getId())) {
-            metaDataMapper.update(MapperUtils.toJson(metaData), metaData.getId());
+            metaDataMapper.update(StaticMapper.toJson(metaData), metaData.getId());
         } else {
             metaDataMapper.save(MetaDataDto.fromMetaData(metaData));
         }
@@ -84,12 +83,25 @@ public class MainRepository {
 
     public List<MetaData> getAllMetaData() {
         return metaDataMapper.getAll().stream()
-                .map(str -> MapperUtils.parseObject(str, MetaData.class))
+                .map(str -> StaticMapper.parseObject(str, MetaData.class))
                 .collect(Collectors.toList());
     }
 
-    public void saveSegments(SegmentDto segmentDto) {
-        segmentsMapper.save(segmentDto);
+    public void saveSegments(List<SegmentDto> list) {
+        SqlSession session = sessionFactory.openSession(ExecutorType.BATCH);
+
+        try {
+            for (SegmentDto dto : list) {
+                segmentsMapper.save(dto);
+            }
+
+            session.commit();
+        } catch (Exception e) {
+            session.rollback();
+            log.error("Database exception: {}", e.getMessage(), e);
+        } finally {
+            session.close();
+        }
     }
 
     public List<String> getSegmentsFromTo(Long id, int scale, Double from, Double to) {
@@ -103,8 +115,13 @@ public class MainRepository {
         return segmentsMapper.getAll(id, scale);
     }
 
-    public Double getLastSegment(Long id, int scale) {
-        return segmentsMapper.getLast(id, scale);
+    public Map<Integer, Double> getScalesLast(Long id) {
+        Map<Integer, Double> result = new HashMap<>();
+
+        segmentsMapper.getScalesLast(id)
+                .forEach((k, v) -> result.put(k, v.getLast()));
+
+        return result;
     }
 
     public void deleteSegments(Long id, Double from) {

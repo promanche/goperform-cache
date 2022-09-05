@@ -3,7 +3,7 @@ package ru.geosteering.goperform.cache.temp;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.*;
 import io.nats.client.impl.NatsMessage;
-import ru.geosteering.goperform.cache.auth.model.JwtRequest;
+import ru.geosteering.goperform.cache.model.auth.JwtRequest;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
