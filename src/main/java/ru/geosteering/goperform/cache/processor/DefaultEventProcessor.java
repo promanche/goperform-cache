@@ -53,7 +53,7 @@ public interface DefaultEventProcessor extends EventProcessor {
     }
 
     @Override
-    default void onLoadResult(Long id, LoadResult result) {
+    default void onLoadResult(Long id, LoadResult result, Double from, Double to) {
 
     }
 }

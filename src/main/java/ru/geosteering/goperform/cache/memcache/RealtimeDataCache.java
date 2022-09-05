@@ -39,21 +39,21 @@ public class RealtimeDataCache extends AbstractCurveItemCache {
         }
     }
 
-    public void merge(Long curveId, List<CurveItem> histItems) {
+    public void merge(Long id, Collection<CurveItem> histItems) {
 
-        PriorityQueue<CurveItem> items = cache.get(curveId);
+        PriorityQueue<CurveItem> queue = cache.get(id);
 
-        synchronized (items) {
+        synchronized (queue) {
 
-            int before = items.size();
-            log.info("Curve {}. Before merging caches: real_size={}, hist_size={}", curveId, before, histItems.size());
+            int before = queue.size();
+            log.info("Curve {}. Before merging caches: real_size={}, hist_size={}", id, before, histItems.size());
 
-            items.removeAll(histItems);
-            int after = items.size();
-            items.addAll(histItems);
-            log.info("Found {} duplicates. After merging caches: real_size={}", before - after, items.size());
+            queue.removeAll(histItems);
+            int after = queue.size();
+            queue.addAll(histItems);
+            log.info("Found {} duplicates. After merging caches: real_size={}", before - after, queue.size());
 
-            save(curveId, items);
+            save(id, queue);
         }
     }
 }

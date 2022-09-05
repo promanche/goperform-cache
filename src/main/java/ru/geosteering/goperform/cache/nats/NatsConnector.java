@@ -32,8 +32,7 @@ public class NatsConnector {
                         ((conn, status) -> new Thread(() -> {
                                     log.info("Nats connection status: {}", status.name());
 
-                                    if (status == ConnectionListener.Events.CLOSED
-                                            || status == ConnectionListener.Events.DISCONNECTED) {
+                                    if (status == ConnectionListener.Events.DISCONNECTED) {
 
                                         realtimeHandler.waitTerminated();
                                         historyHandler.waitTerminated();

@@ -21,12 +21,13 @@ public class MetaDataProcessor implements DefaultEventProcessor {
 
     @Override
     public void onRealtimeCurveItem(Long id, CurveItem item) {
-        updateByNewItem(id, item, true);
+        metaDataCache.addActiveCurve(id);
+        updateByNewItem(id, item);
     }
 
     @Override
     public void onHistoryCurveItem(Long id, CurveItem item) {
-        updateByNewItem(id, item, false);
+        updateByNewItem(id, item);
     }
 
     @Override
@@ -55,10 +56,18 @@ public class MetaDataProcessor implements DefaultEventProcessor {
 
     @Override
     public void onReloadData(Long id, Double from) {
+        metaDataCache.removeFromLoaded(id);
         metaDataCache.reloadById(id);
     }
 
-    private void updateByNewItem(Long id, CurveItem item, boolean isReal) {
+    @Override
+    public void onLoadResult(Long id, LoadResult result, Double from, Double to) {
+        if (result == LoadResult.DONE) {
+            metaDataCache.addHistoryLoaded(id);
+        }
+    }
+
+    private void updateByNewItem(Long id, CurveItem item) {
 
         MetaData metaData = metaDataCache.getMetaData(id);
 
@@ -91,10 +100,6 @@ public class MetaDataProcessor implements DefaultEventProcessor {
                     metaData.setMaxValue(value);
                 }
             }
-        }
-
-        if (isReal) {
-            metaDataCache.addActiveCurve(id);
         }
     }
 }

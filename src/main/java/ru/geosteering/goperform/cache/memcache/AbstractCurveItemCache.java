@@ -18,32 +18,24 @@ public abstract class AbstractCurveItemCache {
 
     public void add(Long id, CurveItem item) {
 
-        cache.compute(id, (aLong, queue) -> {
+        PriorityQueue<CurveItem> queue =
+                cache.computeIfAbsent(id, k -> new PriorityQueue<>(config.HISTORY_REQUEST_LIMIT, Comparator.comparing(CurveItem::getKey)));
 
-            if (queue == null) {
-                queue = new PriorityQueue<>(config.HISTORY_REQUEST_LIMIT, Comparator.comparing(CurveItem::getKey));
-            }
-
+        synchronized (queue) {
             queue.add(item);
             save(id, queue);
-
-            return queue;
-        });
+        }
     }
 
     public void addAll(Long id, Collection<CurveItem> items) {
 
-        cache.compute(id, (aLong, queue) -> {
+        PriorityQueue<CurveItem> queue =
+                cache.computeIfAbsent(id, k -> new PriorityQueue<>(config.HISTORY_REQUEST_LIMIT, Comparator.comparing(CurveItem::getKey)));
 
-            if (queue == null) {
-                queue = new PriorityQueue<>(config.HISTORY_REQUEST_LIMIT, Comparator.comparing(CurveItem::getKey));
-            }
-
+        synchronized (queue) {
             queue.addAll(items);
             save(id, queue);
-
-            return queue;
-        });
+        }
     }
 
     abstract void save(Long id, PriorityQueue<CurveItem> items);

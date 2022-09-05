@@ -62,7 +62,6 @@ public class EventDispatcher implements EventProcessor {
 
         processorMap.get(MetaDataProcessor.class).onItemsBatch(id, items);
         processorMap.get(CurveSegmentProcessor.class).onItemsBatch(id, items);
-        processorMap.get(WebSocketMessageProcessor.class).onItemsBatch(id, items);
 
     }
 
@@ -100,10 +99,11 @@ public class EventDispatcher implements EventProcessor {
     }
 
     @Override
-    public void onLoadResult(Long id, LoadResult result) {
+    public void onLoadResult(Long id, LoadResult result, Double from, Double to) {
 
-        processorMap.get(CurveDataLoadProcessor.class).onLoadResult(id, result);
-        processorMap.get(WebSocketMessageProcessor.class).onLoadResult(id, result);
+        processorMap.get(CurveDataLoadProcessor.class).onLoadResult(id, result, from, to);
+        processorMap.get(MetaDataProcessor.class).onLoadResult(id, result, from, to);
+        processorMap.get(WebSocketMessageProcessor.class).onLoadResult(id, result, from, to);
 
     }
 }

@@ -25,5 +25,5 @@ public interface EventProcessor {
 
     void onDisconnect();
 
-    void onLoadResult(Long id, LoadResult result);
+    void onLoadResult(Long id, LoadResult result, Double from, Double to);
 }

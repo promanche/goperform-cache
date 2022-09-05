@@ -82,43 +82,30 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
     }
 
     @Override
-    public void onLoadResult(Long id, LoadResult result) {
+    public void onLoadResult(Long id, LoadResult result, Double from, Double to) {
 
-        if (result == LoadResult.DONE) {
+        synchronized (loadMap) {
 
-            metaDataCache.addHistoryLoaded(id);
+            if (waitingBlock.contains(id)) {
 
-            if (metaDataCache.isActive(id)) {
+                waitingBlock.remove(id);
+                log.info("{} blocked", id);
+                loadMap.put(id, LoadStatus.BLOCKED);
 
-                List<CurveItem> items = historyDataCache.drain(id);
-                realtimeDataCache.merge(id, items);
+            } else if (result == LoadResult.DONE) {
+
+                if (metaDataCache.isActive(id)) {
+                    PriorityQueue<CurveItem> items = historyDataCache.drain(id);
+                    realtimeDataCache.merge(id, items);
+                }
+
+                loadMap.remove(id);
+
+            } else {
+
+                loadMap.put(id, LoadStatus.IN_QUEUE);
             }
 
-            loadMap.computeIfPresent(id, (aLong, loadStatus) -> {
-
-                if (waitingBlock.contains(id)) {
-
-                    waitingBlock.remove(id);
-                    log.info("{} blocked", id);
-                    return LoadStatus.BLOCKED;
-                }
-
-                return null;
-            });
-
-        } else {
-
-            loadMap.computeIfPresent(id, (aLong, loadStatus) -> {
-
-                if (waitingBlock.contains(id)) {
-
-                    waitingBlock.remove(id);
-                    log.info("{} blocked", id);
-                    return LoadStatus.BLOCKED;
-                }
-
-                return LoadStatus.IN_QUEUE;
-            });
         }
 
         requestAllowed.incrementAndGet();
@@ -210,25 +197,26 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
 
     private void block(Long id) {
 
-        loadMap.compute(id, (aLong, loadStatus) -> {
+        synchronized (loadMap) {
 
-            if (loadStatus == LoadStatus.IN_PROGRESS) {
+            if (loadMap.get(id) == LoadStatus.IN_PROGRESS) {
 
                 waitingBlock.add(id);
-                return loadStatus;
 
             } else {
 
                 log.info("{} blocked", id);
-                return LoadStatus.BLOCKED;
+                loadMap.put(id, LoadStatus.BLOCKED);
             }
-        });
+        }
     }
 
 
     private void addReloadData(Long id, LocalDateTime reloadTime, Double from) {
 
-        reloadMap.compute(id, (aLong, reloadData) -> {
+        synchronized (reloadMap) {
+
+            ReloadData reloadData = reloadMap.get(id);
 
             if (reloadData != null) {
 
@@ -237,18 +225,17 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
                 if (Double.compare(reloadData.getFrom(), from) > 0) {
                     reloadData.setFrom(from);
                 }
-
-                return reloadData;
-
+                
             } else {
 
                 ReloadData newData = new ReloadData();
                 newData.setReloadTime(reloadTime);
                 newData.setFrom(from);
 
-                return newData;
+                reloadMap.put(id, newData);
             }
-        });
+
+        }
     }
 
     @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.SECONDS)

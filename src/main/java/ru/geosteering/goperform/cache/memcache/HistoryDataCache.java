@@ -38,21 +38,7 @@ public class HistoryDataCache extends AbstractCurveItemCache {
         repository.saveItems(transfer);
     }
 
-    public List<CurveItem> drain(Long id) {
-
-        PriorityQueue<CurveItem> items = cache.remove(id);
-
-        if (items != null) {
-
-            List<CurveItem> result = new ArrayList<>(items.size());
-
-            while (!items.isEmpty()) {
-                result.add(items.poll());
-            }
-
-            return result;
-        }
-
-        return Collections.emptyList();
+    public PriorityQueue<CurveItem> drain(Long id) {
+        return cache.remove(id);
     }
 }

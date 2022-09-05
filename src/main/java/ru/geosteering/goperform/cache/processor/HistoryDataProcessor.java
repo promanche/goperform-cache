@@ -88,16 +88,17 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
 
         if (sent == 0) {
             log.info("Curve {} data loaded, {}", id, dataEndMessage);
-            EventDispatcher.getInstance().onLoadResult(id, LoadResult.DONE);
+            EventDispatcher.getInstance().onLoadResult(id, LoadResult.DONE, null, null);
 
         } else if (sent != received) {
             log.error("Received count {} not equals to sent {}", received, sent);
-            EventDispatcher.getInstance().onLoadResult(id, LoadResult.ERROR);
+            EventDispatcher.getInstance().onLoadResult(id, LoadResult.ERROR, null, null);
 
         } else {
             log.info("Curve {} history part received, {}", id, dataEndMessage);
+            double[] keys = findMinMaxKeys(buffer.get(id));
             drainToCache(id);
-            EventDispatcher.getInstance().onLoadResult(id, LoadResult.PART);
+            EventDispatcher.getInstance().onLoadResult(id, LoadResult.PART, keys[0], keys[1]);
         }
 
         buffer.remove(id);
@@ -117,5 +118,26 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
     private void drainToCache(Long id) {
         log.info("Drain buffer to cache. Curve: {}, items: {}", id, buffer.get(id).size());
         historyCache.addAll(id, buffer.get(id));
+    }
+
+    private double[] findMinMaxKeys(Set<CurveItem> items) {
+
+        double min = Double.MAX_VALUE;
+        double max = Double.MIN_VALUE;
+
+        for (CurveItem item : items) {
+
+            Double key = item.getKey();
+
+            if (Double.compare(key, min) < 0) {
+                min = key;
+            }
+
+            if (Double.compare(key, max) > 0) {
+                max = key;
+            }
+        }
+
+        return new double[]{min, max};
     }
 }
