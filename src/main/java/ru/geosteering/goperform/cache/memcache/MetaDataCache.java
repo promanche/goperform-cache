@@ -3,7 +3,6 @@ package ru.geosteering.goperform.cache.memcache;
 import io.nats.client.Message;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
@@ -19,7 +18,6 @@ import javax.annotation.PostConstruct;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
@@ -42,11 +40,17 @@ public class MetaDataCache {
     }
 
     public MetaData getMetaData(Long id) {
-        return metaDataMap.computeIfAbsent(id, aLong -> {
-            MetaData metaData = requestInfo(id, false);
+
+        MetaData metaData =
+                metaDataMap.computeIfAbsent(id, k -> requestInfo(id, false));
+
+        if (metaData != null) {
             repository.saveOrUpdateMetaData(metaData);
-            return metaData;
-        });
+        } else {
+            log.error("MetaData is null");
+        }
+
+        return metaData;
     }
 
     public void addActiveCurve(Long id) {
@@ -126,9 +130,11 @@ public class MetaDataCache {
         });
     }
 
-    @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
-    private void heartbeat() {
+    public int getActiveCount() {
+        return activeCurves.size();
+    }
 
-        log.info("Curves info: active {}, history loaded {}", activeCurves.size(), historyLoaded.size());
+    public int getLoadedCount() {
+        return historyLoaded.size();
     }
 }

@@ -13,6 +13,7 @@ import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
@@ -26,6 +27,7 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
 
     private final Map<Long, AtomicInteger> receivedCount = new ConcurrentHashMap<>();
     private final Map<Long, Set<CurveItem>> buffer = new ConcurrentHashMap<>();
+    private final Map<Long, Long> timer = new ConcurrentHashMap<>(); // id -> 1st point nanos
 
     @Override
     public void onHistoryApiMessage(ApiMessage apiMessage, String subject) {
@@ -55,6 +57,7 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
         receivedCount.clear();
         buffer.clear();
         historyCache.removeAll();
+        timer.clear();
     }
 
     private void processCurveData(CurveDataMessage curveDataMessage) {
@@ -67,8 +70,10 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
         buffer.computeIfAbsent(id, key -> ConcurrentHashMap.newKeySet(config.HISTORY_REQUEST_LIMIT))
                 .add(item);
 
-        receivedCount.computeIfAbsent(id, key -> new AtomicInteger(0))
-                .incrementAndGet();
+        if (receivedCount.computeIfAbsent(id, key -> new AtomicInteger(0))
+                .incrementAndGet() == 1) {
+            timer.put(id, System.nanoTime());
+        }
 
         EventDispatcher.getInstance().onHistoryCurveItem(id, item);
     }
@@ -95,12 +100,16 @@ public class HistoryDataProcessor implements DefaultEventProcessor {
             EventDispatcher.getInstance().onLoadResult(id, LoadResult.ERROR, null, null);
 
         } else {
-            log.info("Curve {} history part received, {}", id, dataEndMessage);
+            long timeMillis = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - timer.get(id));
+            long pointsPerSecond = received * 1000L / timeMillis;
+
+            log.info("Curve {} received {} items with avg speed {} points/sec", id, received, pointsPerSecond);
             double[] keys = findMinMaxKeys(buffer.get(id));
             drainToCache(id);
             EventDispatcher.getInstance().onLoadResult(id, LoadResult.PART, keys[0], keys[1]);
         }
 
+        timer.remove(id);
         buffer.remove(id);
     }
 

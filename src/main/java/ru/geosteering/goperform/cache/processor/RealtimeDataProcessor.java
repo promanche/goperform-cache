@@ -8,6 +8,7 @@ import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.goperform.cache.memcache.MetaDataCache;
 import ru.geosteering.goperform.cache.memcache.RealtimeDataCache;
 import ru.geosteering.goperform.cache.model.CurveItem;
+import ru.geosteering.goperform.cache.model.MetaData;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 @Component
@@ -27,18 +28,24 @@ public class RealtimeDataProcessor implements DefaultEventProcessor {
 
             Long id = curveDataMessage.getId();
 
-            CurveItem item = CurveItem.fromAbstractDataItem(curveDataMessage.getData(),
-                    metaDataCache.getMetaData(id).getIndexType() != LogIndexType.MEASURED_DEPTH);
+            MetaData metaData = metaDataCache.getMetaData(id);
 
-            if (notOld(id, item.getKey())) {
+            if (metaData != null) {
 
-                realTimeCache.add(id, item);
-                EventDispatcher.getInstance().onRealtimeCurveItem(id, item);
+                CurveItem item = CurveItem.fromAbstractDataItem(curveDataMessage.getData(),
+                        metaData.getIndexType() != LogIndexType.MEASURED_DEPTH);
 
-            } else {
+                if (notOld(id, item.getKey())) {
 
-                EventDispatcher.getInstance().onOldItem(id, item);
+                    realTimeCache.add(id, item);
+                    EventDispatcher.getInstance().onRealtimeCurveItem(id, item);
+
+                } else {
+
+                    EventDispatcher.getInstance().onOldItem(id, item);
+                }
             }
+
         } else {
 
             log.info("Some apiMessage: {}", apiMessage);

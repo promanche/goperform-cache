@@ -38,6 +38,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
     private final Map<Long, ReloadData> reloadMap = new ConcurrentHashMap<>();
     private final Set<Long> waitingBlock = ConcurrentHashMap.newKeySet();
     private final AtomicInteger requestAllowed = new AtomicInteger();
+    private final Map<Long, Long> timer = new ConcurrentHashMap<>(); // id -> request start nanos
 
     private ScheduledExecutorService scheduler;
 
@@ -60,6 +61,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
 
     @Override
     public void onDisconnect() {
+        timer.clear();
         scheduler.shutdownNow();
     }
 
@@ -83,6 +85,8 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
 
     @Override
     public void onLoadResult(Long id, LoadResult result, Double from, Double to) {
+
+        log.info("Load request processing time {} sec", (System.nanoTime() - timer.remove(id)) / 1_000_000_000.0);
 
         synchronized (loadMap) {
 
@@ -149,6 +153,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
 
         CurveDataRequest request = new CurveDataRequest(id, from, to, null, false, false, config.HISTORY_REQUEST_LIMIT, config.HISTORY_NUID + "." + id);
 
+        timer.put(id, System.nanoTime());
         Message message = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
 
         if (message == null) {
@@ -225,7 +230,7 @@ public class CurveDataLoadProcessor implements DefaultEventProcessor {
                 if (Double.compare(reloadData.getFrom(), from) > 0) {
                     reloadData.setFrom(from);
                 }
-                
+
             } else {
 
                 ReloadData newData = new ReloadData();

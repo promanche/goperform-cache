@@ -2,6 +2,7 @@ package ru.geosteering.goperform.cache.processor;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.memcache.MetaDataCache;
 import ru.geosteering.goperform.cache.model.CurveItem;
@@ -10,6 +11,8 @@ import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Component
 @Slf4j
@@ -18,15 +21,19 @@ public class MetaDataProcessor implements DefaultEventProcessor {
 
     private final MetaDataCache metaDataCache;
     private final MainRepository repository;
+    private final AtomicInteger counter = new AtomicInteger();
+    private long timer = System.nanoTime();
 
     @Override
     public void onRealtimeCurveItem(Long id, CurveItem item) {
+        counter.incrementAndGet();
         metaDataCache.addActiveCurve(id);
         updateByNewItem(id, item);
     }
 
     @Override
     public void onHistoryCurveItem(Long id, CurveItem item) {
+        counter.incrementAndGet();
         updateByNewItem(id, item);
     }
 
@@ -101,5 +108,17 @@ public class MetaDataProcessor implements DefaultEventProcessor {
                 }
             }
         }
+    }
+
+
+    @Scheduled(fixedDelay = 60, timeUnit = TimeUnit.SECONDS)
+    private void heartbeat() {
+
+        long seconds = (System.nanoTime() - timer) / 1_000_000_000;
+        timer = System.nanoTime();
+        int received = counter.getAndSet(0);
+
+        log.info("Curves info: active {}, history loaded {}, received {} points in {} sec",
+                metaDataCache.getActiveCount(), metaDataCache.getLoadedCount(), received, seconds);
     }
 }
