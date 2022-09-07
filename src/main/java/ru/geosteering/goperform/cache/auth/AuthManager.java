@@ -58,6 +58,10 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
     }
 
+    public boolean checkObjectWriteAccess(Authentication auth, long id) {
+        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
+    }
+
     private boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
 
         String userName = auth.getName();

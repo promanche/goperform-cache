@@ -97,14 +97,14 @@ public class CurveService {
         dataLoadProcessor.reloadByRequest(id, from);
     }
 
-    public Long createCurve(Long parentId, CreateCurveRequest req, String user) {
+    public Long createCurve(CreateCurveRequest req, String user) {
 
         CurveInfo info = new CurveInfo();
         info.setMnemonic(req.getCurveName());
         info.setClassWitsml(req.getTypeCurve().name());
 
         CurveAddRequest request = new CurveAddRequest();
-        request.setParentId(parentId);
+        request.setParentId(req.getLogId());
         request.setCurveInfo(info);
         request.setUser(user);
 

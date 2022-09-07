@@ -6,7 +6,9 @@ import org.apache.ibatis.annotations.Delete;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.memcache.MetaDataCache;
@@ -37,6 +39,10 @@ public class CurveController {
         log.info("By-time request id {}, from {}, to {}, scale {}", id, from, to, scale);
 
         if (isDateTimeCurve(id)) {
+
+            if (metaDataCache.isBroken(id)) {
+                return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+            }
 
             if (scale != null && !config.SCALE_MINUTES.contains(scale)) {
 
@@ -123,6 +129,10 @@ public class CurveController {
 
         if (isDateTimeCurve(id)) {
 
+            if (metaDataCache.isBroken(id)) {
+                return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+            }
+
             Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
 
             service.reloadCurve(id, doubleFrom);
@@ -142,6 +152,10 @@ public class CurveController {
 
         if (isDepthCurve(id)) {
 
+            if (metaDataCache.isBroken(id)) {
+                return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+            }
+
             Double doubleFrom = from == null ? Double.MIN_VALUE : from;
 
             service.reloadCurve(id, doubleFrom);
@@ -153,12 +167,12 @@ public class CurveController {
         return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
     }
 
-    @PostMapping("/curve/{id}/new")
-    public ResponseEntity<Long> create(@PathVariable("id") Long parentId,
-                                       @RequestBody CreateCurveRequest request,
+    @PostMapping("/curve")
+    @PreAuthorize("@authManager.checkObjectWriteAccess(#authentication, #request.logId)")
+    public ResponseEntity<Long> create(@RequestBody @Validated CreateCurveRequest request,
                                        Authentication authentication) {
 
-        Long id = service.createCurve(parentId, request, authentication.getName());
+        Long id = service.createCurve(request, authentication.getName());
 
         if (id != null) {
             return new ResponseEntity<>(id, HttpStatus.OK);
@@ -168,9 +182,14 @@ public class CurveController {
     }
 
     @PostMapping("/curve/{id}/comments")
-    public ResponseEntity<Void> addComment(@PathVariable Long id, @RequestBody Comment comment, Authentication authentication) {
+    public ResponseEntity<Void> addComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
         if (isCommentsCurve(id)) {
+
+            if (metaDataCache.isBroken(id)) {
+                return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+            }
+
             if (service.writeComment(id, comment, authentication.getName(), false)) {
                 return new ResponseEntity<>(HttpStatus.OK);
             }
@@ -180,9 +199,14 @@ public class CurveController {
     }
 
     @PutMapping("/curve/{id}/comments")
-    public ResponseEntity<Void> updateComment(@PathVariable Long id, @RequestBody Comment comment, Authentication authentication) {
+    public ResponseEntity<Void> updateComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
         if (isCommentsCurve(id)) {
+
+            if (metaDataCache.isBroken(id)) {
+                return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+            }
+
             if (service.writeComment(id, comment, authentication.getName(), true)) {
                 return new ResponseEntity<>(HttpStatus.OK);
             }
@@ -196,6 +220,10 @@ public class CurveController {
 
         if (isCommentsCurve(id)) {
 
+            if (metaDataCache.isBroken(id)) {
+                return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+            }
+
             if (service.removeComment(id, key, authentication.getName())) {
                 return new ResponseEntity<>(HttpStatus.OK);
             }
@@ -205,6 +233,11 @@ public class CurveController {
     }
 
     private ResponseEntity<Object> getWithoutParams(Long id) {
+
+        if (metaDataCache.isBroken(id)) {
+            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
         Object response = service.getCurveData(id, null, null, null);
 
         if (response == null) {

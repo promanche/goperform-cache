@@ -5,13 +5,24 @@ import lombok.Getter;
 import lombok.Setter;
 import ru.geosteering.commonModels.wits.RecordIndex;
 
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+
 @Getter
 @Setter
 public class Comment {
+
+    @NotNull
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private Double key;
+
+    @NotNull
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     private RecordIndex recordIndex;
+
+    @NotBlank
     private String title;
+
+    @NotBlank
     private String text;
 }

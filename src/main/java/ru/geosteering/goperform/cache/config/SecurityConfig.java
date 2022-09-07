@@ -3,6 +3,8 @@ package ru.geosteering.goperform.cache.config;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
+import org.springframework.security.config.annotation.method.configuration.EnableGlobalMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
@@ -13,6 +15,7 @@ import ru.geosteering.goperform.cache.auth.AuthManager;
 
 @Configuration
 @EnableWebSecurity
+@EnableGlobalMethodSecurity(prePostEnabled = true)
 @RequiredArgsConstructor
 public class SecurityConfig {
 
@@ -25,6 +28,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         (auth) -> auth
                                 .antMatchers("/ws").permitAll()
+                                .antMatchers(HttpMethod.POST, "/curve").hasRole("USER")
                                 .antMatchers("/curve/{id}/**").access(authManager)
                                 .anyRequest().denyAll()
                 )
