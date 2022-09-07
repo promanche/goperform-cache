@@ -30,7 +30,7 @@ public class RealtimeDataProcessor implements DefaultEventProcessor {
 
             MetaData metaData = metaDataCache.getMetaData(id);
 
-            if (metaData != null) {
+            if (notBroken(id)) {
 
                 CurveItem item = CurveItem.fromAbstractDataItem(curveDataMessage.getData(),
                         metaData.getIndexType() != LogIndexType.MEASURED_DEPTH);
@@ -65,5 +65,9 @@ public class RealtimeDataProcessor implements DefaultEventProcessor {
     private boolean notOld(Long id, Double key) {
         Double lastKey = metaDataCache.getMetaData(id).getLastDBKey();
         return lastKey == null || Double.compare(key, lastKey) > 0;
+    }
+
+    private boolean notBroken(Long id) {
+        return !metaDataCache.isBroken(id);
     }
 }

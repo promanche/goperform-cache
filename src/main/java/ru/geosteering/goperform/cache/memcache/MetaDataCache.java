@@ -3,6 +3,7 @@ package ru.geosteering.goperform.cache.memcache;
 import io.nats.client.Message;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
@@ -15,9 +16,11 @@ import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import javax.annotation.PostConstruct;
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 
 @Component
 @Slf4j
@@ -30,6 +33,7 @@ public class MetaDataCache {
     private final Map<Long, MetaData> metaDataMap = new ConcurrentHashMap<>();
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private final Set<Long> historyLoaded = ConcurrentHashMap.newKeySet();
+    private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
 
     @PostConstruct
     private void loadFromDB() {
@@ -41,16 +45,7 @@ public class MetaDataCache {
 
     public MetaData getMetaData(Long id) {
 
-        MetaData metaData =
-                metaDataMap.computeIfAbsent(id, k -> requestInfo(id, false));
-
-        if (metaData != null) {
-            repository.saveOrUpdateMetaData(metaData);
-        } else {
-            log.error("MetaData is null");
-        }
-
-        return metaData;
+        return metaDataMap.computeIfAbsent(id, k -> requestInfo(id, false));
     }
 
     public void addActiveCurve(Long id) {
@@ -90,6 +85,14 @@ public class MetaDataCache {
             if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.CURVE_INFO) {
                 metaData = new MetaData(((CurveInfoMessage) apiMessage).getCurveInfo());
             }
+        }
+
+        if (metaData == null) {
+            log.error("CurveInfo for {} is missing", id);
+            brokenCurves.putIfAbsent(id, LocalDateTime.now());
+
+        } else {
+            repository.saveOrUpdateMetaData(metaData);
         }
 
         return metaData;
@@ -136,5 +139,16 @@ public class MetaDataCache {
 
     public int getLoadedCount() {
         return historyLoaded.size();
+    }
+
+    public boolean isBroken(Long id) {
+        return brokenCurves.containsKey(id);
+    }
+
+    @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.MINUTES)
+    private void checkBroken() {
+        synchronized (brokenCurves) {
+            brokenCurves.entrySet().removeIf(entry -> entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now()));
+        }
     }
 }
