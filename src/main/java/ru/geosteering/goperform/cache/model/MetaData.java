@@ -27,6 +27,7 @@ public class MetaData extends CurveInfo {
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double lastDBKey;
     private Set<Integer> scaleSet = ConcurrentHashMap.newKeySet();
+    private Object lastValue;
 
     public MetaData(CurveInfo info) {
         super(

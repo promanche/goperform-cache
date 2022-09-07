@@ -88,6 +88,7 @@ public class MetaDataProcessor implements DefaultEventProcessor {
 
             if (metaData.getMaxKey() == null || Double.compare(metaData.getMaxKey(), key) < 0) {
                 metaData.setMaxKey(key);
+                metaData.setLastValue(item.getValue());
             }
 
             if (metaData.getAxisDefinition() != null) {

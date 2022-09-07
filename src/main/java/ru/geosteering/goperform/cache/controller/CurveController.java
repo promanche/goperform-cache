@@ -13,8 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.memcache.MetaDataCache;
 import ru.geosteering.goperform.cache.model.MetaData;
-import ru.geosteering.goperform.cache.model.rest.Comment;
-import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
+import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.service.CurveService;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
@@ -108,14 +107,14 @@ public class CurveController {
     }
 
     @GetMapping("/curve/{id}")
-    public ResponseEntity<MetaData> getCurveInfo(@PathVariable Long id) {
+    public ResponseEntity<CurveInfoResponse> getCurveInfo(@PathVariable Long id) {
 
         log.info("Curve-info request id {}", id);
 
         MetaData metaData = metaDataCache.getMetaData(id);
 
         if (metaData != null) {
-            return new ResponseEntity<>(metaData, HttpStatus.OK);
+            return new ResponseEntity<>(CurveInfoResponse.fromMetaData(metaData), HttpStatus.OK);
         }
 
         return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
