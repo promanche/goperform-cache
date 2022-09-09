@@ -30,7 +30,7 @@ public class CurveInfoResponse {
     private Double maxKey;
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double minKey;
-    private int itemsInDB;
+    private int saved;
     private Set<Integer> scaleSet = ConcurrentHashMap.newKeySet();
     private Object lastValue;
 
@@ -49,7 +49,7 @@ public class CurveInfoResponse {
         response.setMinValue(data.getMinValue());
         response.setMaxKey(data.getMaxKey());
         response.setMinKey(data.getMinKey());
-        response.setItemsInDB(data.getItemsInDB());
+        response.setSaved(data.getItemsInDB());
         response.setScaleSet(data.getScaleSet());
         response.setLastValue(data.getLastValue());
 

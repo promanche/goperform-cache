@@ -8,7 +8,7 @@ import lombok.*;
 @AllArgsConstructor
 public abstract class WsMessage {
 
-    private final MessageType type;
+    private final MessageType msgType;
     private final Long id;
 
     public enum MessageType {
