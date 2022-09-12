@@ -46,13 +46,15 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final AtomicInteger requestAllowed = new AtomicInteger();
 
     private final ScheduledExecutorService statExecutor = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledExecutorService reloadExecutor = Executors.newSingleThreadScheduledExecutor();
     private final AtomicInteger histCount = new AtomicInteger();
     private final AtomicInteger realCount = new AtomicInteger();
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private long timer = System.currentTimeMillis();
 
     @PostConstruct
-    private void runStatExecutor() {
+    private void runExecutors() {
+
         statExecutor.scheduleAtFixedRate(() -> {
             try {
                 Map<String, Integer> curvesInfo = processors.values().stream()
@@ -74,6 +76,14 @@ public class CurveDispatcher implements ConnectionEventListener {
                 log.error(e.getMessage(), e);
             }
         }, config.STATISTIC_PERIOD_SECONDS, config.STATISTIC_PERIOD_SECONDS, TimeUnit.SECONDS);
+
+        reloadExecutor.scheduleWithFixedDelay(() -> {
+            try {
+                processors.values().forEach(SingleCurveProcessor::reload);
+            } catch (Exception e) {
+                log.error(e.getMessage(), e);
+            }
+        }, 0, 5, TimeUnit.SECONDS);
     }
 
 

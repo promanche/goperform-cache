@@ -3,7 +3,6 @@ package ru.geosteering.goperform.cache.processor;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Scheduled;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.commonModels.dataService.responses.DataEndMessage;
@@ -213,13 +212,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    @Scheduled(fixedDelay = 1000)
-    private void reload() {
+    public void reload() {
         synchronized (reloadData) {
-            if (reloadData.reloadTime != null && reloadData.reloadTime.isAfter(LocalDateTime.now()) && loadBuffer.isEmpty()) {
+            if (reloadData.reloadTime != null && reloadData.reloadTime.isBefore(LocalDateTime.now()) && loadBuffer.isEmpty()) {
+
+                log.info("Curve {} will be reload from {}", info.getId(), reloadData.from);
 
                 clearData(reloadData.from);
-                reloadSavedInfo();
                 loadLost();
 
                 reloadData.reloadTime = null;
@@ -232,16 +231,18 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private void clearData(Double from) {
 
-        if (Double.compare(lastSaved.getKey(), reloadData.from) >= 0) {
-            dispatcher.getRepository().deleteItems(info.getId(), from);
-            dispatcher.getRepository().deleteSegments(info.getId(), from);
-        }
-
         loadBuffer.clear();
         historyItemCache.clear();
         realItemCache.clear();
         segmentCache.clear();
         lastSegmentItem.clear();
+
+        if (Double.compare(lastSaved.getKey(), reloadData.from) >= 0) {
+            dispatcher.getRepository().deleteItems(info.getId(), from);
+            reloadSavedInfo();
+            Double segFrom = lastSaved == null ? null : lastSaved.getKey() + 0.0000001;
+            dispatcher.getRepository().deleteSegments(info.getId(), segFrom);
+        }
     }
 
     private void reloadSavedInfo() {
