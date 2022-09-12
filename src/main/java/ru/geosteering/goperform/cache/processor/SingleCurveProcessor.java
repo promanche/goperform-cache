@@ -150,10 +150,21 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         dispatcher.incrementHistCount(received);
 
         if (sent == 0) {
+
+            while (!loadBuffer.isEmpty()) {
+                try {
+                    log.warn("waiting..........");
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    log.error(e.getMessage(), e);
+                }
+            }
+
             if (isActive) {
                 realItemCache.addAll(historyItemCache);
                 historyItemCache.clear();
             }
+
             loadStatus.getAndUpdate(loadStatus -> loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED);
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
