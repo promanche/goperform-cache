@@ -116,16 +116,8 @@ public class CurveDispatcher implements ConnectionEventListener {
         if (processors.containsKey(id)) {
             processors.get(id).onCurveDataMessage(message, isReal);
 
-        } else if (isReal) {
-            Optional<ExtraCurveInfo> optional = repository.getInfo(id);
-
-            if (optional.isPresent()) {
-                processors.computeIfAbsent(id, k -> new SingleCurveProcessor(optional.get(), this))
-                        .onCurveDataMessage(message, true);
-
-            } else {
-                requestQueue.add(new RequestTask(createInfoRequest(id), RequestType.INFO_ACTIVE));
-            }
+        } else {
+            createCurveProcessor(id, false);
         }
     }
 
@@ -163,7 +155,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             }
         }
 
-        requestQueue.add(new RequestTask(createInfoRequest(id), RequestType.INFO_REST));
+        createCurveProcessor(id, true);
         return null;
     }
 
@@ -184,20 +176,25 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public ExtraCurveInfo getCurveInfo(Long id) {
+
+        ExtraCurveInfo info = null;
+
         if (processors.containsKey(id)) {
-            return processors.get(id).getInfo();
+            info = processors.get(id).getInfo();
+
         }
 
-        requestQueue.add(new RequestTask(createInfoRequest(id), RequestType.INFO_REST));
-        return null;
+        return info;
     }
 
     public CurveInfoResponse getCurveInfoResponse(Long id) {
+        CurveInfoResponse response = null;
+
         if (processors.containsKey(id)) {
             SingleCurveProcessor curveProcessor = processors.get(id);
             ExtraCurveInfo info = curveProcessor.getInfo();
 
-            return new CurveInfoResponse(
+            response = new CurveInfoResponse(
                     info.getId(),
                     info.getMnemonic(),
                     info.getIndexType(),
@@ -211,12 +208,13 @@ public class CurveDispatcher implements ConnectionEventListener {
                     curveProcessor.getMinKey(),
                     curveProcessor.getSavedCount(),
                     curveProcessor.getScaleSet(),
-                    curveProcessor.getLastValue()
-            );
+                    curveProcessor.getLastValue());
+
+        } else {
+            createCurveProcessor(id, true);
         }
 
-        requestQueue.add(new RequestTask(createInfoRequest(id), RequestType.INFO_REST));
-        return null;
+        return response;
     }
 
     public boolean isBroken(Long id) {
@@ -225,6 +223,22 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     public void incrementHistCount(int count) {
         histCount.addAndGet(count);
+    }
+
+    private void createCurveProcessor(Long id, boolean restRequest) {
+        ExtraCurveInfo info = repository.getInfo(id).orElse(null);
+
+        if (info != null) {
+            processors.putIfAbsent(id, new SingleCurveProcessor(info, this));
+
+        } else {
+            CurveDataRequest request = new CurveDataRequest();
+            request.setCurveId(id);
+            request.setInfoOnly(true);
+            request.setWithRange(true);
+            RequestType type = restRequest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
+            requestQueue.add(new RequestTask(request, type));
+        }
     }
 
     private Long parseId(String subject) {
@@ -236,16 +250,6 @@ public class CurveDispatcher implements ConnectionEventListener {
             log.error("Parsing id from subject exception: {}", subject, e);
             return null;
         }
-    }
-
-    private CurveDataRequest createInfoRequest(Long id) {
-
-        CurveDataRequest request = new CurveDataRequest();
-        request.setCurveId(id);
-        request.setInfoOnly(true);
-        request.setWithRange(true);
-
-        return request;
     }
 
     @Scheduled(fixedRate = 30)
@@ -269,7 +273,9 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                             CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
                             if (requestTask.type == RequestType.INFO_REST || requestTask.type == RequestType.INFO_ACTIVE) {
-                                processors.putIfAbsent(curveInfo.getId(), new SingleCurveProcessor(new ExtraCurveInfo(curveInfo, null, null), this));
+                                ExtraCurveInfo info = new ExtraCurveInfo(curveInfo, null, null);
+                                repository.saveOrUpdateInfo(info);
+                                processors.putIfAbsent(curveInfo.getId(), new SingleCurveProcessor(info, this));
                             }
                             break;
 
