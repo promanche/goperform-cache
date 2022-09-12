@@ -21,6 +21,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.locks.LockSupport;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -138,28 +139,20 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public void onDataEndMessage(DataEndMessage message) {
 
-        try {
-            Thread.sleep(100);
-        } catch (InterruptedException e) {
-            log.error(e.getMessage(), e);
-        }
-
         int sent = message.getSentCount();
         int received = loadBuffer.size();
+        int step = 5;
+
+        while (sent != received && step > 0) {
+            log.warn("Curve {} received {}. Waiting last points.....", info.getId(), received);
+            LockSupport.parkUntil(30 + System.currentTimeMillis());
+            step--;
+            received = loadBuffer.size();
+        }
 
         dispatcher.incrementHistCount(received);
 
         if (sent == 0) {
-
-            while (!loadBuffer.isEmpty()) {
-                try {
-                    log.warn("waiting...................................................");
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    log.error(e.getMessage(), e);
-                }
-            }
-
             if (isActive) {
                 realItemCache.addAll(historyItemCache);
                 historyItemCache.clear();
@@ -183,11 +176,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             saveHistoryItems();
             updateInfo();
             createSegments(loadBuffer);
-            doRequest(false);
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
+            doRequest(false);
         }
-
-        loadBuffer.clear();
     }
 
     public Set<Integer> getScaleSet() {
@@ -398,6 +389,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void doRequest(boolean ifBlocked) {
+        loadBuffer.clear();
 
         if (loadStatus.get() != LoadStatus.BLOCKED || ifBlocked) {
             String from = findFrom();
