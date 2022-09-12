@@ -478,7 +478,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         int totalSeconds = (int) ((lastSaved.getKey() - firstSaved.getKey()) / 1000);
         int secondsOnPixel = scale * 60 / 120;
 
-        return (int) ((long) secondsOnPixel * savedCount / totalSeconds);
+        return totalSeconds == 0 ? 0 : (int) ((long) secondsOnPixel * savedCount / totalSeconds);
     }
 
     private void createScaleSegments(Collection<CurveItem> items, int scale, int itemsOnPixel) {
