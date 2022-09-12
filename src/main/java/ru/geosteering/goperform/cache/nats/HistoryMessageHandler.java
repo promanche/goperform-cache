@@ -5,9 +5,9 @@ import io.nats.client.MessageHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import ru.geosteering.commonModels.dataService.responses.ApiMessage;
+import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.processor.EventDispatcher;
+import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
@@ -20,6 +20,7 @@ import java.util.concurrent.Executors;
 public class HistoryMessageHandler implements MessageHandler {
 
     private final Config config;
+    private final CurveDispatcher curveDispatcher;
 
     private ExecutorService executor;
 
@@ -40,7 +41,20 @@ public class HistoryMessageHandler implements MessageHandler {
             ApiMessage apiMessage = StaticMapper.parseObject(new String(msg.getData()), ApiMessage.class);
 
             if (apiMessage != null) {
-                EventDispatcher.getInstance().onHistoryApiMessage(apiMessage, msg.getSubject());
+
+                ApiMessage.MessageType type = apiMessage.getType();
+
+                switch (type) {
+                    case CURVE_DATA:
+                        curveDispatcher.onCurveDataMessage((CurveDataMessage) apiMessage, false);
+                        break;
+                    case DATA_END:
+                        curveDispatcher.onDataEndMessage((DataEndMessage) apiMessage, msg.getSubject());
+                        break;
+                    default:
+                        log.info("Some apiMessage: {}", apiMessage);
+                        break;
+                }
             }
 
         } catch (Exception e) {

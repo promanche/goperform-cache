@@ -45,7 +45,7 @@ public class Config {
 
     @NotNull
     @Positive
-    public final int HISTORY_ONETIME_REQUESTS;
+    public final int NATS_ONETIME_REQUESTS;
 
     @NotNull
     @Positive
@@ -54,19 +54,23 @@ public class Config {
     @NotNull
     public final List<Integer> SCALE_MINUTES;
 
+    @Positive
+    public final int STATISTIC_PERIOD_SECONDS;
+
     public final String HISTORY_NUID;
 
-    public Config(@Value("${subject}") String subject,
-                  @Value("${host}") String host,
-                  @Value("${realtime-threads}") int realtimeThreads,
-                  @Value("${history-threads}") int historyThreads,
-                  @Value("${history-request-limit}") int historyRequestLimit,
-                  @Value("${batch-size}") int batchSize,
-                  @Value("${margin-size}") int marginSize,
-                  @Value("${credentials-file}") String credentialsFile,
-                  @Value("${history-onetime-requests}") int historyOnetimeRequests,
-                  @Value("${reconnect-timeout-sec}") int reconnectTimeoutSeconds,
-                  @Value("#{${scale-minutes}}") List<Integer> scaleMinutes) {
+    public Config(@Value("${goperform" + '.' + "subject}") String subject,
+                  @Value("${goperform.host}") String host,
+                  @Value("${goperform.realtime-threads}") int realtimeThreads,
+                  @Value("${goperform.history-threads}") int historyThreads,
+                  @Value("${goperform.history-request-limit}") int historyRequestLimit,
+                  @Value("${goperform.batch-size}") int batchSize,
+                  @Value("${goperform.margin-size}") int marginSize,
+                  @Value("${goperform.credentials-file}") String credentialsFile,
+                  @Value("${goperform.nats-onetime-requests}") int natsOnetimeRequests,
+                  @Value("${goperform.reconnect-timeout-sec}") int reconnectTimeoutSeconds,
+                  @Value("#{${goperform.scale-minutes}}") List<Integer> scaleMinutes,
+                  @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds) {
         this.SUBJECT = subject;
         this.HOST = host;
         this.REALTIME_THREADS = realtimeThreads;
@@ -75,9 +79,10 @@ public class Config {
         this.BATCH_SIZE = batchSize;
         this.MARGIN_SIZE = marginSize;
         this.CREDENTIALS_FILE = credentialsFile;
-        this.HISTORY_ONETIME_REQUESTS = historyOnetimeRequests;
+        this.NATS_ONETIME_REQUESTS = natsOnetimeRequests;
         this.RECONNECT_TIMEOUT_SECONDS = reconnectTimeoutSeconds;
         this.SCALE_MINUTES = scaleMinutes;
+        this.STATISTIC_PERIOD_SECONDS = statisticPeriodSeconds;
 
         this.HISTORY_NUID = NUID.nextGlobal();
     }

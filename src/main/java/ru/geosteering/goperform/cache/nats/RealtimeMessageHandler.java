@@ -6,8 +6,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
+import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.processor.EventDispatcher;
+import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors;
 public class RealtimeMessageHandler implements MessageHandler {
 
     private final Config config;
+    private final CurveDispatcher curveDispatcher;
 
     private ExecutorService executor;
 
@@ -41,7 +43,14 @@ public class RealtimeMessageHandler implements MessageHandler {
                 ApiMessage apiMessage = StaticMapper.parseObject(new String(msg.getData()), ApiMessage.class);
 
                 if (apiMessage != null) {
-                    EventDispatcher.getInstance().onRealtimeApiMessage(apiMessage);
+                    if (apiMessage.getType() == ApiMessage.MessageType.CURVE_DATA) {
+
+                        curveDispatcher.onCurveDataMessage((CurveDataMessage) apiMessage, true);
+
+                    } else {
+
+                        log.info("Some apiMessage: {}", apiMessage);
+                    }
                 }
             }
 

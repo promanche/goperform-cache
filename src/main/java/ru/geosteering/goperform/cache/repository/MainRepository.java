@@ -4,12 +4,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
-import ru.geosteering.goperform.cache.model.MetaData;
+import ru.geosteering.goperform.cache.model.CurveItem;
+import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.repository.dto.*;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
@@ -17,7 +17,7 @@ import java.util.stream.Collectors;
 public class MainRepository {
 
     private final ItemsMapper itemsMapper;
-    private final MetaDataMapper metaDataMapper;
+    private final CurveInfoMapper curveInfoMapper;
     private final SegmentsMapper segmentsMapper;
     private final SqlSessionFactory sessionFactory;
 
@@ -49,10 +49,6 @@ public class MainRepository {
         return itemsMapper.getAll(id);
     }
 
-    public List<Long> getAllItemIds() {
-        return itemsMapper.getAllIds();
-    }
-
     public void deleteItems(Long id, Double from) {
         if (from == null) {
             itemsMapper.deleteAll(id);
@@ -61,30 +57,46 @@ public class MainRepository {
         }
     }
 
-    public Double getFirstItemKey(Long id) {
-        return itemsMapper.getFirst(id);
+    public Optional<CurveItem> getFirstItem(Long id) {
+        String json = itemsMapper.getFirst(id);
+        if (json != null) {
+            List<CurveItem> items = StaticMapper.parseListOf(itemsMapper.getFirst(id), CurveItem.class);
+            if (!items.isEmpty()) {
+                return Optional.of(items.get(0));
+            }
+        }
+        return Optional.empty();
     }
 
-    public Double getLastItemKey(Long id) {
-        return itemsMapper.getLast(id);
+    public Optional<CurveItem> getLastItem(Long id) {
+        String json = itemsMapper.getLast(id);
+        if (json != null) {
+            List<CurveItem> items = StaticMapper.parseListOf(itemsMapper.getLast(id), CurveItem.class);
+            if (!items.isEmpty()) {
+                return Optional.of(items.get(0));
+            }
+        }
+        return Optional.empty();
     }
 
     public int getItemsRecords(Long id) {
         return itemsMapper.getRecordsCount(id);
     }
 
-    public void saveOrUpdateMetaData(MetaData metaData) {
-        if (metaDataMapper.exists(metaData.getId())) {
-            metaDataMapper.update(StaticMapper.toJson(metaData), metaData.getId());
+    public void saveOrUpdateInfo(ExtraCurveInfo info) {
+        if (curveInfoMapper.exists(info.getId())) {
+            curveInfoMapper.update(StaticMapper.toJson(info), info.getId());
         } else {
-            metaDataMapper.save(MetaDataDto.fromMetaData(metaData));
+            curveInfoMapper.save(CurveInfoDto.fromCurveInfo(info));
         }
     }
 
-    public List<MetaData> getAllMetaData() {
-        return metaDataMapper.getAll().stream()
-                .map(str -> StaticMapper.parseObject(str, MetaData.class))
-                .collect(Collectors.toList());
+    public Optional<ExtraCurveInfo> getInfo(Long id) {
+        String json = curveInfoMapper.get(id);
+        if (json != null) {
+            return Optional.ofNullable(StaticMapper.parseObject(json, ExtraCurveInfo.class));
+        }
+        return Optional.empty();
     }
 
     public void saveSegments(List<SegmentDto> list) {
@@ -130,9 +142,5 @@ public class MainRepository {
         } else {
             segmentsMapper.deleteAfter(id, from);
         }
-    }
-
-    public Set<Integer> getSegmentsScales(Long id) {
-        return segmentsMapper.getScales(id);
     }
 }

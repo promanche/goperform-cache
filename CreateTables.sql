@@ -8,7 +8,7 @@ create table items
     data     jsonb   not null
 );
 
-create table meta_data
+create table info
 (
     curve_id bigint primary key,
     created  timestamp(3) default now(),
@@ -29,6 +29,7 @@ create table segments
 
 create index on items(curve_id);
 
-create index on meta_data(curve_id);
+create index on info(curve_id);
 
 create index on segments(curve_id);
+create index on segments(curve_id, scale);

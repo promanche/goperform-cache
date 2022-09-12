@@ -11,7 +11,7 @@ public interface ItemsMapper {
     @Insert("insert into items (curve_id, first, last, data) values (#{id}, #{first}, #{last}, #{data}::jsonb)")
     void save(ItemDto itemDto);
 
-    @Select("select data from items where curve_id=${id} and ((${from} <= last) and (${to} >= first)) order by first")
+    @Select("select data from items where curve_id=${id} and ${from} <= last and ${to} >= first order by first")
     List<String> getFromTo(@Param("id") Long id, @Param("from") Double from, @Param("to") Double to);
 
     @Select("select data from items where curve_id=${id} order by first")
@@ -26,11 +26,11 @@ public interface ItemsMapper {
     @Select("select distinct curve_id from items")
     List<Long> getAllIds();
 
-    @Select("select min(first) from items where curve_id=${id}")
-    Double getFirst(@Param("id") Long id);
+    @Select("select data from items where curve_id=${id} order by first limit 1")
+    String getFirst(@Param("id") Long id);
 
-    @Select("select max(last) from items where curve_id=${id}")
-    Double getLast(@Param("id") Long id);
+    @Select("select data from items where curve_id=${id} order by last desc limit 1")
+    String getLast(@Param("id") Long id);
 
     @Select("select count(*) from items where curve_id=${id}")
     int getRecordsCount(@Param("id") Long id);

@@ -7,7 +7,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.processor.EventDispatcher;
 
 import javax.annotation.PreDestroy;
 import java.io.IOException;
@@ -20,6 +19,7 @@ public class NatsConnector {
 
     private final RealtimeMessageHandler realtimeHandler;
     private final HistoryMessageHandler historyHandler;
+    private final ConnectionEventDispatcher connectionEventDispatcher;
     private final Config config;
 
     private static Connection connection;
@@ -33,16 +33,14 @@ public class NatsConnector {
                                     log.info("Nats connection status: {}", status.name());
 
                                     if (status == ConnectionListener.Events.DISCONNECTED) {
-
                                         realtimeHandler.waitTerminated();
                                         historyHandler.waitTerminated();
-                                        EventDispatcher.getInstance().onDisconnect();
+                                        connectionEventDispatcher.onDisconnect();
                                         reconnect();
                                     }
 
                                     if (status == ConnectionListener.Events.CONNECTED) {
-
-                                        EventDispatcher.getInstance().onConnect();
+                                        connectionEventDispatcher.onConnect();
                                     }
                                 }).start()
                         )
@@ -74,9 +72,7 @@ public class NatsConnector {
         Message response = null;
 
         if (isConnected()) {
-
             try {
-
                 Message request = NatsMessage.builder()
                         .subject(subject)
                         .data(data)
@@ -107,7 +103,6 @@ public class NatsConnector {
 
     void reconnect() {
         try {
-
             closeConnection();
 
             int seconds = config.RECONNECT_TIMEOUT_SECONDS;
