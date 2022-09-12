@@ -113,11 +113,10 @@ public class CurveDispatcher implements ConnectionEventListener {
             return;
         }
 
-        if (processors.containsKey(id)) {
-            processors.get(id).onCurveDataMessage(message, isReal);
+        SingleCurveProcessor curveProcessor = getCurveProcessor(id, false);
 
-        } else {
-            createCurveProcessor(id, false);
+        if (curveProcessor != null) {
+            curveProcessor.onCurveDataMessage(message, isReal);
         }
     }
 
@@ -139,8 +138,8 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     public List<?> getCurveData(Long id, Double from, Double to, Integer scale) {
 
-        if (processors.containsKey(id)) {
-            SingleCurveProcessor curveProcessor = processors.get(id);
+        SingleCurveProcessor curveProcessor = getCurveProcessor(id, true);
+        if (curveProcessor != null) {
 
             curveProcessor.setHaveRestRequest(true);
 
@@ -155,7 +154,6 @@ public class CurveDispatcher implements ConnectionEventListener {
             }
         }
 
-        createCurveProcessor(id, true);
         return null;
     }
 
@@ -190,8 +188,9 @@ public class CurveDispatcher implements ConnectionEventListener {
     public CurveInfoResponse getCurveInfoResponse(Long id) {
         CurveInfoResponse response = null;
 
-        if (processors.containsKey(id)) {
-            SingleCurveProcessor curveProcessor = processors.get(id);
+        SingleCurveProcessor curveProcessor = getCurveProcessor(id, true);
+
+        if (curveProcessor != null) {
             ExtraCurveInfo info = curveProcessor.getInfo();
 
             response = new CurveInfoResponse(
@@ -209,9 +208,6 @@ public class CurveDispatcher implements ConnectionEventListener {
                     curveProcessor.getSavedCount(),
                     curveProcessor.getScaleSet(),
                     curveProcessor.getLastValue());
-
-        } else {
-            createCurveProcessor(id, true);
         }
 
         return response;
@@ -225,13 +221,19 @@ public class CurveDispatcher implements ConnectionEventListener {
         histCount.addAndGet(count);
     }
 
-    private void createCurveProcessor(Long id, boolean restRequest) {
-        ExtraCurveInfo info = repository.getInfo(id).orElse(null);
+    private SingleCurveProcessor getCurveProcessor(Long id, boolean restRequest) {
 
-        if (info != null) {
-            processors.putIfAbsent(id, new SingleCurveProcessor(info, this));
+        SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
 
-        } else {
+            ExtraCurveInfo info = repository.getInfo(id).orElse(null);
+            if (info != null) {
+                return new SingleCurveProcessor(info, this);
+            }
+
+            return null;
+        });
+
+        if (curveProcessor == null) {
             CurveDataRequest request = new CurveDataRequest();
             request.setCurveId(id);
             request.setInfoOnly(true);
@@ -239,6 +241,8 @@ public class CurveDispatcher implements ConnectionEventListener {
             RequestType type = restRequest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
             requestQueue.add(new RequestTask(request, type));
         }
+
+        return curveProcessor;
     }
 
     private Long parseId(String subject) {

@@ -153,7 +153,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
             while (!loadBuffer.isEmpty()) {
                 try {
-                    log.warn("waiting..........");
+                    log.warn("waiting...................................................");
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
                     log.error(e.getMessage(), e);
@@ -170,7 +170,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             log.info("Curve {} data loaded, {}", info.getId(), message);
 
         } else if (sent != received) {
-            log.error("Received count {} not equals to sent {}", received, sent);
+            log.error("Curve {} received count {} not equals to sent {}", info.getId(), received, sent);
             doRequest(false);
 
         } else {
