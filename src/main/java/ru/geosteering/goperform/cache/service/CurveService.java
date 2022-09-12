@@ -43,11 +43,12 @@ public class CurveService {
         }
 
         List<?> result = curveDispatcher.getCurveData(id, from, to, scale);
-        int size = result == null ? -1 : result.size();
 
-        log.info("Response for id {} prepared. Result list size: {}", id, size);
+        if (result != null) {
+            log.info("Response for id {} prepared. Result list size: {}", id, result.size());
+        }
+
         return result;
-
     }
 
     public boolean reloadCurve(Long id, Double from) {

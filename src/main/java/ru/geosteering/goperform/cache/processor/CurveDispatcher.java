@@ -302,7 +302,6 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         } catch (Exception e) {
             log.error(e.getMessage(), e);
-            requestAllowed.incrementAndGet();
         }
     }
 
