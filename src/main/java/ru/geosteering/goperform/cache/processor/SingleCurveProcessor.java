@@ -171,6 +171,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             historyItemCache.addAll(loadBuffer);
             saveHistoryItems();
             updateInfo();
+            createSegments(loadBuffer);
             doRequest(false);
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
         }
@@ -322,8 +323,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             lastSaved = itemsBatch.get(itemsBatch.size() - 1);
 
             savedCount += itemsBatch.size();
-
-            createSegments(itemsBatch);
         }
 
         dispatcher.getRepository().saveItems(transfer);
@@ -452,12 +451,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         dispatcher.getWebSocketMessageProcessor().sendMessage(info.getId(), message);
     }
 
-    private void createSegments(List<CurveItem> items) {
+    private void createSegments(Collection<CurveItem> items) {
 
         if (isApproximated) {
-            for (Map.Entry<Integer, List<CurveSegment>> entry : segmentCache.entrySet()) {
+            for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
 
-                Integer scale = entry.getKey();
                 int itemsOnPixel = findItemsOnPixel(scale);
 
                 if (isApproximatedScale(itemsOnPixel)) {
@@ -483,7 +481,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return (int) ((long) secondsOnPixel * savedCount / totalSeconds);
     }
 
-    private void createScaleSegments(List<CurveItem> items, int scale, int itemsOnPixel) {
+    private void createScaleSegments(Collection<CurveItem> items, int scale, int itemsOnPixel) {
 
         List<CurveSegment> segments = segmentCache.computeIfAbsent(scale, k -> new ArrayList<>());
 
