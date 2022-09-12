@@ -453,7 +453,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private void createSegments(Collection<CurveItem> items) {
 
-        if (isApproximated) {
+        if (isApproximated && lastSaved != null && firstSaved != null) {
             for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
 
                 int itemsOnPixel = findItemsOnPixel(scale);

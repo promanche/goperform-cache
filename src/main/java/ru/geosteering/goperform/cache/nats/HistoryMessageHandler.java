@@ -11,6 +11,7 @@ import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -62,6 +63,7 @@ public class HistoryMessageHandler implements MessageHandler {
         }
     }
 
+    @PreDestroy
     public void waitTerminated() {
         try {
             executor.shutdown();
