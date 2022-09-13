@@ -144,7 +144,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         int step = 5;
 
         while (sent != received && step > 0) {
-            log.warn("Curve {} received {}. Waiting last points.....", info.getId(), received);
+            log.warn("Curve {} received {}. Waiting for last points.....", info.getId(), received);
             LockSupport.parkUntil(30 + System.currentTimeMillis());
             step--;
             received = loadBuffer.size();

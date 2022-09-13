@@ -76,6 +76,10 @@ public class CurveController {
 
         log.info("Curve-info request id {}", id);
 
+        if (service.isBroken(id)) {
+            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
+        }
+
         CurveInfoResponse response = service.getCurveInfoResponse(id);
 
         return response == null ? new ResponseEntity<>(HttpStatus.ACCEPTED) : new ResponseEntity<>(response, HttpStatus.OK);

@@ -86,7 +86,6 @@ public class CurveDispatcher implements ConnectionEventListener {
         }, 0, 5, TimeUnit.SECONDS);
     }
 
-
     @Override
     public void onConnect() {
         requestAllowed.set(config.NATS_ONETIME_REQUESTS);
@@ -131,7 +130,6 @@ public class CurveDispatcher implements ConnectionEventListener {
         requestAllowed.incrementAndGet();
     }
 
-
     public void addRequestTask(RequestTask task) {
         requestQueue.add(task);
     }
@@ -156,7 +154,6 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         return null;
     }
-
 
     public boolean reload(Long id, Double from) {
         if (processors.containsKey(id)) {
