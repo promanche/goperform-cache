@@ -10,6 +10,7 @@ import ru.geosteering.commonModels.dataService.requests.*;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.StatusMessage;
 import ru.geosteering.commonModels.wits.RecordIndex;
+import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
@@ -127,7 +128,7 @@ public class CurveService {
 
     public boolean removeComment(Long id, Double key, String user) {
 
-        CurveInfo curveInfo = curveDispatcher.getCurveInfo(id);
+        ExtraCurveInfo curveInfo = curveDispatcher.getCurveInfo(id);
 
         if (curveInfo == null) {
             return false;

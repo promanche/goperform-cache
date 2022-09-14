@@ -10,7 +10,6 @@ import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.CurveSegment;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
@@ -23,9 +22,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 @Component
 @Slf4j
@@ -137,19 +134,9 @@ public class CurveDispatcher implements ConnectionEventListener {
     public List<?> getCurveData(Long id, Double from, Double to, Integer scale) {
 
         SingleCurveProcessor curveProcessor = getCurveProcessor(id, true);
+
         if (curveProcessor != null) {
-
-            curveProcessor.setHaveRestRequest(true);
-
-            if (scale != null && curveProcessor.getScaleSet().contains(scale)) {
-                return repository.getSegmentsFromTo(id, scale, from, to)
-                        .stream()
-                        .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
-                        .collect(Collectors.toList());
-
-            } else {
-                return curveProcessor.getCurveData(from, to);
-            }
+            return curveProcessor.getCurveData(from, to, scale);
         }
 
         return null;
@@ -200,11 +187,11 @@ public class CurveDispatcher implements ConnectionEventListener {
                     info.getTypeLogData(),
                     info.getMaxValue(),
                     info.getMinValue(),
-                    curveProcessor.getMaxKey(),
-                    curveProcessor.getMinKey(),
-                    curveProcessor.getSavedCount(),
+                    info.getMaxKey(),
+                    info.getMinKey(),
+                    curveProcessor.getSavedCount().get(),
                     curveProcessor.getScaleSet(),
-                    curveProcessor.getLastValue());
+                    info.getLastValue());
         }
 
         return response;
@@ -274,7 +261,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                             CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
                             if (requestTask.type == RequestType.INFO_REST || requestTask.type == RequestType.INFO_ACTIVE) {
-                                ExtraCurveInfo info = new ExtraCurveInfo(curveInfo, null, null);
+                                ExtraCurveInfo info = new ExtraCurveInfo(curveInfo);
                                 repository.saveOrUpdateInfo(info);
                                 processors.putIfAbsent(curveInfo.getId(), new SingleCurveProcessor(info, this));
                             }
