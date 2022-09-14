@@ -73,7 +73,7 @@ public class MainRepository {
         if (json != null) {
             List<CurveItem> items = StaticMapper.parseListOf(itemsMapper.getLast(id), CurveItem.class);
             if (!items.isEmpty()) {
-                return Optional.of(items.get(0));
+                return Optional.of(items.get(items.size() - 1));
             }
         }
         return Optional.empty();
