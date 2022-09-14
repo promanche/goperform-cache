@@ -262,11 +262,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         firstSaved = dispatcher.getRepository().getFirstItem(info.getId()).orElse(null);
         lastSaved = dispatcher.getRepository().getLastItem(info.getId()).orElse(null);
         savedCount.set(dispatcher.getRepository().getItemsRecords(info.getId()) * dispatcher.getConfig().BATCH_SIZE);
-
-        dispatcher.getRepository().getInfo(info.getId()).ifPresent(in -> {
-            info.setMaxValue(in.getMaxValue());
-            info.setMinValue(in.getMinValue());
-        });
     }
 
     private void collect(CurveItem item, boolean isReal) {
