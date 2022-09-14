@@ -167,7 +167,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             doRequest(false);
 
         } else {
-            long millis = System.currentTimeMillis() - pointTimer;
+            long millis = Math.max(1, System.currentTimeMillis() - pointTimer);
             long pointsPerSecond = received * 1000L / millis;
             log.info("Curve {} received {} items with avg speed {} points/sec. Request->firstPoint {} ms, firstPoint->lastPoint {} ms",
                     info.getId(), received, pointsPerSecond, pointTimer - requestTimer, millis);
