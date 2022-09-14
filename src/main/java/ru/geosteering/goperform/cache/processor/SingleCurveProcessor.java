@@ -69,8 +69,19 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         this.info = info;
         this.dispatcher = dispatcher;
 
-        minKey = info.getIndexType() == LogIndexType.MEASURED_DEPTH ? info.getMdMin() : info.getTimeMin().toInstant().toEpochMilli();
-        maxKey = info.getIndexType() == LogIndexType.MEASURED_DEPTH ? info.getMdMax() : info.getTimeMax().toInstant().toEpochMilli();
+        if (info.getIndexType() == LogIndexType.MEASURED_DEPTH) {
+            if (info.getMdMin() == null || info.getMdMax() == null) {
+                log.warn("Null range for {}", info.getId());
+            }
+            minKey = info.getMdMin() == null ? null : info.getMdMin();
+            maxKey = info.getMdMax() == null ? null : info.getMdMax();
+        } else {
+            if (info.getTimeMin() == null || info.getTimeMax() == null) {
+                log.warn("Null range for {}", info.getId());
+            }
+            minKey = info.getTimeMin() == null ? null : (double) info.getTimeMin().toInstant().toEpochMilli();
+            maxKey = info.getTimeMax() == null ? null : (double) info.getTimeMax().toInstant().toEpochMilli();
+        }
 
         isApproximated = info.getIndexType() != LogIndexType.MEASURED_DEPTH && info.getAxisDefinition() == null
                 && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG);

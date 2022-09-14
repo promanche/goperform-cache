@@ -83,7 +83,7 @@ public class NatsConnector {
 
                 response = connection.request(request).get();
 
-                log.debug("Response: {}", new String(response.getData()));
+                log.info("Response: {}", new String(response.getData()));
 
             } catch (InterruptedException | ExecutionException e) {
                 log.error("Send request exception: {}", e.getMessage(), e);

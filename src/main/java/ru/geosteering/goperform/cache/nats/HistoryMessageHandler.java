@@ -59,7 +59,7 @@ public class HistoryMessageHandler implements MessageHandler {
             }
 
         } catch (Exception e) {
-            log.error(e.getMessage(), e);
+            log.error("Subject: {}, message {}", new String(msg.getData()), msg.getSubject(), e);
         }
     }
 
