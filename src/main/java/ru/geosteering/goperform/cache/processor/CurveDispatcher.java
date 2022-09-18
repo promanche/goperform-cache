@@ -217,7 +217,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             return null;
         });
 
-        if (curveProcessor == null) {
+        if (curveProcessor == null && notContainsRequest(id)) {
             CurveDataRequest request = new CurveDataRequest();
             request.setCurveId(id);
             request.setInfoOnly(true);
@@ -237,6 +237,17 @@ public class CurveDispatcher implements ConnectionEventListener {
         } catch (Exception e) {
             log.error("Parsing id from subject exception: {}", subject, e);
             return null;
+        }
+    }
+
+    private boolean notContainsRequest(Long id) {
+        synchronized (requestQueue) {
+            for (RequestTask task : requestQueue) {
+                if (Objects.equals(task.request.getCurveId(), id)) {
+                    return false;
+                }
+            }
+            return true;
         }
     }
 
@@ -263,7 +274,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                             if (requestTask.type == RequestType.INFO_REST || requestTask.type == RequestType.INFO_ACTIVE) {
                                 ExtraCurveInfo info = new ExtraCurveInfo(curveInfo);
                                 repository.saveOrUpdateInfo(info);
-                                processors.putIfAbsent(curveInfo.getId(), new SingleCurveProcessor(info, this));
+                                processors.computeIfAbsent(curveInfo.getId(), k -> new SingleCurveProcessor(info, this));
                             }
                             break;
 
@@ -271,7 +282,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                             StatusMessage statusMessage = (StatusMessage) apiMessage;
                             log.error("Missing curveInfo for {}, message {}", requestTask.request.getCurveId(), statusMessage);
-                            brokenCurves.putIfAbsent(requestTask.request.getCurveId(), LocalDateTime.now());
+                            brokenCurves.computeIfAbsent(requestTask.request.getCurveId(), k -> LocalDateTime.now());
                             break;
 
                         default:

@@ -204,13 +204,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             double finalFrom = from == null ? Double.MIN_VALUE : from;
             double finalTo = to == null ? Double.MAX_VALUE : to;
 
-            historyItemCache.stream()
-                    .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
-                    .forEachOrdered(result::add);
+            synchronized (historyItemCache) {
+                historyItemCache.stream()
+                        .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
+                        .forEachOrdered(result::add);
+            }
 
-            realItemCache.stream()
-                    .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
-                    .forEachOrdered(result::add);
+            synchronized (realItemCache) {
+                realItemCache.stream()
+                        .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
+                        .forEachOrdered(result::add);
+            }
 
             return result;
         }
@@ -317,35 +321,37 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private void saveHistoryItems() {
 
-        List<ItemDto> transfer = new ArrayList<>();
+        synchronized (historyItemCache) {
+            List<ItemDto> transfer = new ArrayList<>();
 
-        CurveItem tmpFirst = firstSaved;
-        CurveItem tmpLast = lastSaved;
-        int tmpCount = 0;
+            CurveItem tmpFirst = firstSaved;
+            CurveItem tmpLast = lastSaved;
+            int tmpCount = 0;
 
 
-        while (historyItemCache.size() >= dispatcher.getConfig().BATCH_SIZE) {
+            while (historyItemCache.size() >= dispatcher.getConfig().BATCH_SIZE) {
 
-            ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
+                ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
 
-            for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
-                itemsBatch.add(historyItemCache.pollFirst());
+                for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
+                    itemsBatch.add(historyItemCache.pollFirst());
+                }
+
+                transfer.add(ItemDto.fromItemsList(info.getId(), itemsBatch));
+
+                if (tmpFirst == null) {
+                    tmpFirst = itemsBatch.get(0);
+                }
+                tmpLast = itemsBatch.get(itemsBatch.size() - 1);
+                tmpCount += itemsBatch.size();
             }
 
-            transfer.add(ItemDto.fromItemsList(info.getId(), itemsBatch));
+            dispatcher.getRepository().saveItems(transfer);
 
-            if (tmpFirst == null) {
-                tmpFirst = itemsBatch.get(0);
-            }
-            tmpLast = itemsBatch.get(itemsBatch.size() - 1);
-            tmpCount += itemsBatch.size();
+            firstSaved = tmpFirst;
+            lastSaved = tmpLast;
+            savedCount.addAndGet(tmpCount);
         }
-
-        dispatcher.getRepository().saveItems(transfer);
-
-        firstSaved = tmpFirst;
-        lastSaved = tmpLast;
-        savedCount.addAndGet(tmpCount);
     }
 
     private void updateInfo(CurveItem item) {

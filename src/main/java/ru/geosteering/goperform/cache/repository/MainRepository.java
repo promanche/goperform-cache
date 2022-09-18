@@ -58,25 +58,11 @@ public class MainRepository {
     }
 
     public Optional<CurveItem> getFirstItem(Long id) {
-        String json = itemsMapper.getFirst(id);
-        if (json != null) {
-            List<CurveItem> items = StaticMapper.parseListOf(itemsMapper.getFirst(id), CurveItem.class);
-            if (!items.isEmpty()) {
-                return Optional.of(items.get(0));
-            }
-        }
-        return Optional.empty();
+        return Optional.ofNullable(StaticMapper.parseObject(itemsMapper.getFirst(id), CurveItem.class));
     }
 
     public Optional<CurveItem> getLastItem(Long id) {
-        String json = itemsMapper.getLast(id);
-        if (json != null) {
-            List<CurveItem> items = StaticMapper.parseListOf(itemsMapper.getLast(id), CurveItem.class);
-            if (!items.isEmpty()) {
-                return Optional.of(items.get(items.size() - 1));
-            }
-        }
-        return Optional.empty();
+        return Optional.ofNullable(StaticMapper.parseObject(itemsMapper.getLast(id), CurveItem.class));
     }
 
     public int getItemsRecords(Long id) {

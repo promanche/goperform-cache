@@ -1,8 +1,7 @@
 package ru.geosteering.goperform.cache.model.rest;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import ru.geosteering.commonModels.wits.RecordIndex;
 
 import javax.validation.constraints.NotBlank;
@@ -10,6 +9,7 @@ import javax.validation.constraints.NotNull;
 
 @Getter
 @Setter
+@ToString
 public class Comment {
 
     @NotNull
@@ -25,4 +25,6 @@ public class Comment {
 
     @NotBlank
     private String text;
+
+    private double length;
 }

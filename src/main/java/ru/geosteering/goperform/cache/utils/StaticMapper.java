@@ -22,6 +22,11 @@ public class StaticMapper {
     }
 
     public static <T> T parseObject(String json, Class<T> clazz) {
+
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+
         try {
             return mapper.readValue(json, clazz);
         } catch (Exception e) {
@@ -31,6 +36,11 @@ public class StaticMapper {
     }
 
     public static <T> List<T> parseListOf(String json, Class<T> clazz) {
+
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+
         try {
             return mapper.readValue(json, mapper.getTypeFactory().constructCollectionType(List.class, clazz));
         } catch (Exception e) {

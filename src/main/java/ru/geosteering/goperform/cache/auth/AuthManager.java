@@ -33,6 +33,7 @@ import java.util.function.Supplier;
 public class AuthManager extends OncePerRequestFilter implements AuthorizationManager<RequestAuthorizationContext> {
 
     private final Map<String, UserAuthentication> authenticatedUsers = new ConcurrentHashMap<>();
+    private final String authSubject = "gostream.auth";
 
     @Override
     public AuthorizationDecision check(Supplier<Authentication> authentication, RequestAuthorizationContext object) {
@@ -44,11 +45,11 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
         switch (method) {
             case "GET":
-                return new AuthorizationDecision(checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ));
+                return new AuthorizationDecision(checkObjectReadAccess(auth, id));
             case "POST":
             case "PUT":
             case "DELETE":
-                return new AuthorizationDecision(checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE));
+                return new AuthorizationDecision(checkObjectWriteAccess(auth, id));
             default:
                 return new AuthorizationDecision(false);
         }
@@ -78,7 +79,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
         CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
 
-        Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
+        Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
 
         ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
@@ -87,7 +88,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
     public Authentication getAuthentication(String jwt) {
 
-        if (jwt == null || jwt.isEmpty()) {
+        if (jwt == null || jwt.isEmpty() || jwt.equalsIgnoreCase("null")) {
             return null;
         }
 
@@ -101,7 +102,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
             TokenRequest request = new TokenRequest(jwt);
 
-            Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
+            Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
 
             ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 

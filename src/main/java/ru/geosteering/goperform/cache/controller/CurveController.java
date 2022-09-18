@@ -120,6 +120,8 @@ public class CurveController {
     public ResponseEntity<Long> create(@RequestBody @Validated CreateCurveRequest request,
                                        Authentication authentication) {
 
+        log.info("Create curve request {}", request);
+
         Long id = service.createCurve(request, authentication.getName());
 
         if (id != null) {
@@ -131,6 +133,8 @@ public class CurveController {
 
     @PostMapping("/curve/{id}/comments")
     public ResponseEntity<Void> addComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
+
+        log.info("Add comment request id {}, comment {}", id, comment);
 
         if (service.isBroken(id)) {
             return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
@@ -146,6 +150,8 @@ public class CurveController {
     @PutMapping("/curve/{id}/comments")
     public ResponseEntity<Void> updateComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
+        log.info("Update comment request id {}, comment {}", id, comment);
+
         if (service.isBroken(id)) {
             return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
         }
@@ -159,6 +165,8 @@ public class CurveController {
 
     @DeleteMapping("/curve/{id}/comments")
     public ResponseEntity<Void> deleteComment(@PathVariable Long id, @RequestParam Double key, Authentication authentication) {
+
+        log.info("Delete comment request id {}, key {}", id, key);
 
         if (service.isBroken(id)) {
             return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);

@@ -26,10 +26,10 @@ public interface ItemsMapper {
     @Select("select distinct curve_id from items")
     List<Long> getAllIds();
 
-    @Select("select data from items where curve_id=${id} order by first limit 1")
+    @Select("select data -> 0 from items where curve_id=${id} order by first limit 1")
     String getFirst(@Param("id") Long id);
 
-    @Select("select data from items where curve_id=${id} order by last desc limit 1")
+    @Select("select data -> -1 from items where curve_id=${id} order by last desc limit 1")
     String getLast(@Param("id") Long id);
 
     @Select("select count(*) from items where curve_id=${id}")
