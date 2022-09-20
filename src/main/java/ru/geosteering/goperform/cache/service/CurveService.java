@@ -143,6 +143,7 @@ public class CurveService {
         request.setFrom(from);
         request.setTo(from);
         request.setUser(user);
+        request.setUpdateBaseTimestamp(OffsetDateTime.now(ZoneId.of("Z")));
 
         Message message = NatsConnector.sendRequest("gostream.curvesClear", StaticMapper.toBytes(request));
 

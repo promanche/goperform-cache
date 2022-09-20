@@ -254,11 +254,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         segmentCache.clear();
         lastSegmentItem.clear();
 
-        if (Double.compare(lastSaved.getKey(), reloadData.from) >= 0) {
+        if (lastSaved != null && Double.compare(lastSaved.getKey(), reloadData.from) >= 0) {
             dispatcher.getRepository().deleteItems(info.getId(), from);
             reloadSavedInfo();
-            Double segFrom = lastSaved == null ? null : lastSaved.getKey() + 0.0000001;
-            dispatcher.getRepository().deleteSegments(info.getId(), segFrom);
+            if (isApproximated) {
+                Double segFrom = lastSaved == null ? null : lastSaved.getKey() + 0.0000001;
+                dispatcher.getRepository().deleteSegments(info.getId(), segFrom);
+            }
         }
     }
 
