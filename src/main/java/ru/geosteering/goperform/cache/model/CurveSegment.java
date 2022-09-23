@@ -20,7 +20,7 @@ public class CurveSegment {
     public void addItem(CurveItem item) {
 
         if (item != null) {
-            Double value = (Double) item.getValue();
+            double value = ((Number) item.getValue()).doubleValue();
 
             if (maxVal == null || value > maxVal) {
                 maxVal = value;

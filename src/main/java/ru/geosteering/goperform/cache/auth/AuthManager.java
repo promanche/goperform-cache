@@ -38,20 +38,25 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
     @Override
     public AuthorizationDecision check(Supplier<Authentication> authentication, RequestAuthorizationContext object) {
 
-        Authentication auth = authentication.get();
-        long id = Long.parseLong(object.getVariables().get("id"));
+        try {
+            Authentication auth = authentication.get();
+            long id = Long.parseLong(object.getVariables().get("id"));
 
-        String method = object.getRequest().getMethod().toUpperCase();
+            String method = object.getRequest().getMethod().toUpperCase();
 
-        switch (method) {
-            case "GET":
-                return new AuthorizationDecision(checkObjectReadAccess(auth, id));
-            case "POST":
-            case "PUT":
-            case "DELETE":
-                return new AuthorizationDecision(checkObjectWriteAccess(auth, id));
-            default:
-                return new AuthorizationDecision(false);
+            switch (method) {
+                case "GET":
+                    return new AuthorizationDecision(checkObjectReadAccess(auth, id));
+                case "POST":
+                case "PUT":
+                case "DELETE":
+                    return new AuthorizationDecision(checkObjectWriteAccess(auth, id));
+                default:
+                    return new AuthorizationDecision(false);
+            }
+
+        } catch (NumberFormatException e) {
+            return new AuthorizationDecision(false);
         }
     }
 
