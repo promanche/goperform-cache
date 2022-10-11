@@ -23,7 +23,7 @@ public class ExtraCurveInfo {
     private Double maxKey;
     private Double minValue;
     private Double maxValue;
-    private String lastValue;
+    private Object lastValue;
 
     public ExtraCurveInfo(CurveInfo info) {
         id = info.getId();
