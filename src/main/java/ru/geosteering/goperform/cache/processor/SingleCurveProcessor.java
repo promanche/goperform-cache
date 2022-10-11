@@ -35,6 +35,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private final CurveDispatcher dispatcher;
 
     private final boolean isApproximated;
+    @Getter
+    private final boolean isDateTimeCurve;
 
     @Getter
     private final AtomicReference<LoadStatus> loadStatus = new AtomicReference<>(LoadStatus.UNKNOWN);
@@ -64,7 +66,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         this.info = info;
         this.dispatcher = dispatcher;
 
-        isApproximated = info.getIndexType() != LogIndexType.MEASURED_DEPTH && info.getAxisDefinition() == null
+        isDateTimeCurve = info.getIndexType() != LogIndexType.MEASURED_DEPTH;
+
+        isApproximated = isDateTimeCurve && info.getAxisDefinition() == null
                 && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG);
 
         reloadSavedInfo();
@@ -193,6 +197,24 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 result.addAll(segmentCache.get(scale));
 
             }
+
+            List<CurveItem> tail;
+            synchronized (realItemCache) {
+                tail = List.copyOf(realItemCache);
+            }
+            CurveSegment lastSegment = result.isEmpty() ? null : result.get(result.size() - 1);
+            int secondsOnPixel = scale * 60 / 120;
+            for (CurveItem item : tail) {
+                if (lastSegment != null && item.getKey() - lastSegment.getFirstKey() < (secondsOnPixel - 1) * 1000) {
+                    lastSegment.addItem(item);
+                } else {
+                    CurveSegment segment = new CurveSegment();
+                    segment.addItem(item);
+                    result.add(segment);
+                    lastSegment = segment;
+                }
+            }
+
             return result;
 
         } else {
@@ -227,6 +249,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
             reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
         }
+
+        dispatcher.removeFromRequestQueue(info.getId());
     }
 
     public void reload() {
@@ -366,9 +390,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 info.setMinKey(key);
             }
 
-            if (info.getMaxKey() == null || Double.compare(info.getMaxKey(), key) < 0) {
+            if (info.getMaxKey() == null || Double.compare(info.getMaxKey(), key) <= 0) {
                 info.setMaxKey(key);
-                info.setLastValue(item.getValue());
+                info.setLastValue(String.valueOf(item.getValue()));
             }
 
             if (info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)) {
@@ -393,9 +417,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 info.setMinKey(loadBuffer.first().getKey());
             }
 
-            if (info.getMaxKey() == null || Double.compare(info.getMaxKey(), loadBuffer.last().getKey()) < 0) {
+            if (info.getMaxKey() == null || Double.compare(info.getMaxKey(), loadBuffer.last().getKey()) <= 0) {
                 info.setMaxKey(loadBuffer.last().getKey());
-                info.setLastValue(loadBuffer.first().getValue());
+                info.setLastValue(String.valueOf(loadBuffer.first().getValue()));
             }
 
             if (info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)) {

@@ -10,12 +10,14 @@ import ru.geosteering.commonModels.dataService.requests.*;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.StatusMessage;
 import ru.geosteering.commonModels.wits.RecordIndex;
+import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.exception.*;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
+import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
-import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -29,12 +31,25 @@ import java.util.List;
 public class CurveService {
 
     private final CurveDispatcher curveDispatcher;
+    private final Config config;
 
-    public boolean isBroken(Long id) {
-        return curveDispatcher.isBroken(id);
+    public void checkCurve(Long id, Integer scale) {
+        if (curveDispatcher.isBroken(id)) {
+            throw new BrokenCurveException(id);
+        }
+
+        if (scale != null && !config.SCALE_MINUTES.contains(scale)) {
+            throw new BadRequestException("Scale " + scale + " not provided by configuration");
+        }
+
+        if (curveDispatcher.getCurveProcessor(id, true) == null) {
+            throw new CurveProcessorNotExistException();
+        }
     }
 
     public List<?> getCurveData(Long id, Double from, Double to, Integer scale) {
+
+        checkCurve(id, scale);
 
         log.debug("Begin response preparing for id {}", id);
 
@@ -43,7 +58,7 @@ public class CurveService {
             to = to == null ? Double.MAX_VALUE : to;
         }
 
-        List<?> result = curveDispatcher.getCurveData(id, from, to, scale);
+        List<?> result = curveDispatcher.getCurveProcessor(id, true).getCurveData(from, to, scale);
 
         if (result != null) {
             log.info("Response for id {} prepared. Result list size: {}", id, result.size());
@@ -52,12 +67,33 @@ public class CurveService {
         return result;
     }
 
-    public boolean reloadCurve(Long id, Double from) {
-        return curveDispatcher.reload(id, from);
+    public void reloadCurve(Long id, Double from) {
+        checkCurve(id, null);
+        curveDispatcher.getCurveProcessor(id, true).updateReloadData(from, 0);
     }
 
     public CurveInfoResponse getCurveInfoResponse(Long id) {
-        return curveDispatcher.getCurveInfoResponse(id);
+
+        checkCurve(id, null);
+
+        SingleCurveProcessor curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+        ExtraCurveInfo info = curveProcessor.getInfo();
+
+        return new CurveInfoResponse(
+                info.getId(),
+                info.getMnemonic(),
+                info.getIndexType(),
+                info.getUnit(),
+                info.getAxisDefinition(),
+                info.getClassWitsml(),
+                info.getTypeLogData(),
+                info.getMaxValue(),
+                info.getMinValue(),
+                info.getMaxKey(),
+                info.getMinKey(),
+                curveProcessor.getSavedCount().get(),
+                curveProcessor.getScaleSet(),
+                info.getLastValue());
     }
 
     public Long createCurve(CreateCurveRequest req, String user) {
@@ -81,13 +117,17 @@ public class CurveService {
 
             if (statusMessage.getStatus() == EResult.OK) {
                 return Long.valueOf(statusMessage.getMessage());
+            } else {
+                throw new BadRequestException(statusMessage.getMessage());
             }
         }
 
         return null;
     }
 
-    public boolean writeComment(Long id, Comment comment, String user, boolean update) {
+    public void writeComment(Long id, Comment comment, String user, boolean update) {
+
+        checkCurve(id, null);
 
         CurveDataStoreRequest.CurveStoreData data = new CurveDataStoreRequest.CurveStoreData();
         data.setCurveId(id);
@@ -110,33 +150,27 @@ public class CurveService {
 
         ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
 
-        boolean written = false;
-
         if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
 
             StatusMessage statusMessage = (StatusMessage) apiMessage;
 
-            written = statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0;
-
-            if (update & written) {
-                reloadCurve(id, comment.getKey());
+            if (statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0) {
+                if (update) {
+                    reloadCurve(id, comment.getKey());
+                }
+            } else {
+                throw new BadRequestException(statusMessage.getMessage());
             }
         }
-
-        return written;
     }
 
-    public boolean removeComment(Long id, Double key, String user) {
+    public void removeComment(Long id, Double key, String user) {
 
-        ExtraCurveInfo curveInfo = curveDispatcher.getCurveInfo(id);
+        checkCurve(id, null);
 
-        if (curveInfo == null) {
-            return false;
-        }
-
-        String from = curveInfo.getIndexType() == LogIndexType.MEASURED_DEPTH ?
-                new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() :
-                OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+        String from = curveDispatcher.getCurveProcessor(id, true).isDateTimeCurve() ?
+                OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME) :
+                new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString();
 
         CurveDataClearRequest request = new CurveDataClearRequest();
         request.setCurveId(id);
@@ -149,19 +183,15 @@ public class CurveService {
 
         ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
 
-        boolean removed = false;
-
         if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
 
             StatusMessage statusMessage = (StatusMessage) apiMessage;
 
-            removed = statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0;
-
-            if (removed) {
+            if (statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0) {
                 reloadCurve(id, key);
+            } else {
+                throw new BadRequestException(statusMessage.getMessage());
             }
         }
-
-        return removed;
     }
 }

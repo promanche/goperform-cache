@@ -9,7 +9,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.service.CurveService;
 
@@ -23,7 +22,6 @@ import java.util.List;
 public class CurveController {
 
     private final CurveService service;
-    private final Config config;
 
     @GetMapping("/curve/{id}/coordinates/by-time")
     public ResponseEntity<List<?>> getByTime(@PathVariable Long id,
@@ -32,22 +30,9 @@ public class CurveController {
                                              @RequestParam(required = false) Integer scale) {
 
         log.info("By-time request id {}, from {}, to {}, scale {}", id, from, to, scale);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        if (scale != null && !config.SCALE_MINUTES.contains(scale)) {
-            log.info("Scale {} not provided by configuration {}", scale, config.SCALE_MINUTES);
-            return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
-        }
-
         Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
         Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
-
-        List<?> response = service.getCurveData(id, doubleFrom, doubleTo, scale);
-
-        return response == null ? new ResponseEntity<>(HttpStatus.ACCEPTED) : new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(service.getCurveData(id, doubleFrom, doubleTo, scale), HttpStatus.OK);
     }
 
     @GetMapping("/curve/{id}/coordinates/by-depth")
@@ -75,44 +60,26 @@ public class CurveController {
     public ResponseEntity<CurveInfoResponse> getCurveInfo(@PathVariable Long id) {
 
         log.info("Curve-info request id {}", id);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        CurveInfoResponse response = service.getCurveInfoResponse(id);
-
-        return response == null ? new ResponseEntity<>(HttpStatus.ACCEPTED) : new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(service.getCurveInfoResponse(id), HttpStatus.OK);
     }
 
     @DeleteMapping("/curve/{id}/coordinates/by-time")
-    public ResponseEntity<Void> reloadByTime(@PathVariable Long id,
-                                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from) {
+    @ResponseStatus(HttpStatus.OK)
+    public void reloadByTime(@PathVariable Long id,
+                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from) {
 
         log.info("Reload by-time request id {}, from {}", id, from);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
         Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
-
-        return service.reloadCurve(id, doubleFrom) ? new ResponseEntity<>(HttpStatus.OK) : new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        service.reloadCurve(id, doubleFrom);
     }
 
     @DeleteMapping("/curve/{id}/coordinates/by-depth")
-    public ResponseEntity<Void> reloadByDepth(@PathVariable Long id,
-                                              @RequestParam(required = false) Double from) {
+    @ResponseStatus(HttpStatus.OK)
+    public void reloadByDepth(@PathVariable Long id,
+                              @RequestParam(required = false) Double from) {
 
         log.info("Reload by-depth request id {}, from {}", id, from);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        Double doubleFrom = from == null ? Double.MIN_VALUE : from;
-
-        return service.reloadCurve(id, doubleFrom) ? new ResponseEntity<>(HttpStatus.OK) : new ResponseEntity<>(HttpStatus.NO_CONTENT);
+        service.reloadCurve(id, from);
     }
 
     @PostMapping("/curve")
@@ -121,72 +88,34 @@ public class CurveController {
                                        Authentication authentication) {
 
         log.info("Create curve request {}", request);
-
-        Long id = service.createCurve(request, authentication.getName());
-
-        if (id != null) {
-            return new ResponseEntity<>(id, HttpStatus.OK);
-        }
-
-        return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        return new ResponseEntity<>(service.createCurve(request, authentication.getName()), HttpStatus.OK);
     }
 
     @PostMapping("/curve/{id}/comments")
-    public ResponseEntity<Void> addComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
+    @ResponseStatus(HttpStatus.OK)
+    public void addComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
         log.info("Add comment request id {}, comment {}", id, comment);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        if (service.writeComment(id, comment, authentication.getName(), false)) {
-            return new ResponseEntity<>(HttpStatus.OK);
-        }
-
-        return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        service.writeComment(id, comment, authentication.getName(), false);
     }
 
     @PutMapping("/curve/{id}/comments")
-    public ResponseEntity<Void> updateComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
+    @ResponseStatus(HttpStatus.OK)
+    public void updateComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
         log.info("Update comment request id {}, comment {}", id, comment);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        if (service.writeComment(id, comment, authentication.getName(), true)) {
-            return new ResponseEntity<>(HttpStatus.OK);
-        }
-
-        return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        service.writeComment(id, comment, authentication.getName(), true);
     }
 
     @DeleteMapping("/curve/{id}/comments")
-    public ResponseEntity<Void> deleteComment(@PathVariable Long id, @RequestParam Double key, Authentication authentication) {
+    @ResponseStatus(HttpStatus.OK)
+    public void deleteComment(@PathVariable Long id, @RequestParam Double key, Authentication authentication) {
 
         log.info("Delete comment request id {}, key {}", id, key);
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        if (service.removeComment(id, key, authentication.getName())) {
-            return new ResponseEntity<>(HttpStatus.OK);
-        }
-
-        return new ResponseEntity<>(HttpStatus.BAD_REQUEST);
+        service.removeComment(id, key, authentication.getName());
     }
 
     private ResponseEntity<List<?>> getWithoutParams(Long id) {
-
-        if (service.isBroken(id)) {
-            return new ResponseEntity<>(HttpStatus.SERVICE_UNAVAILABLE);
-        }
-
-        List<?> response = service.getCurveData(id, null, null, null);
-
-        return response == null ? new ResponseEntity<>(HttpStatus.ACCEPTED) : new ResponseEntity<>(response, HttpStatus.OK);
+        return new ResponseEntity<>(service.getCurveData(id, null, null, null), HttpStatus.OK);
     }
 }

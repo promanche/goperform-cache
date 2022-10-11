@@ -70,25 +70,31 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
     private boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
 
-        String userName = auth.getName();
+        try {
+            String userName = auth.getName();
 
-        if (
-                userName == null
-                        || userName.isEmpty()
-                        || userName.equalsIgnoreCase("anonymousUser")
-                        || userName.equalsIgnoreCase("anonymous")
-        ) {
+            if (
+                    userName == null
+                            || userName.isEmpty()
+                            || userName.equalsIgnoreCase("anonymousUser")
+                            || userName.equalsIgnoreCase("anonymous")
+            ) {
 
+                return false;
+            }
+
+            CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
+
+            Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
+
+            ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
+
+            return apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK;
+
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
             return false;
         }
-
-        CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
-
-        Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
-
-        ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
-
-        return apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK;
     }
 
     public Authentication getAuthentication(String jwt) {

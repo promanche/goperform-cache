@@ -131,45 +131,14 @@ public class CurveDispatcher implements ConnectionEventListener {
         requestQueue.add(task);
     }
 
-    public List<?> getCurveData(Long id, Double from, Double to, Integer scale) {
-
-        SingleCurveProcessor curveProcessor = getCurveProcessor(id, true);
-
-        if (curveProcessor != null) {
-            return curveProcessor.getCurveData(from, to, scale);
+    public void removeFromRequestQueue(Long id) {
+        synchronized (requestQueue) {
+            requestQueue.removeIf(task -> Objects.equals(task.request.getCurveId(), id)
+                    && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
         }
-
-        return null;
     }
 
-    public boolean reload(Long id, Double from) {
-        if (processors.containsKey(id)) {
-
-            processors.get(id).updateReloadData(from, 0);
-
-            synchronized (requestQueue) {
-                requestQueue.removeIf(task -> Objects.equals(task.request.getCurveId(), id)
-                        && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
-            }
-            return true;
-        }
-
-        return false;
-    }
-
-    public ExtraCurveInfo getCurveInfo(Long id) {
-
-        ExtraCurveInfo info = null;
-
-        if (processors.containsKey(id)) {
-            info = processors.get(id).getInfo();
-
-        }
-
-        return info;
-    }
-
-    public CurveInfoResponse getCurveInfoResponse(Long id) {
+    private CurveInfoResponse getCurveInfoResponse(Long id) {
         CurveInfoResponse response = null;
 
         SingleCurveProcessor curveProcessor = getCurveProcessor(id, true);
@@ -205,7 +174,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         histCount.addAndGet(count);
     }
 
-    private SingleCurveProcessor getCurveProcessor(Long id, boolean restRequest) {
+    public SingleCurveProcessor getCurveProcessor(Long id, boolean isRestRequest) {
 
         SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
 
@@ -222,7 +191,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             request.setCurveId(id);
             request.setInfoOnly(true);
             request.setWithRange(true);
-            RequestType type = restRequest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
+            RequestType type = isRestRequest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
             requestQueue.add(new RequestTask(request, type));
         }
 
