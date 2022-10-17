@@ -69,7 +69,7 @@ public class CurveController {
                              @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from) {
 
         log.info("Reload by-time request id {}, from {}", id, from);
-        Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
+        Double doubleFrom = from == null ? 0 : (double) from.toInstant().toEpochMilli();
         service.reloadCurve(id, doubleFrom);
     }
 
@@ -79,7 +79,8 @@ public class CurveController {
                               @RequestParam(required = false) Double from) {
 
         log.info("Reload by-depth request id {}, from {}", id, from);
-        service.reloadCurve(id, from);
+        Double doubleFrom = from == null ? Double.MIN_VALUE : from;
+        service.reloadCurve(id, doubleFrom);
     }
 
     @PostMapping("/curve")

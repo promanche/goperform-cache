@@ -11,7 +11,6 @@ import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
-import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
@@ -136,34 +135,6 @@ public class CurveDispatcher implements ConnectionEventListener {
             requestQueue.removeIf(task -> Objects.equals(task.request.getCurveId(), id)
                     && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
         }
-    }
-
-    private CurveInfoResponse getCurveInfoResponse(Long id) {
-        CurveInfoResponse response = null;
-
-        SingleCurveProcessor curveProcessor = getCurveProcessor(id, true);
-
-        if (curveProcessor != null) {
-            ExtraCurveInfo info = curveProcessor.getInfo();
-
-            response = new CurveInfoResponse(
-                    info.getId(),
-                    info.getMnemonic(),
-                    info.getIndexType(),
-                    info.getUnit(),
-                    info.getAxisDefinition(),
-                    info.getClassWitsml(),
-                    info.getTypeLogData(),
-                    info.getMaxValue(),
-                    info.getMinValue(),
-                    info.getMaxKey(),
-                    info.getMinKey(),
-                    curveProcessor.getSavedCount().get(),
-                    curveProcessor.getScaleSet(),
-                    info.getLastValue());
-        }
-
-        return response;
     }
 
     public boolean isBroken(Long id) {
