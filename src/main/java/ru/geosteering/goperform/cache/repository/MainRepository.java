@@ -45,6 +45,14 @@ public class MainRepository {
         return itemsMapper.getFromTo(id, from, to);
     }
 
+    public List<ItemDto> getItemsFromTo(long[] ids, Double from, Double to) {
+        StringJoiner joiner = new StringJoiner(",");
+        for (Long id : ids) {
+            joiner.add(String.valueOf(id));
+        }
+        return itemsMapper.getMulti(joiner.toString(), from, to);
+    }
+
     private List<String> getAllItems(Long id) {
         return itemsMapper.getAll(id);
     }
@@ -107,6 +115,14 @@ public class MainRepository {
             return getAllSegments(id, scale);
         }
         return segmentsMapper.getFromTo(id, scale, from, to);
+    }
+
+    public List<SegmentDto> getSegmentsFromTo(long[] ids, int scale, Double from, Double to) {
+        StringJoiner joiner = new StringJoiner(",");
+        for (Long id : ids) {
+            joiner.add(String.valueOf(id));
+        }
+        return segmentsMapper.getMulti(joiner.toString(), scale, from, to);
     }
 
     private List<String> getAllSegments(Long id, int scale) {

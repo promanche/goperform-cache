@@ -17,9 +17,6 @@ public interface CurveInfoMapper {
     @Update("update info set data='${data}'::jsonb where curve_id=${id}")
     void update(@Param("data") String data, @Param("id") Long id);
 
-    @Select("select data from info")
-    List<String> getAll();
-
     @Select("select data from info where curve_id=${id}")
     String get(@Param("id") Long id);
 }

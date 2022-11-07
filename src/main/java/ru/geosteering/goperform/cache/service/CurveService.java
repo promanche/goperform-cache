@@ -12,17 +12,19 @@ import ru.geosteering.commonModels.dataService.responses.StatusMessage;
 import ru.geosteering.commonModels.wits.RecordIndex;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.*;
-import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
+import ru.geosteering.goperform.cache.model.*;
 import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
+import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.List;
 
 @Service
@@ -32,6 +34,7 @@ public class CurveService {
 
     private final CurveDispatcher curveDispatcher;
     private final Config config;
+    private final MainRepository repository;
 
     public void checkCurve(Long id, Integer scale) {
         if (curveDispatcher.isBroken(id)) {
@@ -67,6 +70,31 @@ public class CurveService {
         return result;
     }
 
+    public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
+        MultiResponse response = new MultiResponse(ids);
+
+        if (scale == null || scale < 15) {
+            repository.getItemsFromTo(ids, from, to)
+                    .forEach(dto -> response.addItems(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveItem.class)));
+
+            for (long id : ids) {
+                response.addItems(id, curveDispatcher.getCurveProcessor(id, true).getTail(from, to));
+            }
+
+        } else {
+            repository.getSegmentsFromTo(ids, scale, from, to)
+                    .forEach(dto -> response.addSegments(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveSegment.class)));
+
+            for (long id : ids) {
+                response.addSegments(id, curveDispatcher.getCurveProcessor(id, true).getSegmentsFromTail(from, to, scale));
+            }
+        }
+
+        log.info("Response for ids {} prepared. Result list size: {}", Arrays.toString(ids), response.getDataSet().size() + "x" + ids.length);
+
+        return response;
+    }
+
     public void reloadCurve(Long id, Double from) {
         checkCurve(id, null);
         curveDispatcher.getCurveProcessor(id, true).updateReloadData(from, 0);
@@ -94,6 +122,22 @@ public class CurveService {
                 curveProcessor.getSavedCount().get(),
                 curveProcessor.getScaleSet(),
                 info.getLastValue());
+    }
+
+    public CurveInfoResponse[] getCurveInfoResponse(Long[] ids) {
+        CurveInfoResponse[] response = new CurveInfoResponse[ids.length];
+
+        for (int i = 0; i < response.length; i++) {
+            CurveInfoResponse cir = null;
+            try {
+                cir = getCurveInfoResponse(ids[i]);
+            } catch (Exception e) {
+                log.info(ids[i] + " " + e.getMessage());
+            }
+            response[i] = cir;
+        }
+
+        return response;
     }
 
     public Long createCurve(CreateCurveRequest req, String user) {

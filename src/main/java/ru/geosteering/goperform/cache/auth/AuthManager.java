@@ -68,6 +68,15 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
     }
 
+    public boolean checkObjectsReadAccess(Authentication auth, long[] ids) {
+        for (long id : ids) {
+            if (!checkObjectReadAccess(auth, id)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
 
         try {

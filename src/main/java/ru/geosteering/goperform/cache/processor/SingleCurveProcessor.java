@@ -44,7 +44,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private final TreeSet<CurveItem> historyItemCache = new TreeSet<>(Comparator.comparing(CurveItem::getKey));
     private final TreeSet<CurveItem> loadBuffer = new TreeSet<>(Comparator.comparing(CurveItem::getKey));
     private final Map<Integer, List<CurveSegment>> segmentCache = new HashMap<>(); // scale -> segments
-    private final Map<Integer, CurveItem> lastSegmentItem = new HashMap<>(); // scale -> lastItem
+//    private final Map<Integer, CurveItem> lastSegmentItem = new HashMap<>(); // scale -> lastItem
 
     @Getter
     private volatile CurveItem lastSaved;
@@ -90,7 +90,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     @Override
     public void onDisconnect() {
-
         loadStatus.getAndUpdate(loadStatus -> {
             switch (loadStatus) {
                 case BLOCKED:
@@ -108,33 +107,29 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public void onCurveDataMessage(CurveDataMessage message, boolean isReal) {
-
         CurveItem item = CurveItem.fromAbstractDataItem(message.getData(), info.getIndexType() != LogIndexType.MEASURED_DEPTH);
-
         if (isReal) {
             isActive = true;
-
             if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
                 collect(item, true);
                 updateInfo(item);
-
                 synchronized (loadStatus) {
                     if (loadStatus.get() == LoadStatus.UNKNOWN) {
                         doRequest(false);
                     }
                 }
-
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
+
             } else {
                 updateReloadData(item.getKey(), 5);
             }
+
         } else {
             collect(item, false);
         }
     }
 
     public void onDataEndMessage(DataEndMessage message) {
-
         int sent = message.getSentCount();
         int received = loadBuffer.size();
         int step = 5;
@@ -153,7 +148,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 realItemCache.addAll(historyItemCache);
                 historyItemCache.clear();
             }
-
             loadStatus.getAndUpdate(loadStatus -> loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED);
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
@@ -181,39 +175,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return Set.copyOf(segmentCache.keySet());
     }
 
-    public List<?> getCurveData(Double from, Double to, Integer scale) {
-
+    public synchronized List<?> getCurveData(Double from, Double to, Integer scale) {
         haveRestRequest = true;
-
         if (scale != null && segmentCache.containsKey(scale)) {
-
             List<CurveSegment> result;
-            synchronized (segmentCache.get(scale)) {
-                result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
-                        .stream()
-                        .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
-                        .collect(Collectors.toList());
+            result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
+                    .stream()
+                    .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
+                    .collect(Collectors.toList());
 
-                result.addAll(segmentCache.get(scale));
-
-            }
-
-            List<CurveItem> tail;
-            synchronized (realItemCache) {
-                tail = List.copyOf(realItemCache);
-            }
-            CurveSegment lastSegment = result.isEmpty() ? null : result.get(result.size() - 1);
-            int secondsOnPixel = scale * 60 / 120;
-            for (CurveItem item : tail) {
-                if (lastSegment != null && item.getKey() - lastSegment.getFirstKey() < (secondsOnPixel - 1) * 1000) {
-                    lastSegment.addItem(item);
-                } else {
-                    CurveSegment segment = new CurveSegment();
-                    segment.addItem(item);
-                    result.add(segment);
-                    lastSegment = segment;
-                }
-            }
+            result.addAll(segmentCache.get(scale));
+            addSegmentsFromItems(getTail(from, to), scale, result);
 
             return result;
 
@@ -223,48 +195,52 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .collect(Collectors.toList());
 
-            double finalFrom = from == null ? Double.MIN_VALUE : from;
-            double finalTo = to == null ? Double.MAX_VALUE : to;
-
-            synchronized (historyItemCache) {
-                historyItemCache.stream()
-                        .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
-                        .forEachOrdered(result::add);
-            }
-
-            synchronized (realItemCache) {
-                realItemCache.stream()
-                        .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
-                        .forEachOrdered(result::add);
-            }
+            result.addAll(getTail(from, to));
 
             return result;
         }
     }
 
-    public void updateReloadData(Double from, int delayMinutes) {
+    public synchronized List<CurveItem> getTail(Double from, Double to) {
+        List<CurveItem> result = new ArrayList<>();
 
+        double finalFrom = from == null ? Double.MIN_VALUE : from;
+        double finalTo = to == null ? Double.MAX_VALUE : to;
+
+        historyItemCache.stream()
+                .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
+                .forEachOrdered(result::add);
+
+        realItemCache.stream()
+                .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
+                .forEachOrdered(result::add);
+
+        return result;
+    }
+
+    public synchronized List<CurveSegment> getSegmentsFromTail(Double from, Double to, int scale) {
+        List<CurveSegment> result = new ArrayList<>();
+        addSegmentsFromItems(getTail(from, to), scale, result);
+        return result;
+    }
+
+    public void updateReloadData(Double from, int delayMinutes) {
         synchronized (reloadData) {
             loadStatus.set(LoadStatus.BLOCKED);
             reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
             reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
         }
-
         dispatcher.removeFromRequestQueue(info.getId());
     }
 
     public void reload() {
         synchronized (reloadData) {
             if (reloadData.reloadTime != null && reloadData.reloadTime.isBefore(LocalDateTime.now()) && loadBuffer.isEmpty()) {
-
                 log.info("Curve {} will be reload from {}", info.getId(), reloadData.from);
-
                 clearData(reloadData.from);
                 loadLost();
-
                 reloadData.reloadTime = null;
                 reloadData.from = null;
-
                 doRequest(true);
             }
         }
@@ -276,7 +252,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         historyItemCache.clear();
         realItemCache.clear();
         segmentCache.clear();
-        lastSegmentItem.clear();
 
         if (lastSaved != null && Double.compare(lastSaved.getKey(), reloadData.from) >= 0) {
             dispatcher.getRepository().deleteItems(info.getId(), from);
@@ -300,6 +275,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 realItemCache.add(item);
                 saveRealItems();
             }
+
         } else {
             synchronized (loadBuffer) {
                 if (loadBuffer.isEmpty()) {
@@ -312,7 +288,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void saveRealItems() {
-
         if (loadStatus.get() == LoadStatus.LOADED) {
 
             CurveItem tmpFirst = firstSaved;
@@ -320,12 +295,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             int tmpCount = 0;
 
             while (realItemCache.size() >= dispatcher.getConfig().BATCH_SIZE + dispatcher.getConfig().MARGIN_SIZE) {
-
                 ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
                 for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
                     itemsBatch.add(realItemCache.pollFirst());
                 }
-
                 dispatcher.getRepository().saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch)));
 
                 if (tmpFirst == null) {
@@ -346,7 +319,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void saveHistoryItems() {
-
         synchronized (historyItemCache) {
             List<ItemDto> transfer = new ArrayList<>();
 
@@ -354,9 +326,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             CurveItem tmpLast = lastSaved;
             int tmpCount = 0;
 
-
             while (historyItemCache.size() >= dispatcher.getConfig().BATCH_SIZE) {
-
                 ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
 
                 for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
@@ -373,7 +343,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             }
 
             dispatcher.getRepository().saveItems(transfer);
-
             firstSaved = tmpFirst;
             lastSaved = tmpLast;
             savedCount.addAndGet(tmpCount);
@@ -381,11 +350,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void updateInfo(CurveItem item) {
-
         synchronized (info) {
-
             Double key = item.getKey();
-
             if (info.getMinKey() == null || Double.compare(info.getMinKey(), key) > 0) {
                 info.setMinKey(key);
             }
@@ -401,7 +367,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 if (info.getMinValue() == null || Double.compare(info.getMinValue(), value) > 0) {
                     info.setMinValue(value);
                 }
-
                 if (info.getMaxValue() == null || Double.compare(info.getMaxValue(), value) < 0) {
                     info.setMaxValue(value);
                 }
@@ -410,9 +375,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void updateInfoFromBuffer() {
-
         synchronized (info) {
-
             if (info.getMinKey() == null || Double.compare(info.getMinKey(), loadBuffer.first().getKey()) > 0) {
                 info.setMinKey(loadBuffer.first().getKey());
             }
@@ -423,7 +386,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             }
 
             if (info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)) {
-
                 for (CurveItem item : loadBuffer) {
                     double value = (Double) item.getValue();
                     if (info.getMinValue() == null || Double.compare(info.getMinValue(), value) > 0) {
@@ -441,7 +403,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private void doRequest(boolean ifBlocked) {
         loadBuffer.clear();
-
         if (loadStatus.get() != LoadStatus.BLOCKED || ifBlocked) {
             String from = findFrom();
             String to = findTo();
@@ -466,23 +427,19 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private String findFrom() {
-
         Double key = historyItemCache.isEmpty() ? lastSaved == null ? null : lastSaved.getKey() : historyItemCache.last().getKey();
         return getKeyAsString(key, info.getIndexType());
     }
 
     private String findTo() {
-
         Double key = realItemCache.isEmpty() ? null : realItemCache.first().getKey();
         return getKeyAsString(key, info.getIndexType());
     }
 
     private String getKeyAsString(Double key, LogIndexType type) {
-
         if (key == null) {
             return null;
         }
-
         return type == LogIndexType.MEASURED_DEPTH ?
                 new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() :
                 OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
@@ -493,14 +450,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void createSegments(Collection<CurveItem> items) {
-
         if (isApproximated && lastSaved != null && firstSaved != null) {
             for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
-
                 int itemsOnPixel = findItemsOnPixel(scale);
-
-                if (isApproximatedScale(itemsOnPixel)) {
-
+                if (isApproximatedScale(scale)) {
                     createScaleSegments(items, scale, itemsOnPixel);
 
                 } else {
@@ -510,12 +463,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    private boolean isApproximatedScale(int itemsOnPixel) {
-        return itemsOnPixel >= 5;
+    private boolean isApproximatedScale(Integer scale) {
+        return scale != null && scale >= 15;
     }
 
     private int findItemsOnPixel(int scale) {
-
         int totalSeconds = (int) ((lastSaved.getKey() - firstSaved.getKey()) / 1000);
         int secondsOnPixel = scale * 60 / 120;
 
@@ -523,78 +475,55 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void createScaleSegments(Collection<CurveItem> items, int scale, int itemsOnPixel) {
-
-        List<CurveSegment> segments = segmentCache.computeIfAbsent(scale, k -> new ArrayList<>());
-
-        synchronized (segments) {
-            CurveSegment lastSegment = segments.isEmpty() ? null : segments.get(segments.size() - 1);
-
-            int secondsOnPixel = scale * 60 / 120;
-
-            for (CurveItem item : items) {
-
-                if (lastSegment != null && item.getKey() - lastSegment.getFirstKey() < (secondsOnPixel - 1) * 1000) {
-
-                    lastSegment.addItem(item);
-
-                } else {
-
-                    CurveSegment segment = new CurveSegment();
-
-                    CurveItem lastItem = lastSegmentItem.get(scale);
-                    if (lastItem != null && item.getKey() - lastItem.getKey() < (secondsOnPixel - 1) * 1000) {
-                        segment.addItem(lastItem);
-                    }
-
-                    segment.addItem(item);
-
-                    segments.add(segment);
-
-                    lastSegment = segment;
-                }
-
-                lastSegmentItem.put(scale, item);
-            }
-
+        List<CurveSegment> segments;
+        synchronized (segments = segmentCache.computeIfAbsent(scale, k -> new ArrayList<>())) {
+            addSegmentsFromItems(items, scale, segments);
             if (segments.size() > 1) {
-
-                segments.remove(segments.size() - 1);
-
+                CurveSegment last = segments.remove(segments.size() - 1);
                 saveSegments(segments, scale);
-
-                log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), info.getId(), scale, secondsOnPixel, itemsOnPixel);
-
                 segments.clear();
+                segments.add(last);
+                log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), info.getId(), scale, scale * 60 / 120, itemsOnPixel);
+            }
+        }
+    }
 
-                segments.add(lastSegment);
+    private void addSegmentsFromItems(Collection<CurveItem> items, int scale, List<CurveSegment> segments) {
+        CurveSegment lastSegment = segments.isEmpty() ? null : segments.get(segments.size() - 1);
+        for (CurveItem item : items) {
+            if (lastSegment != null && Double.compare(item.getKey(), lastSegment.getFirstKey()) >= 0 && Double.compare(item.getKey(), lastSegment.getLastKey()) <= 0) {
+                lastSegment.addItem(item);
+
+            } else {
+                CurveSegment segment = new CurveSegment(item, scale);
+                if (lastSegment != null && Double.compare(lastSegment.getLastKey(), segment.getFirstKey()) == 0) {
+                    lastSegment.addItem(item);
+                }
+                segment.addItem(item);
+                segments.add(segment);
+                lastSegment = segment;
             }
         }
     }
 
     private void saveSegments(List<CurveSegment> segments, int scale) {
-
         List<SegmentDto> transfer = new ArrayList<>();
-
         int first = 0;
-
         while (segments.size() - first > dispatcher.getConfig().BATCH_SIZE) {
             transfer.add(SegmentDto.fromLinesList(info.getId(), scale, segments.subList(first, first + dispatcher.getConfig().BATCH_SIZE)));
             first = first + dispatcher.getConfig().BATCH_SIZE;
         }
 
         transfer.add(SegmentDto.fromLinesList(info.getId(), scale, segments.subList(first, segments.size())));
-
         dispatcher.getRepository().saveSegments(transfer);
     }
 
     private void loadLost() {
-
         if (isApproximated && lastSaved != null && firstSaved != null) {
-
             Map<Integer, Double> scaleLast = dispatcher.getRepository().getScalesLast(info.getId());
 
             for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
-                if (isApproximatedScale(findItemsOnPixel(scale))) {
+                if (isApproximatedScale(scale)) {
                     scaleLast.putIfAbsent(scale, Double.MIN_VALUE);
                 }
             }
@@ -614,7 +543,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         .collect(Collectors.toList());
 
                 if (!lost.isEmpty()) {
-                    lastSegmentItem.put(scale, lost.get(0));
                     createScaleSegments(lost, scale, findItemsOnPixel(scale));
                 }
             });

@@ -14,6 +14,9 @@ public interface ItemsMapper {
     @Select("select data from items where curve_id=${id} and ${from} <= last and ${to} >= first order by first")
     List<String> getFromTo(@Param("id") Long id, @Param("from") Double from, @Param("to") Double to);
 
+    @Select("select curve_id as id, first, last, data from items where curve_id in (${ids}) and ${from} <= last and ${to} >= first order by first")
+    List<ItemDto> getMulti(@Param("ids") String ids, @Param("from") Double from, @Param("to") Double to);
+
     @Select("select data from items where curve_id=${id} order by first")
     List<String> getAll(@Param("id") Long id);
 
@@ -22,9 +25,6 @@ public interface ItemsMapper {
 
     @Delete("delete from items where curve_id=${id}")
     void deleteAll(@Param("id") Long id);
-
-    @Select("select distinct curve_id from items")
-    List<Long> getAllIds();
 
     @Select("select data -> 0 from items where curve_id=${id} order by first limit 1")
     String getFirst(@Param("id") Long id);

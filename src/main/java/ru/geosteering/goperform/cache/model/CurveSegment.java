@@ -7,6 +7,7 @@ import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
 @Getter
 @Setter
 @EqualsAndHashCode
+@NoArgsConstructor
 public class CurveSegment {
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double firstKey;
@@ -16,6 +17,13 @@ public class CurveSegment {
     private Double minVal;
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double maxVal;
+
+    public CurveSegment(CurveItem item, int scale) {
+        int msOnPixel = scale * 60000 / 120;
+        long key = item.getKey().longValue();
+        firstKey = (double) (key - key % msOnPixel);
+        lastKey = firstKey + msOnPixel;
+    }
 
     public void addItem(CurveItem item) {
 
@@ -28,10 +36,6 @@ public class CurveSegment {
             if (minVal == null || value < minVal) {
                 minVal = value;
             }
-            if (firstKey == null) {
-                firstKey = item.getKey();
-            }
-            lastKey = item.getKey();
         }
     }
 }

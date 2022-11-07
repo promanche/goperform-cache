@@ -54,7 +54,6 @@ public class NatsConnector {
             connection = Nats.connect(options);
         } catch (IOException | InterruptedException e) {
             log.error("Connection exception: {}", e.getMessage(), e);
-            reconnect();
         }
 
         if (isConnected()) {

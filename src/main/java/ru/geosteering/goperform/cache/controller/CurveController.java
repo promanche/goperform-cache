@@ -13,6 +13,7 @@ import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.service.CurveService;
 
 import java.time.OffsetDateTime;
+import java.util.Arrays;
 import java.util.List;
 
 @RestController
@@ -63,6 +64,35 @@ public class CurveController {
         return new ResponseEntity<>(service.getCurveInfoResponse(id), HttpStatus.OK);
     }
 
+    @GetMapping("/curve/multi")
+    @PreAuthorize("@authManager.checkObjectsReadAccess(authentication, #ids)")
+    public ResponseEntity<CurveInfoResponse[]> getCurveInfo(@RequestParam Long[] ids) {
+        log.info("Curve-info request ids {}", Arrays.toString(ids));
+        CurveInfoResponse[] infos = service.getCurveInfoResponse(ids);
+        for (CurveInfoResponse cir : infos) {
+            if (cir == null) {
+                return new ResponseEntity<>(infos, HttpStatus.ACCEPTED);
+            }
+        }
+        return new ResponseEntity<>(infos, HttpStatus.OK);
+    }
+
+    @GetMapping("/curve/multi/coordinates/by-time")
+    @PreAuthorize("@authManager.checkObjectsReadAccess(authentication, #ids)")
+    @ResponseStatus(HttpStatus.OK)
+    public MultiResponse getByTime(@RequestParam long[] ids,
+                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+                                   @RequestParam(required = false) Integer scale) {
+
+        log.info("By-time request ids {}, from {}, to {}, scale {}", ids, from, to, scale);
+        Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
+        Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
+
+        return service.getMultiResponse(ids, doubleFrom, doubleTo, scale);
+
+    }
+
     @DeleteMapping("/curve/{id}/coordinates/by-time")
     @ResponseStatus(HttpStatus.OK)
     public void reloadByTime(@PathVariable Long id,
@@ -84,7 +114,7 @@ public class CurveController {
     }
 
     @PostMapping("/curve")
-    @PreAuthorize("@authManager.checkObjectWriteAccess(#authentication, #request.logId)")
+    @PreAuthorize("@authManager.checkObjectWriteAccess(authentication, #request.logId)")
     public ResponseEntity<Long> create(@RequestBody @Validated CreateCurveRequest request,
                                        Authentication authentication) {
 
