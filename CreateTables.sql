@@ -28,8 +28,10 @@ create table segments
 );
 
 create index on items(curve_id);
+create index on items(curve_id, first, last);
 
 create index on info(curve_id);
 
 create index on segments(curve_id);
 create index on segments(curve_id, scale);
+create index on segments(curve_id, scale, first, last);
