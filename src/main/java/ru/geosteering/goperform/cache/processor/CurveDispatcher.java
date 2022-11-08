@@ -66,6 +66,8 @@ public class CurveDispatcher implements ConnectionEventListener {
                 int history = histCount.getAndSet(0);
                 int real = realCount.getAndSet(0);
 
+                seconds = seconds == 0 ? 1 : seconds;
+
                 log.info("STATISTICS FOR THE PERIOD: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
                         history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
             } catch (Exception e) {
