@@ -11,6 +11,7 @@ import ru.geosteering.goperform.cache.config.Config;
 import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Component
 @Slf4j
@@ -21,6 +22,7 @@ public class NatsConnector {
     private final HistoryMessageHandler historyHandler;
     private final ConnectionEventDispatcher connectionEventDispatcher;
     private final Config config;
+    private final AtomicBoolean reconnecting = new AtomicBoolean(false);
 
     private static Connection connection;
 
@@ -102,22 +104,26 @@ public class NatsConnector {
     }
 
     void reconnect() {
-        try {
-            closeConnection();
+        if (reconnecting.compareAndSet(false, true)) {
+            try {
+                closeConnection();
 
-            int seconds = config.RECONNECT_TIMEOUT_SECONDS;
-            while (seconds > 0) {
-                log.info("Reconnect waiting... " + seconds);
-                Thread.sleep(1000);
-                seconds--;
+                int seconds = config.RECONNECT_TIMEOUT_SECONDS;
+                while (seconds > 0) {
+                    log.info("Reconnect waiting... " + seconds);
+                    Thread.sleep(1000);
+                    seconds--;
+                }
+
+                realtimeHandler.initExecutor();
+                historyHandler.initExecutor();
+                connect();
+
+            } catch (InterruptedException e) {
+                log.error(e.getMessage(), e);
+            } finally {
+                reconnecting.set(false);
             }
-
-            realtimeHandler.initExecutor();
-            historyHandler.initExecutor();
-            connect();
-
-        } catch (InterruptedException e) {
-            log.error(e.getMessage(), e);
         }
     }
 }

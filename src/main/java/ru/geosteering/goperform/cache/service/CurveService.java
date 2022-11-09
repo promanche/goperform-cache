@@ -73,12 +73,15 @@ public class CurveService {
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
         MultiResponse response = new MultiResponse(ids);
 
-        if (scale == null || scale < 15) {
+        if (scale == null || scale < config.SEGMENTS_FROM_SCALE) {
             repository.getItemsFromTo(ids, from, to)
                     .forEach(dto -> response.addItems(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveItem.class)));
 
             for (long id : ids) {
-                response.addItems(id, curveDispatcher.getCurveProcessor(id, true).getTail(from, to));
+                SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
+                if (processor != null) {
+                    response.addItems(id, processor.getTail(from, to));
+                }
             }
 
         } else {
@@ -86,7 +89,10 @@ public class CurveService {
                     .forEach(dto -> response.addSegments(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveSegment.class)));
 
             for (long id : ids) {
-                response.addSegments(id, curveDispatcher.getCurveProcessor(id, true).getSegmentsFromTail(from, to, scale));
+                SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
+                if (processor != null) {
+                    response.addSegments(id, processor.getSegmentsFromTail(from, to, scale));
+                }
             }
         }
 

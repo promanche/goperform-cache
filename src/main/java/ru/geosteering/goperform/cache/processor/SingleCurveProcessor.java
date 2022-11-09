@@ -175,16 +175,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return Set.copyOf(segmentCache.keySet());
     }
 
-    public synchronized List<?> getCurveData(Double from, Double to, Integer scale) {
+    public List<?> getCurveData(Double from, Double to, Integer scale) {
         haveRestRequest = true;
-        if (scale != null && segmentCache.containsKey(scale)) {
+        if (scale != null && segmentCache.containsKey(scale) && scale >= dispatcher.getConfig().SEGMENTS_FROM_SCALE) {
             List<CurveSegment> result;
             result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
                     .stream()
                     .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
                     .collect(Collectors.toList());
-
-            result.addAll(segmentCache.get(scale));
+            synchronized (segmentCache) {
+                result.addAll(segmentCache.get(scale));
+            }
             addSegmentsFromItems(getTail(from, to), scale, result);
 
             return result;
@@ -201,24 +202,28 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    public synchronized List<CurveItem> getTail(Double from, Double to) {
+    public List<CurveItem> getTail(Double from, Double to) {
         List<CurveItem> result = new ArrayList<>();
 
         double finalFrom = from == null ? Double.MIN_VALUE : from;
         double finalTo = to == null ? Double.MAX_VALUE : to;
 
-        historyItemCache.stream()
-                .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
-                .forEachOrdered(result::add);
+        synchronized (historyItemCache) {
+            historyItemCache.stream()
+                    .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
+                    .forEach(result::add);
+        }
 
-        realItemCache.stream()
-                .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
-                .forEachOrdered(result::add);
+        synchronized (realItemCache) {
+            realItemCache.stream()
+                    .filter(item -> Double.compare(item.getKey(), finalFrom) >= 0 && Double.compare(item.getKey(), finalTo) <= 0)
+                    .forEach(result::add);
+        }
 
         return result;
     }
 
-    public synchronized List<CurveSegment> getSegmentsFromTail(Double from, Double to, int scale) {
+    public List<CurveSegment> getSegmentsFromTail(Double from, Double to, int scale) {
         List<CurveSegment> result = new ArrayList<>();
         addSegmentsFromItems(getTail(from, to), scale, result);
         return result;
