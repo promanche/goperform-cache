@@ -80,7 +80,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     @Override
-    public void onConnect() {
+    public synchronized void onConnect() {
         synchronized (loadStatus) {
             if (loadStatus.get() == LoadStatus.UNKNOWN) {
                 doRequest(false);
@@ -89,7 +89,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     @Override
-    public void onDisconnect() {
+    public synchronized void onDisconnect() {
         loadStatus.getAndUpdate(loadStatus -> {
             switch (loadStatus) {
                 case BLOCKED:
@@ -106,7 +106,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         loadBuffer.clear();
     }
 
-    public void onCurveDataMessage(CurveDataMessage message, boolean isReal) {
+    public synchronized void onCurveDataMessage(CurveDataMessage message, boolean isReal) {
         CurveItem item = CurveItem.fromAbstractDataItem(message.getData(), info.getIndexType() != LogIndexType.MEASURED_DEPTH);
         if (isReal) {
             isActive = true;
@@ -129,17 +129,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    public void onDataEndMessage(DataEndMessage message) {
+    public synchronized void onDataEndMessage(DataEndMessage message) {
         int sent = message.getSentCount();
         int received = loadBuffer.size();
-        int step = 5;
-
-        while (sent != received && step > 0) {
-            log.warn("Curve {} received {}. Waiting for last points.....", info.getId(), received);
-            LockSupport.parkUntil(30 + System.currentTimeMillis());
-            step--;
-            received = loadBuffer.size();
-        }
+//        int step = 5;
+//
+//        while (sent != received && step > 0) {
+//            log.warn("Curve {} received {}. Waiting for last points.....", info.getId(), received);
+//            LockSupport.parkUntil(30 + System.currentTimeMillis());
+//            step--;
+//            received = loadBuffer.size();
+//        }
 
         dispatcher.incrementHistCount(received);
 
@@ -171,13 +171,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    public Set<Integer> getScaleSet() {
+    public synchronized Set<Integer> getScaleSet() {
         return Set.copyOf(segmentCache.keySet());
     }
 
-    public List<?> getCurveData(Double from, Double to, Integer scale) {
+    public synchronized List<?> getCurveData(Double from, Double to, Integer scale) {
         haveRestRequest = true;
-        if (scale != null && segmentCache.containsKey(scale) && scale >= dispatcher.getConfig().SEGMENTS_FROM_SCALE) {
+        if (scale != null && segmentCache.containsKey(scale)) {
             List<CurveSegment> result;
             result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
                     .stream()
@@ -202,7 +202,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    public List<CurveItem> getTail(Double from, Double to) {
+    public synchronized List<CurveItem> getTail(Double from, Double to) {
         List<CurveItem> result = new ArrayList<>();
 
         double finalFrom = from == null ? Double.MIN_VALUE : from;
@@ -223,13 +223,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return result;
     }
 
-    public List<CurveSegment> getSegmentsFromTail(Double from, Double to, int scale) {
+    public synchronized List<CurveSegment> getSegmentsFromTail(Double from, Double to, int scale) {
         List<CurveSegment> result = new ArrayList<>();
         addSegmentsFromItems(getTail(from, to), scale, result);
         return result;
     }
 
-    public void updateReloadData(Double from, int delayMinutes) {
+    public synchronized void updateReloadData(Double from, int delayMinutes) {
         synchronized (reloadData) {
             loadStatus.set(LoadStatus.BLOCKED);
             reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
@@ -238,7 +238,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         dispatcher.removeFromRequestQueue(info.getId());
     }
 
-    public void reload() {
+    public synchronized void reload() {
         synchronized (reloadData) {
             if (reloadData.reloadTime != null && reloadData.reloadTime.isBefore(LocalDateTime.now()) && loadBuffer.isEmpty()) {
                 log.info("Curve {} will be reload from {}", info.getId(), reloadData.from);

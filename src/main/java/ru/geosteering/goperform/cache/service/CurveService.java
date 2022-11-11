@@ -73,7 +73,7 @@ public class CurveService {
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
         MultiResponse response = new MultiResponse(ids);
 
-        if (scale == null || scale < config.SEGMENTS_FROM_SCALE) {
+        if (scale == null || scale < 15) {
             repository.getItemsFromTo(ids, from, to)
                     .forEach(dto -> response.addItems(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveItem.class)));
 

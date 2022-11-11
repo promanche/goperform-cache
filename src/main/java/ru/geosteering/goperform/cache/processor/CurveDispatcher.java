@@ -21,6 +21,8 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.LockSupport;
 import java.util.stream.Collectors;
 
 @Component
@@ -98,33 +100,26 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public void onCurveDataMessage(CurveDataMessage message, boolean isReal) {
-
         Long id = message.getId();
-
         if (isReal) {
             activeCurves.add(id);
             realCount.incrementAndGet();
         }
-
         if (brokenCurves.containsKey(id)) {
             return;
         }
-
         SingleCurveProcessor curveProcessor = getCurveProcessor(id, false);
-
         if (curveProcessor != null) {
             curveProcessor.onCurveDataMessage(message, isReal);
         }
     }
 
     public void onDataEndMessage(DataEndMessage message, String subject) {
-
         Long id = parseId(subject);
-
+        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
         if (id != null) {
             processors.get(id).onDataEndMessage(message);
         }
-
         requestAllowed.incrementAndGet();
     }
 
@@ -148,14 +143,11 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public SingleCurveProcessor getCurveProcessor(Long id, boolean isRestRequest) {
-
         SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
-
             ExtraCurveInfo info = repository.getInfo(id).orElse(null);
             if (info != null) {
                 return new SingleCurveProcessor(info, this);
             }
-
             return null;
         });
 

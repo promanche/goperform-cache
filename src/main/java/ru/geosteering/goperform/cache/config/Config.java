@@ -55,9 +55,6 @@ public class Config {
     public final List<Integer> SCALE_MINUTES;
 
     @Positive
-    public final int SEGMENTS_FROM_SCALE;
-
-    @Positive
     public final int STATISTIC_PERIOD_SECONDS;
 
     public final String HISTORY_NUID;
@@ -71,9 +68,8 @@ public class Config {
                   @Value("${goperform.margin-size}") int marginSize,
                   @Value("${goperform.credentials-file}") String credentialsFile,
                   @Value("${goperform.nats-onetime-requests}") int natsOnetimeRequests,
-                  @Value("${goperform.reconnect-timeout-sec}") int reconnectTimeoutSeconds,
+                  @Value("${goperform.reconnect-timeout-sec:10}") int reconnectTimeoutSeconds,
                   @Value("#{${goperform.scale-minutes}}") List<Integer> scaleMinutes,
-                  @Value("${goperform.segments-from-scale:30}") int segmentsFromScale,
                   @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds) {
         this.SUBJECT = subject;
         this.HOST = host;
@@ -86,7 +82,6 @@ public class Config {
         this.NATS_ONETIME_REQUESTS = natsOnetimeRequests;
         this.RECONNECT_TIMEOUT_SECONDS = reconnectTimeoutSeconds;
         this.SCALE_MINUTES = scaleMinutes;
-        this.SEGMENTS_FROM_SCALE = segmentsFromScale;
         this.STATISTIC_PERIOD_SECONDS = statisticPeriodSeconds;
 
         this.HISTORY_NUID = NUID.nextGlobal();
