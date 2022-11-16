@@ -65,6 +65,13 @@ public class NatsConnector {
         }
     }
 
+	private class ErrorListenerLoggerImpl extends io.nats.client.impl.ErrorListenerLoggerImpl {
+		@Override
+		public void exceptionOccurred(final Connection conn, final Exception exp) {
+			log.error( "NATS exception occurred", exp );
+		}
+	}
+
     private static boolean isConnected() {
         return connection != null && connection.getStatus() == Connection.Status.CONNECTED;
     }
