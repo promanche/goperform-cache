@@ -61,20 +61,44 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
     }
 
     public boolean checkObjectReadAccess(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
+        log.debug("checkObjectReadAccess started. User: {}, id {}", auth.getName(), id);
+        boolean result = checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
+
+        if (result) {
+            log.debug("checkObjectReadAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
+        } else {
+            log.warn("checkObjectReadAccess completed. User: {}, id {}, result: {}", auth.getName(), id, false);
+        }
+        return result;
     }
 
     public boolean checkObjectWriteAccess(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
+        log.debug("checkObjectWriteAccess START. User: {}, id {}", auth.getName(), id);
+        boolean result = checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
+
+        if (result) {
+            log.debug("checkObjectWriteAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
+        } else {
+            log.warn("checkObjectWriteAccess completed. User: {}, id {}, result: {}", auth.getName(), id, false);
+        }
+        return result;
     }
 
     public boolean checkObjectsReadAccess(Authentication auth, long[] ids) {
+        log.debug("checkObjectsReadAccess START. User: {}, ids {}", auth.getName(), Arrays.toString(ids));
+        boolean result = true;
         for (long id : ids) {
             if (!checkObjectReadAccess(auth, id)) {
-                return false;
+                result = false;
             }
         }
-        return true;
+
+        if (result) {
+            log.debug("checkObjectsReadAccess completed. User: {}, ids {}, result: {}", auth.getName(), Arrays.toString(ids), true);
+        } else {
+            log.warn("checkObjectsReadAccess completed. User: {}, ids {}, result: {}", auth.getName(), Arrays.toString(ids), false);
+        }
+        return result;
     }
 
     private boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
@@ -94,7 +118,9 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
             CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
 
+            log.trace("Request: {}", request);
             Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
+            log.trace("Response: {}", response);
 
             ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
@@ -122,7 +148,9 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
             TokenRequest request = new TokenRequest(jwt);
 
+            log.trace("Request: {}", request);
             Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
+            log.trace("Response: {}", response);
 
             ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 

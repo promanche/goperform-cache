@@ -57,7 +57,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             try {
                 Map<String, Integer> curvesInfo = processors.values().stream()
                         .map(SingleCurveProcessor::getLoadStatus)
-                        .collect(Collectors.toMap(ls -> ls.get().name(), ls -> 1, Integer::sum));
+                        .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
                 curvesInfo.put("ACTIVE", activeCurves.size());
                 curvesInfo.put("BROKEN", brokenCurves.size());
                 log.info("CURVES INFO: {}", curvesInfo);
@@ -195,7 +195,9 @@ public class CurveDispatcher implements ConnectionEventListener {
                     processors.get(requestTask.request.getCurveId()).setRequestTimer(System.currentTimeMillis());
                 }
 
+                log.info("Request: {}", requestTask.request);
                 Message response = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(requestTask.request));
+                log.info("Response: {}", response);
 
                 if (response != null) {
                     ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);

@@ -125,7 +125,7 @@ public class CurveService {
                 info.getMinValue(),
                 info.getMaxKey(),
                 info.getMinKey(),
-                curveProcessor.getSavedCount().get(),
+                curveProcessor.getSavedCount(),
                 curveProcessor.getScaleSet(),
                 info.getLastValue());
     }
@@ -157,7 +157,9 @@ public class CurveService {
         request.setCurveInfo(info);
         request.setUser(user);
 
+        log.info("Request: {}", request);
         Message message = NatsConnector.sendRequest("gostream.curvesAdd", StaticMapper.toBytes(request));
+        log.info("Response: {}", message);
 
         ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
 
@@ -196,7 +198,9 @@ public class CurveService {
         request.setUser(user);
         request.setUpdate(update);
 
+        log.info("Request: {}", request);
         Message message = NatsConnector.sendRequest("gostream.curvesStore", StaticMapper.toBytes(request));
+        log.info("Response: {}", message);
 
         ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
 
@@ -229,7 +233,9 @@ public class CurveService {
         request.setUser(user);
         request.setUpdateBaseTimestamp(OffsetDateTime.now(ZoneId.of("Z")));
 
+        log.info("Request: {}", request);
         Message message = NatsConnector.sendRequest("gostream.curvesClear", StaticMapper.toBytes(request));
+        log.info("Response: {}", message);
 
         ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
 

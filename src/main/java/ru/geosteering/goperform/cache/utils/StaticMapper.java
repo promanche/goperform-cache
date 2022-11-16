@@ -30,7 +30,7 @@ public class StaticMapper {
         try {
             return mapper.readValue(json, clazz);
         } catch (Exception e) {
-            log.warn("Parsing object exception: json {}, class {}", json, clazz.getSimpleName(), e);
+            log.error("Parsing object exception: json {}, class {}", json, clazz.getSimpleName(), e);
             return null;
         }
     }
