@@ -21,7 +21,6 @@ import java.time.LocalDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.LockSupport;
 import java.util.stream.Collectors;
 
@@ -197,7 +196,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                 log.info("Request: {}", requestTask.request);
                 Message response = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(requestTask.request));
-                log.info("Response: {}", response);
+                log.info("Response: {}", new String(response.getData()));
 
                 if (response != null) {
                     ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);

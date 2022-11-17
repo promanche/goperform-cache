@@ -4,6 +4,8 @@ import io.nats.client.Message;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StopWatch;
+
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.*;
@@ -73,30 +75,73 @@ public class CurveService {
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
         MultiResponse response = new MultiResponse(ids);
 
+        StopWatch swDispatch = new StopWatch();
+        StopWatch swProcess = new StopWatch();
+        StopWatch swParse = new StopWatch();
+        StopWatch swAdd = new StopWatch();
         if (scale == null || scale < 15) {
             repository.getItemsFromTo(ids, from, to)
-                    .forEach(dto -> response.addItems(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveItem.class)));
+                    .forEach(dto -> {
+                        swParse.start();
+                        List<CurveItem> items = StaticMapper.parseListOf(dto.getData(), CurveItem.class);
+                        swParse.stop();
+
+                        swAdd.start();
+                        response.addItems(dto.getId(), items);
+                        swAdd.stop();
+                    });
 
             for (long id : ids) {
+                swDispatch.start();
                 SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
+                swDispatch.stop();
                 if (processor != null) {
-                    response.addItems(id, processor.getTail(from, to));
+                    swProcess.start();
+                    List<CurveItem> items = processor.getTail(from, to);
+                    swProcess.stop();
+
+                    swAdd.start();
+                    response.addItems(id, items);
+                    swAdd.stop();
                 }
             }
 
         } else {
             repository.getSegmentsFromTo(ids, scale, from, to)
-                    .forEach(dto -> response.addSegments(dto.getId(), StaticMapper.parseListOf(dto.getData(), CurveSegment.class)));
+                    .forEach(dto -> {
+                        swParse.start();
+                        List<CurveSegment> items = StaticMapper.parseListOf(dto.getData(), CurveSegment.class);
+                        swParse.stop();
+
+                        swAdd.start();
+                        response.addSegments(dto.getId(), items);
+                        swAdd.stop();
+                }   );
 
             for (long id : ids) {
+                swDispatch.start();
                 SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
+                swDispatch.stop();
                 if (processor != null) {
-                    response.addSegments(id, processor.getSegmentsFromTail(from, to, scale));
+                    swProcess.start();
+                    List<CurveSegment> items = processor.getSegmentsFromTail(from, to, scale);
+                    swProcess.stop();
+
+                    swAdd.start();
+                    response.addSegments(id, items);
+                    swAdd.stop();
                 }
             }
         }
 
         log.info("Response for ids {} prepared. Result list size: {}", Arrays.toString(ids), response.getDataSet().size() + "x" + ids.length);
+        // FIXME: должно быть debug!
+        log.info("getMultiResponse() operations: parse {} ms, add {} ms, dispatch {} ms, process {} ms"
+            , swParse   .getTotalTimeMillis()
+            , swAdd     .getTotalTimeMillis()
+            , swDispatch.getTotalTimeMillis()
+            , swProcess .getTotalTimeMillis()
+        );
 
         return response;
     }

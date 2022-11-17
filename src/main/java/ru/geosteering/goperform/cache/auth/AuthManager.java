@@ -60,9 +60,13 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         }
     }
 
+    private boolean checkObjectReadAccessImpl(Authentication auth, long id) {
+        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
+    }
+
     public boolean checkObjectReadAccess(Authentication auth, long id) {
         log.debug("checkObjectReadAccess started. User: {}, id {}", auth.getName(), id);
-        boolean result = checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
+        boolean result = checkObjectReadAccessImpl(auth, id) ;
 
         if (result) {
             log.debug("checkObjectReadAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
@@ -84,19 +88,20 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         return result;
     }
 
-    public boolean checkObjectsReadAccess(Authentication auth, long[] ids) {
-        log.debug("checkObjectsReadAccess START. User: {}, ids {}", auth.getName(), Arrays.toString(ids));
+    public boolean checkBatchReadAccess(Authentication auth, long[] ids) {
+        log.debug("checkBatchReadAccess for {}: {}", auth.getName(), ids);
         boolean result = true;
         for (long id : ids) {
-            if (!checkObjectReadAccess(auth, id)) {
+            if (!checkObjectReadAccessImpl(auth, id)) {
                 result = false;
+                break;
             }
         }
 
         if (result) {
-            log.debug("checkObjectsReadAccess completed. User: {}, ids {}, result: {}", auth.getName(), Arrays.toString(ids), true);
+            log.debug("checkBatchReadAccess: permission granted for {}", auth.getName());
         } else {
-            log.warn("checkObjectsReadAccess completed. User: {}, ids {}, result: {}", auth.getName(), Arrays.toString(ids), false);
+            log.warn("checkBatchReadAccess: permission denied for {}", auth.getName());
         }
         return result;
     }

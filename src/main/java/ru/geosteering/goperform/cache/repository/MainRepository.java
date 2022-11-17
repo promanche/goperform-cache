@@ -2,7 +2,10 @@ package ru.geosteering.goperform.cache.repository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.session.*;
+
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
@@ -22,7 +25,7 @@ public class MainRepository {
     private final SqlSessionFactory sessionFactory;
 
     public void saveItems(List<ItemDto> list) {
-        log.debug("saveItems started");
+        log.trace("saveItems started");
         long started = System.currentTimeMillis();
         SqlSession session = sessionFactory.openSession(ExecutorType.BATCH);
 
@@ -38,28 +41,32 @@ public class MainRepository {
         } finally {
             session.close();
         }
-        log.debug("saveItems completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("saveItems: saved {} element(s) in {} ms", list.size(), System.currentTimeMillis() - started);
     }
 
     public List<String> getItemsFromTo(Long id, Double from, Double to) {
         log.debug("getItemsFromTo started");
         long started = System.currentTimeMillis();
+        List<String> result;
         if (from == null && to == null) {
-            return getAllItems(id);
+            result = getAllItems(id);
+        } else {
+            result = itemsMapper.getFromTo(id, from, to);
         }
         log.debug("getItemsFromTo completed in {} ms", System.currentTimeMillis() - started);
-        return itemsMapper.getFromTo(id, from, to);
+        return result;
     }
 
     public List<ItemDto> getItemsFromTo(long[] ids, Double from, Double to) {
-        log.debug("getItemsFromTo started");
+        log.debug("getItemsFromTo[] started");
         long started = System.currentTimeMillis();
         StringJoiner joiner = new StringJoiner(",");
         for (Long id : ids) {
             joiner.add(String.valueOf(id));
         }
-        log.debug("getItemsFromTo completed in {} ms", System.currentTimeMillis() - started);
-        return itemsMapper.getMulti(joiner.toString(), from, to);
+        List<ItemDto> result = itemsMapper.getMulti(joiner.toString(), from, to);
+        log.debug("getItemsFromTo[] completed in {} ms", System.currentTimeMillis() - started);
+        return result;
     }
 
     private List<String> getAllItems(Long id) {
@@ -67,65 +74,64 @@ public class MainRepository {
     }
 
     public void deleteItems(Long id, Double from) {
-        log.debug("deleteItems started");
+        log.trace("deleteItems started");
         long started = System.currentTimeMillis();
         if (from == null) {
             itemsMapper.deleteAll(id);
         } else {
             itemsMapper.deleteAfter(id, from);
         }
-        log.debug("deleteItems completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("deleteItems completed in {} ms", System.currentTimeMillis() - started);
     }
 
     public Optional<CurveItem> getFirstItem(Long id) {
-        log.debug("getFirstItem started");
-        long started = System.currentTimeMillis();
+        log.trace("getFirstItem started");
         Optional<CurveItem> optional = Optional.ofNullable(StaticMapper.parseObject(itemsMapper.getFirst(id), CurveItem.class));
-        log.debug("getFirstItem FINISH");
+        log.trace("getFirstItem FINISH");
         return optional;
     }
 
     public Optional<CurveItem> getLastItem(Long id) {
-        log.debug("getLastItem started");
+        log.trace("getLastItem started");
         long started = System.currentTimeMillis();
         Optional<CurveItem> optional = Optional.ofNullable(StaticMapper.parseObject(itemsMapper.getLast(id), CurveItem.class));
-        log.debug("getLastItem completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("getLastItem completed in {} ms", System.currentTimeMillis() - started);
         return optional;
     }
 
     public int getItemsRecordsCount(Long id) {
-        log.debug("getItemsRecordsCount started");
+        log.trace("getItemsRecordsCount started");
         long started = System.currentTimeMillis();
         int count = itemsMapper.getRecordsCount(id);
-        log.debug("getItemsRecordsCount completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("getItemsRecordsCount completed in {} ms", System.currentTimeMillis() - started);
         return count;
     }
 
     public void saveOrUpdateInfo(ExtraCurveInfo info) {
-        log.debug("saveOrUpdateInfo started");
+        log.trace("saveOrUpdateInfo started");
         long started = System.currentTimeMillis();
         if (curveInfoMapper.exists(info.getId())) {
             curveInfoMapper.update(StaticMapper.toJson(info), info.getId());
         } else {
             curveInfoMapper.save(CurveInfoDto.fromCurveInfo(info));
         }
-        log.debug("saveOrUpdateInfo completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("saveOrUpdateInfo completed in {} ms", System.currentTimeMillis() - started);
     }
 
     public Optional<ExtraCurveInfo> getInfo(Long id) {
-        log.debug("getInfo started");
+        log.trace("getInfo started");
         long started = System.currentTimeMillis();
         String json = curveInfoMapper.get(id);
         Optional<ExtraCurveInfo> optional = Optional.empty();
         if (json != null) {
             optional = Optional.ofNullable(StaticMapper.parseObject(json, ExtraCurveInfo.class));
         }
-        log.debug("getInfo completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("getInfo completed in {} ms", System.currentTimeMillis() - started);
         return optional;
     }
 
     public void saveSegments(List<SegmentDto> list) {
-        log.debug("saveSegments started");
+        log.trace("saveSegments started");
         long started = System.currentTimeMillis();
         SqlSession session = sessionFactory.openSession(ExecutorType.BATCH);
 
@@ -141,7 +147,7 @@ public class MainRepository {
         } finally {
             session.close();
         }
-        log.debug("saveSegments completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("saveSegments: {} element(s) saved in {} ms", list.size(), System.currentTimeMillis() - started);
     }
 
     public List<String> getSegmentsFromTo(Long id, int scale, Double from, Double to) {
@@ -174,25 +180,25 @@ public class MainRepository {
     }
 
     public Map<Integer, Double> getScalesLast(Long id) {
-        log.debug("getScalesLast started");
+        log.trace("getScalesLast started");
         long started = System.currentTimeMillis();
         Map<Integer, Double> result = new HashMap<>();
 
         segmentsMapper.getScalesLast(id)
                 .forEach((k, v) -> result.put(k, v.getLast()));
 
-        log.debug("getScalesLast completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("getScalesLast completed in {} ms", System.currentTimeMillis() - started);
         return result;
     }
 
     public void deleteSegments(Long id, Double from) {
-        log.debug("deleteSegments started");
+        log.trace("deleteSegments started");
         long started = System.currentTimeMillis();
         if (from == null) {
             segmentsMapper.deleteAll(id);
         } else {
             segmentsMapper.deleteAfter(id, from);
         }
-        log.debug("deleteSegments completed in {} ms", System.currentTimeMillis() - started);
+        log.trace("deleteSegments completed in {} ms", System.currentTimeMillis() - started);
     }
 }

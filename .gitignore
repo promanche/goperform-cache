@@ -36,3 +36,5 @@ build/
 /.gradle/
 /logs/
 /test
+
+bin/

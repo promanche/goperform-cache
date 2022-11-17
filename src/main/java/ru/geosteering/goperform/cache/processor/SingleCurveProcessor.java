@@ -58,6 +58,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     @Setter
     private long requestTimer;
 
+    /** Миллисекунды последней записи в логе об ошибках вычисления минимумов-максимумов (предположительно, на некорретных данных) */
+    private long lastMinMaxErrorReported;
+    /** Счётчик ошибок, сообщения о которых были заблокированы во время {@link #MINMAX_ERROR_REPORT_THRESHOLD} */
+    private int minMaxErrorCounter;
+    /** Промежуток времени после {@link #lastMinMaxErrorReported}, на который блокируются последующие сообщения */
+    private static final long MINMAX_ERROR_REPORT_THRESHOLD = 3*60*1000L;
+
     public SingleCurveProcessor(ExtraCurveInfo info, CurveDispatcher dispatcher) {
         this.info = info;
         this.dispatcher = dispatcher;
@@ -139,7 +146,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             historyItemCache.addAll(loadBuffer);
             saveHistoryItems();
             updateInfoFromBuffer();
-            createSegments(loadBuffer);
+            new SegmentCreator()
+                .createSegments(loadBuffer)
+                .logResults("onDataEndMessage()");
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
             doRequest(false);
         }
@@ -158,7 +167,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
                     .collect(Collectors.toList());
             result.addAll(segmentCache.get(scale));
-            addSegmentsFromItems(getTail(from, to), scale, result);
+            new SegmentCreator()
+                .addSegmentsFromItems(getTail(from, to), scale, result)
+                .logResults("getCurveData()");
 
             return result;
 
@@ -194,7 +205,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public synchronized List<CurveSegment> getSegmentsFromTail(Double from, Double to, int scale) {
         List<CurveSegment> result = new ArrayList<>();
-        addSegmentsFromItems(getTail(from, to), scale, result);
+        new SegmentCreator()
+            .addSegmentsFromItems(getTail(from, to), scale, result)
+            .logResults("getSegmentsFromTail()");
         return result;
     }
 
@@ -259,6 +272,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             CurveItem tmpLast;
             int tmpCount = 0;
 
+            SegmentCreator segmentCreator = new SegmentCreator();
             while (realItemCache.size() >= dispatcher.getConfig().BATCH_SIZE + dispatcher.getConfig().MARGIN_SIZE) {
                 ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
                 for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
@@ -278,8 +292,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 lastSaved = tmpLast;
                 savedCount = savedCount + tmpCount;
 
-                createSegments(itemsBatch);
+                segmentCreator.createSegments(itemsBatch);
             }
+            segmentCreator.logResults("saveRealItems()");
         }
     }
 
@@ -354,7 +369,20 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         info.setMaxValue(value);
                     }
                 } catch (Exception e) {
-                    log.info("UpdateInfo exception. Message: {}, data: {}", e.getMessage(), StaticMapper.toJson(item));
+                    if( System.currentTimeMillis() - lastMinMaxErrorReported > MINMAX_ERROR_REPORT_THRESHOLD ) {
+                        log.info("updateMaxMinValue for {} threw {}: {}, data: {}. {} more messages suppressed."
+                            ,getInfo().getId()
+                            ,e.getClass().getName()
+                            ,e.getMessage()
+                            ,StaticMapper.toJson(item)
+                            ,minMaxErrorCounter
+                        );
+                        minMaxErrorCounter = 0;
+                        lastMinMaxErrorReported = System.currentTimeMillis();
+                    } else {
+                        minMaxErrorCounter++;
+                    }
+                    
                     log.debug(e.getMessage(), e);
                 }
             }
@@ -409,20 +437,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         dispatcher.getWebSocketMessageProcessor().sendMessage(info.getId(), message);
     }
 
-    private void createSegments(Collection<CurveItem> items) {
-        if (isApproximated && lastSaved != null && firstSaved != null) {
-            for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
-                int itemsOnPixel = findItemsOnPixel(scale);
-                if (isApproximatedScale(scale)) {
-                    createScaleSegments(items, scale, itemsOnPixel);
-
-                } else {
-                    log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", info.getId(), items.size(), scale, itemsOnPixel);
-                }
-            }
-        }
-    }
-
     private boolean isApproximatedScale(Integer scale) {
         return scale != null && scale >= 15;
     }
@@ -434,38 +448,73 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return totalSeconds == 0 ? 0 : (int) ((long) secondsOnPixel * savedCount / totalSeconds);
     }
 
-    private void createScaleSegments(Collection<CurveItem> items, int scale, int itemsOnPixel) {
-        List<CurveSegment> segments = segmentCache.computeIfAbsent(scale, k -> new ArrayList<>());
-        addSegmentsFromItems(items, scale, segments);
-        if (segments.size() > 1) {
-            CurveSegment last = segments.remove(segments.size() - 1);
-            saveSegments(segments, scale);
-            segments.clear();
-            segments.add(last);
-            log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), info.getId(), scale, scale * 60 / 120, itemsOnPixel);
-        }
-    }
+    /** 
+     * Обёртка, высчитывающая количество ошибок процедуры вычисления штрихов ("сегментации") из-за некорректных точек.
+     * По окончании сегментации вызывающий код может вывести единичное сообщение о числе ошибок, вызвав {@link #logResults(String)}.
+     */
+    private class SegmentCreator {
+        private int totalItems;
+        private int invalidItems;
 
-    private void addSegmentsFromItems(Collection<CurveItem> items, int scale, List<CurveSegment> segments) {
-        CurveSegment lastSegment = segments.isEmpty() ? null : segments.get(segments.size() - 1);
-        for (CurveItem item : items) {
-            try {
-                if (lastSegment != null && Double.compare(item.getKey(), lastSegment.getFirstKey()) >= 0 && Double.compare(item.getKey(), lastSegment.getLastKey()) <= 0) {
-                    lastSegment.addItem(item);
-
-                } else {
-                    CurveSegment segment = new CurveSegment(item, scale);
-                    if (lastSegment != null && Double.compare(lastSegment.getLastKey(), segment.getFirstKey()) == 0) {
-                        lastSegment.addItem(item);
-                    }
-                    segment.addItem(item);
-                    segments.add(segment);
-                    lastSegment = segment;
-                }
-            } catch (Exception e) {
-                log.info("Create segment exception. Message: {}, item: {}", e.getMessage(), StaticMapper.toJson(item));
-                log.debug(e.getMessage(), e);
+        public void logResults( String label) {
+            if( invalidItems > 0 ) {
+                log.info( "Curve {} segmentation for {}, items invalid/total: {}/{}", info.getId(), label, invalidItems, totalItems);
             }
+        }
+
+        public SegmentCreator createSegments(Collection<CurveItem> items) {
+            if (isApproximated && lastSaved != null && firstSaved != null) {
+                for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
+                    int itemsOnPixel = findItemsOnPixel(scale);
+                    if (isApproximatedScale(scale)) {
+                        createScaleSegments(items, scale, itemsOnPixel);
+    
+                    } else {
+                        log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", info.getId(), items.size(), scale, itemsOnPixel);
+                    }
+                }
+            }
+            return this;
+        }
+    
+        private void createScaleSegments(Collection<CurveItem> items, int scale, int itemsOnPixel) {
+            List<CurveSegment> segments = segmentCache.computeIfAbsent(scale, k -> new ArrayList<>());
+            addSegmentsFromItems(items, scale, segments);
+            if (segments.size() > 1) {
+                CurveSegment last = segments.remove(segments.size() - 1);
+                saveSegments(segments, scale);
+                segments.clear();
+                segments.add(last);
+                log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), info.getId(), scale, scale * 60 / 120, itemsOnPixel);
+            }
+        }
+
+        public SegmentCreator  addSegmentsFromItems(Collection<CurveItem> items, int scale, List<CurveSegment> segments) {
+            CurveSegment lastSegment = segments.isEmpty() ? null : segments.get(segments.size() - 1);
+            for (CurveItem item : items) {
+                try {
+                    totalItems++;
+                    if (lastSegment != null && Double.compare(item.getKey(), lastSegment.getFirstKey()) >= 0 && Double.compare(item.getKey(), lastSegment.getLastKey()) <= 0) {
+                        lastSegment.addItem(item);
+
+                    } else {
+                        CurveSegment segment = new CurveSegment(item, scale);
+                        if (lastSegment != null && Double.compare(lastSegment.getLastKey(), segment.getFirstKey()) == 0) {
+                            lastSegment.addItem(item);
+                        }
+                        segment.addItem(item);
+                        segments.add(segment);
+                        lastSegment = segment;
+                    }
+                } catch (Exception e) {
+                    if( invalidItems == 0 ) {
+                        log.info("Create segment exception. Message: {}, item: {}", e.getMessage(), StaticMapper.toJson(item));
+                    }
+                    invalidItems++;
+                    log.debug(e.getMessage(), e);
+                }
+            }
+            return this;
         }
     }
 
@@ -500,15 +549,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
             log.info("{} lost items for {} loaded", items.size(), info.getId());
 
+            SegmentCreator segmentCreator = new SegmentCreator();
             scaleLast.forEach((scale, last) -> {
                 List<CurveItem> lost = items.stream()
                         .filter(i -> Double.compare(i.getKey(), last) >= 0)
                         .collect(Collectors.toList());
 
                 if (!lost.isEmpty()) {
-                    createScaleSegments(lost, scale, findItemsOnPixel(scale));
+                    segmentCreator.createScaleSegments(lost, scale, findItemsOnPixel(scale));
                 }
             });
+            segmentCreator.logResults("loadLost()");
         }
     }
 

@@ -65,7 +65,7 @@ public class CurveController {
     }
 
     @GetMapping("/curve/multi")
-    @PreAuthorize("@authManager.checkObjectsReadAccess(authentication, #ids)")
+    @PreAuthorize("@authManager.checkBatchReadAccess(authentication, #ids)")
     public ResponseEntity<CurveInfoResponse[]> getCurveInfo(@RequestParam Long[] ids) {
         log.info("Curve-info request ids {}", Arrays.toString(ids));
         CurveInfoResponse[] infos = service.getCurveInfoResponse(ids);
@@ -78,7 +78,7 @@ public class CurveController {
     }
 
     @GetMapping("/curve/multi/coordinates/by-time")
-    @PreAuthorize("@authManager.checkObjectsReadAccess(authentication, #ids)")
+    @PreAuthorize("@authManager.checkBatchReadAccess(authentication, #ids)")
     @ResponseStatus(HttpStatus.OK)
     public MultiResponse getByTime(@RequestParam long[] ids,
                                    @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
