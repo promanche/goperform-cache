@@ -16,9 +16,7 @@ public class CurveItem {
     private final Object value;
 
     public static CurveItem fromAbstractDataItem(AbstractDataItem dataItem, boolean isDateTimeCurve) {
-
         Double key = isDateTimeCurve ? dataItem.getTime().toInstant().toEpochMilli() : dataItem.getDepth();
-
         return new CurveItem(key, dataItem.getValue());
     }
 }
