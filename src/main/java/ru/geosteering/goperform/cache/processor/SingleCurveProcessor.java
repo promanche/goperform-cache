@@ -98,8 +98,14 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public synchronized void onCurveDataMessage(CurveDataMessage message, boolean isReal) {
-        CurveItem item = CurveItem.fromAbstractDataItem(message.getData(), info.getIndexType() != LogIndexType.MEASURED_DEPTH);
+        CurveItem item = CurveItem.fromAbstractDataItem(message.getData(), isDateTimeCurve);
+
         if (isReal) {
+
+            if (isKeyNotValid(item.getKey())) {
+                return;
+            }
+
             isActive = true;
             if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
                 collect(item, true);
@@ -116,6 +122,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         } else {
             collect(item, false);
         }
+    }
+
+    private boolean isKeyNotValid(Double key) {
+        double minVal = isDateTimeCurve ? dispatcher.getConfig().MIN_TIME_MILLIS : dispatcher.getConfig().MIN_DEPTH_METERS;
+        double maxVal = isDateTimeCurve ? OffsetDateTime.now().toInstant().toEpochMilli() : dispatcher.getConfig().MAX_DEPTH_METERS;
+        return Double.compare(key, minVal) < 0 || Double.compare(key, maxVal) > 0;
     }
 
     public synchronized void onDataEndMessage(DataEndMessage message) {
@@ -416,6 +428,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private String findFrom() {
         Double key = historyItemCache.isEmpty() ? lastSaved == null ? null : lastSaved.getKey() : historyItemCache.last().getKey();
+        if (key == null) {
+            key = isDateTimeCurve ? dispatcher.getConfig().MIN_TIME_MILLIS : dispatcher.getConfig().MIN_DEPTH_METERS;
+        }
         return getKeyAsString(key, info.getIndexType());
     }
 

@@ -7,6 +7,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
 import javax.validation.constraints.*;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 
 @Component
@@ -59,6 +61,12 @@ public class Config {
 
     public final String HISTORY_NUID;
 
+    public final long MIN_TIME_MILLIS;
+
+    public final double MIN_DEPTH_METERS;
+
+    public final double MAX_DEPTH_METERS;
+
     public Config(@Value("${goperform" + '.' + "subject}") String subject,
                   @Value("${goperform.host}") String host,
                   @Value("${goperform.realtime-threads}") int realtimeThreads,
@@ -85,5 +93,8 @@ public class Config {
         this.STATISTIC_PERIOD_SECONDS = statisticPeriodSeconds;
 
         this.HISTORY_NUID = NUID.nextGlobal();
+        this.MIN_TIME_MILLIS = OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli();
+        this.MIN_DEPTH_METERS = 0;
+        this.MAX_DEPTH_METERS = 13000;
     }
 }

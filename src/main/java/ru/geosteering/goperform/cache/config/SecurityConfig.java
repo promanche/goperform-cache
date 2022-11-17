@@ -27,6 +27,7 @@ public class SecurityConfig {
                         (auth) -> auth
                                 .antMatchers("/ws").permitAll()
                                 .antMatchers( "/curve/multi/**").hasRole("USER")
+                                .antMatchers(HttpMethod.POST, "/curve").hasRole("USER")
                                 .antMatchers(HttpMethod.DELETE, "/curve/{id}/coordinates/by-time", "/curve/{id}/coordinates/by-depth").hasRole("USER")
                                 .antMatchers("/curve/{id}/**").access(authManager)
                                 .anyRequest().denyAll()
