@@ -1,7 +1,5 @@
 package ru.geosteering.goperform.cache.model.rest;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import ru.geosteering.goperform.cache.model.CurveItem;
@@ -14,52 +12,77 @@ import java.util.*;
 public class MultiResponse {
 
     private final long[] ids;
-    @JsonIgnore
-    private final Map<Long, Data<?>> dataMap = new HashMap<>();
-    @JsonProperty("data")
-    private final Set<Data<?>> dataSet = new TreeSet<>();
+    private ArrayList<MultiData> data;
 
     public void addSegments(long id, List<CurveSegment> segments) {
-        int index = findIndex(id);
+        int idIndex = findIdIndex(id);
 
-        if (index >= 0) {
+        if (idIndex >= 0) {
+            if (data == null) {
+                data = new ArrayList<>(segments.size() + 1000);
+            }
+
             for (CurveSegment segment : segments) {
-                SegmentsData data;
                 long key = segment.getFirstKey().longValue();
-                if (dataMap.containsKey(key)) {
-                    data = (SegmentsData) dataMap.get(key);
+                MultiData multiData;
+                if (data.isEmpty() || ((long[]) data.get(data.size() - 1).t)[0] < key) {
+                    multiData = new MultiData(new long[]{key, segment.getLastKey().longValue()}, new Object[ids.length]);
+                    multiData.v[idIndex] = new double[]{segment.getMinVal(), segment.getMaxVal()};
+                    data.add(multiData);
+                } else if (key < ((long[]) data.get(0).t)[0]) {
+                    multiData = new MultiData(new long[]{key, segment.getLastKey().longValue()}, new Object[ids.length]);
+                    multiData.v[idIndex] = new double[]{segment.getMinVal(), segment.getMaxVal()};
+                    data.add(0, multiData);
                 } else {
-                    data = new SegmentsData(new long[2], new Object[ids.length]);
-                    data.getT()[0] = key;
-                    data.getT()[1] = segment.getLastKey().longValue();
-                    dataMap.put(key, data);
-                    dataSet.add(data);
+                    int dataIndex = findDataIndex(key, false);
+                    multiData = data.get(dataIndex);
+                    if (((long[]) multiData.t)[0] == key) {
+                        multiData.v[idIndex] = new double[]{segment.getMinVal(), segment.getMaxVal()};
+                    } else {
+                        multiData = new MultiData(new long[]{key, segment.getLastKey().longValue()}, new Object[ids.length]);
+                        multiData.v[idIndex] = new double[]{segment.getMinVal(), segment.getMaxVal()};
+                        data.add(dataIndex + 1, multiData);
+                    }
                 }
-                data.v[index] = new double[]{segment.getMinVal(), segment.getMaxVal()};
             }
         }
     }
 
     public void addItems(long id, List<CurveItem> items) {
-        int index = findIndex(id);
+        int idIndex = findIdIndex(id);
 
-        if (index >= 0) {
+        if (idIndex >= 0) {
+            if (data == null) {
+                data = new ArrayList<>(items.size() + 1000);
+            }
+
             for (CurveItem item : items) {
-                ItemData data;
                 long key = item.getKey().longValue();
-                if (dataMap.containsKey(key)) {
-                    data = (ItemData) dataMap.get(key);
+                MultiData multiData;
+                if (data.isEmpty() || (long) data.get(data.size() - 1).t < key) {
+                    multiData = new MultiData(key, new Object[ids.length]);
+                    multiData.v[idIndex] = item.getValue();
+                    data.add(multiData);
+                } else if (key < (long) data.get(0).t) {
+                    multiData = new MultiData(key, new Object[ids.length]);
+                    multiData.v[idIndex] = item.getValue();
+                    data.add(0, multiData);
                 } else {
-                    data = new ItemData(key, new Object[ids.length]);
-                    dataMap.put(key, data);
-                    dataSet.add(data);
+                    int dataIndex = findDataIndex(key, true);
+                    multiData = data.get(dataIndex);
+                    if ((long) multiData.t == key) {
+                        multiData.v[idIndex] = item.getValue();
+                    } else {
+                        multiData = new MultiData(key, new Object[ids.length]);
+                        multiData.v[idIndex] = item.getValue();
+                        data.add(dataIndex + 1, multiData);
+                    }
                 }
-                data.v[index] = item.getValue();
             }
         }
     }
 
-    private int findIndex(long id) {
+    private int findIdIndex(long id) {
         for (int i = 0; i < ids.length; i++) {
             if (Objects.equals(ids[i], id)) {
                 return i;
@@ -68,39 +91,30 @@ public class MultiResponse {
         return -1;
     }
 
+    private int findDataIndex(long t, boolean isItem) {
+        int leftIndex = 0;
+        int rightIndex = data.size() - 1;
+
+        while (true) {
+            int index = leftIndex + (rightIndex - leftIndex) / 2;
+            if (leftIndex + 1 >= rightIndex) {
+                return index;
+            }
+            long key = isItem ? (long) data.get(index).t : ((long[]) data.get(index).t)[0];
+            if (key == t) {
+                return index;
+            } else if (key > t) {
+                rightIndex = index;
+            } else {
+                leftIndex = index;
+            }
+        }
+    }
+
     @RequiredArgsConstructor
     @Getter
-    private static abstract class Data<T> implements Comparable<Data<T>> {
-        private final T t;
-    }
-
-    @Getter
-    private static class ItemData extends Data<Long> {
-        private final Object[] v;
-
-        public ItemData(Long t, Object[] v) {
-            super(t);
-            this.v = v;
-        }
-
-        @Override
-        public int compareTo(Data<Long> o) {
-            return Long.compare(this.getT(), o.getT());
-        }
-    }
-
-    @Getter
-    private static class SegmentsData extends Data<long[]> {
-        private final Object[] v;
-
-        public SegmentsData(long[] t, Object[] v) {
-            super(t);
-            this.v = v;
-        }
-
-        @Override
-        public int compareTo(Data<long[]> o) {
-            return Long.compare(this.getT()[0], o.getT()[0]);
-        }
+    private static class MultiData {
+        final Object t;
+        final Object[] v;
     }
 }

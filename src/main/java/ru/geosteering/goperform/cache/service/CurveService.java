@@ -5,7 +5,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StopWatch;
-
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.*;
@@ -116,7 +115,7 @@ public class CurveService {
                         swAdd.start();
                         response.addSegments(dto.getId(), items);
                         swAdd.stop();
-                }   );
+                    });
 
             for (long id : ids) {
                 swDispatch.start();
@@ -134,13 +133,12 @@ public class CurveService {
             }
         }
 
-        log.info("Response for ids {} prepared. Result list size: {}", Arrays.toString(ids), response.getDataSet().size() + "x" + ids.length);
-        // FIXME: должно быть debug!
-        log.info("getMultiResponse() operations: parse {} ms, add {} ms, dispatch {} ms, process {} ms"
-            , swParse   .getTotalTimeMillis()
-            , swAdd     .getTotalTimeMillis()
-            , swDispatch.getTotalTimeMillis()
-            , swProcess .getTotalTimeMillis()
+        log.info("Response for ids {} prepared. Result list size: {}", Arrays.toString(ids), response.getData().size() + "x" + ids.length);
+        log.debug("getMultiResponse() operations: parse {} ms, add {} ms, dispatch {} ms, process {} ms"
+                , swParse.getTotalTimeMillis()
+                , swAdd.getTotalTimeMillis()
+                , swDispatch.getTotalTimeMillis()
+                , swProcess.getTotalTimeMillis()
         );
 
         return response;

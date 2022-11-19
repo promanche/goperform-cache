@@ -9,6 +9,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.service.CurveService;
 
@@ -23,6 +24,7 @@ import java.util.List;
 public class CurveController {
 
     private final CurveService service;
+    private final Config config;
 
     @GetMapping("/curve/{id}/coordinates/by-time")
     public ResponseEntity<List<?>> getByTime(@PathVariable Long id,
@@ -86,11 +88,10 @@ public class CurveController {
                                    @RequestParam(required = false) Integer scale) {
 
         log.info("By-time request ids {}, from {}, to {}, scale {}", ids, from, to, scale);
-        Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
-        Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
+        Double doubleFrom = from == null ? config.MIN_TIME_MILLIS : (double) from.toInstant().toEpochMilli();
+        Double doubleTo = to == null ? OffsetDateTime.now().toInstant().toEpochMilli() : (double) to.toInstant().toEpochMilli();
 
         return service.getMultiResponse(ids, doubleFrom, doubleTo, scale);
-
     }
 
     @DeleteMapping("/curve/{id}/coordinates/by-time")

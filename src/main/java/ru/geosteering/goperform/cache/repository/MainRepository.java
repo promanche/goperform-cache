@@ -2,10 +2,7 @@ package ru.geosteering.goperform.cache.repository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
-import org.apache.ibatis.session.ExecutorType;
-import org.apache.ibatis.session.SqlSession;
-import org.apache.ibatis.session.SqlSessionFactory;
+import org.apache.ibatis.session.*;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
@@ -86,8 +83,9 @@ public class MainRepository {
 
     public Optional<CurveItem> getFirstItem(Long id) {
         log.trace("getFirstItem started");
+        long started = System.currentTimeMillis();
         Optional<CurveItem> optional = Optional.ofNullable(StaticMapper.parseObject(itemsMapper.getFirst(id), CurveItem.class));
-        log.trace("getFirstItem FINISH");
+        log.trace("getFirstItem completed in {} ms", System.currentTimeMillis() - started);
         return optional;
     }
 
