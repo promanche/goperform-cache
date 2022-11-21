@@ -116,9 +116,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
                 collect(item, true);
                 updateInfo(item);
-                if (loadStatus == LoadStatus.UNKNOWN) {
-                    doRequest(false);
-                }
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
             } else {
@@ -145,6 +142,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (sent == 0) {
             if (isActive) {
                 realItemCache.addAll(historyItemCache);
+                realItemCache.removeIf(item -> Double.compare(lastSaved.getKey(), item.getKey()) >= 0);
                 historyItemCache.clear();
             }
             loadStatus = loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED;
