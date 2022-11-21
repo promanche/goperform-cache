@@ -178,13 +178,14 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public synchronized List<?> getCurveData(Double from, Double to, Integer scale) {
         haveRestRequest = true;
-        if (scale != null && segmentCache.containsKey(scale)) {
-            List<CurveSegment> result;
-            result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
+        if (scale != null && scale > 15) {
+            List<CurveSegment> result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
                     .stream()
                     .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
                     .collect(Collectors.toList());
-            result.addAll(segmentCache.get(scale));
+            if (segmentCache.containsKey(scale)) {
+                result.addAll(segmentCache.get(scale));
+            }
             new SegmentCreator()
                     .addSegmentsFromItems(getTail(from, to), scale, result)
                     .logResults("getCurveData()");

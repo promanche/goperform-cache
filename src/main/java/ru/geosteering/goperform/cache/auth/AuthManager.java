@@ -1,39 +1,30 @@
 package ru.geosteering.goperform.cache.auth;
 
 import io.nats.client.Message;
-import lombok.Setter;
-import lombok.ToString;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpHeaders;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.context.SecurityContext;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.stereotype.Component;
-import org.springframework.web.filter.OncePerRequestFilter;
 import ru.geosteering.goperform.cache.model.auth.*;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
-import javax.servlet.FilterChain;
-import javax.servlet.ServletException;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import java.io.IOException;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.function.Supplier;
 
 @Component
 @Slf4j
-public class AuthManager extends OncePerRequestFilter implements AuthorizationManager<RequestAuthorizationContext> {
+@RequiredArgsConstructor
+public class AuthManager implements AuthorizationManager<RequestAuthorizationContext> {
 
-    private final Map<String, UserAuthentication> authenticatedUsers = new ConcurrentHashMap<>();
-    private final String authSubject = "gostream.auth";
+    private final ObjectAccessor objectAccessor;
 
     @Override
     public AuthorizationDecision check(Supplier<Authentication> authentication, RequestAuthorizationContext object) {
@@ -60,13 +51,9 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         }
     }
 
-    private boolean checkObjectReadAccessImpl(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
-    }
-
     public boolean checkObjectReadAccess(Authentication auth, long id) {
         log.debug("checkObjectReadAccess started. User: {}, id {}", auth.getName(), id);
-        boolean result = checkObjectReadAccessImpl(auth, id) ;
+        boolean result = objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.READ);
 
         if (result) {
             log.debug("checkObjectReadAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
@@ -78,7 +65,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
     public boolean checkObjectWriteAccess(Authentication auth, long id) {
         log.debug("checkObjectWriteAccess START. User: {}, id {}", auth.getName(), id);
-        boolean result = checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
+        boolean result = objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
 
         if (result) {
             log.debug("checkObjectWriteAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
@@ -92,7 +79,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         log.debug("checkBatchReadAccess for {}: {}", auth.getName(), ids);
         boolean result = true;
         for (long id : ids) {
-            if (!checkObjectReadAccessImpl(auth, id)) {
+            if (!checkObjectReadAccess(auth, id)) {
                 result = false;
                 break;
             }
@@ -106,37 +93,7 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
         return result;
     }
 
-    private boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
-
-        try {
-            String userName = auth.getName();
-
-            if (
-                    userName == null
-                            || userName.isEmpty()
-                            || userName.equalsIgnoreCase("anonymousUser")
-                            || userName.equalsIgnoreCase("anonymous")
-            ) {
-
-                return false;
-            }
-
-            CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
-
-            log.trace("Request: {}", request);
-            Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
-            log.trace("Response: {}", response);
-
-            ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
-
-            return apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK;
-
-        } catch (Exception e) {
-            log.error(e.getMessage(), e);
-            return false;
-        }
-    }
-
+    @Cacheable("authentication")
     public Authentication getAuthentication(String jwt) {
 
         if (jwt == null || jwt.isEmpty() || jwt.equalsIgnoreCase("null")) {
@@ -145,54 +102,24 @@ public class AuthManager extends OncePerRequestFilter implements AuthorizationMa
 
         UserAuthentication authentication = null;
 
-        if (authenticatedUsers.containsKey(jwt)) {
+        TokenRequest request = new TokenRequest(jwt);
 
-            authentication = authenticatedUsers.get(jwt);
+        log.trace("Request: {}", request);
+        Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
+        log.trace("Response: {}", response);
 
-        } else {
+        ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
-            TokenRequest request = new TokenRequest(jwt);
+        if (apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK) {
 
-            log.trace("Request: {}", request);
-            Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
-            log.trace("Response: {}", response);
-
-            ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
-
-            if (apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK) {
-
-                authentication = new UserAuthentication();
-                authentication.setUserName((String) apiResult.getResult());
-                authentication.setToken(jwt);
-                authentication.setAuthority(new SimpleGrantedAuthority("ROLE_USER"));
-                authentication.setAuthenticated(true);
-
-                authenticatedUsers.putIfAbsent(jwt, authentication);
-            }
+            authentication = new UserAuthentication();
+            authentication.setUserName((String) apiResult.getResult());
+            authentication.setToken(jwt);
+            authentication.setAuthority(new SimpleGrantedAuthority("ROLE_USER"));
+            authentication.setAuthenticated(true);
         }
 
         return authentication;
-    }
-
-    @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
-
-        String authHeader = request.getHeader(HttpHeaders.AUTHORIZATION);
-        String jwt = null;
-
-        if (authHeader != null && authHeader.startsWith("Bearer")) {
-            jwt = authHeader.substring(6).trim();
-        }
-
-        Authentication authentication = getAuthentication(jwt);
-
-        if (authentication != null) {
-            SecurityContext context = SecurityContextHolder.createEmptyContext();
-            context.setAuthentication(authentication);
-            SecurityContextHolder.setContext(context);
-        }
-
-        filterChain.doFilter(request, response);
     }
 
     @Setter
