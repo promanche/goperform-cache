@@ -1,15 +1,17 @@
 package ru.geosteering.goperform.cache.processor;
 
 import com.google.common.util.concurrent.AtomicDouble;
+import io.nats.client.Message;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
-import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
-import ru.geosteering.commonModels.dataService.responses.DataEndMessage;
+import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.model.*;
 import ru.geosteering.goperform.cache.model.ws.*;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
+import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.dto.ItemDto;
 import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
@@ -22,7 +24,6 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -52,7 +53,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     @Getter
     private int savedCount;
 
-    private boolean haveRestRequest;
+    @Setter
+    private boolean fromRest;
     private boolean isActive;
 
     private final ReloadData reloadData = new ReloadData();
@@ -74,8 +76,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
      */
     private static final long MINMAX_ERROR_REPORT_THRESHOLD = 3 * 60 * 1000L;
 
-    public SingleCurveProcessor(ExtraCurveInfo info, CurveDispatcher dispatcher) {
+    public SingleCurveProcessor(ExtraCurveInfo info, boolean fromRest, CurveDispatcher dispatcher) {
         this.info = info;
+        this.fromRest = fromRest;
         this.dispatcher = dispatcher;
 
         isDateTimeCurve = info.getIndexType() != LogIndexType.MEASURED_DEPTH;
@@ -85,14 +88,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
         reloadSavedInfo();
         loadLost();
-
-        doRequest(false);
+        addRequestJob(false);
     }
 
     @Override
     public synchronized void onConnect() {
         if (loadStatus == LoadStatus.UNKNOWN) {
-            doRequest(false);
+            addRequestJob(false);
         }
     }
 
@@ -176,7 +178,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
         } else if (sent != received) {
             log.error("Curve {} received count {} not equals to sent {}", info.getId(), received, sent);
-            doRequest(false);
+            addRequestJob(false);
 
         } else {
             long millis = Math.max(1, System.currentTimeMillis() - pointTimer);
@@ -191,7 +193,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     .createSegments(loadBuffer)
                     .logResults("onDataEndMessage()");
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
-            doRequest(false);
+            addRequestJob(false);
         }
     }
 
@@ -200,7 +202,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public synchronized List<?> getCurveData(Double from, Double to, Integer scale) {
-        haveRestRequest = true;
         if (scale != null && scale > 15) {
             List<CurveSegment> result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
                     .stream()
@@ -267,7 +268,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             loadLost();
             reloadData.reloadTime = null;
             reloadData.from = null;
-            doRequest(true);
+            addRequestJob(true);
         }
     }
 
@@ -431,28 +432,51 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    private void doRequest(boolean ifBlocked) {
+    private void addRequestJob(boolean ifBlocked) {
         loadBuffer.clear();
         if (loadStatus != LoadStatus.BLOCKED || ifBlocked) {
-            String from = findFrom();
-            String to = findTo();
-
-            CurveDispatcher.RequestType type = haveRestRequest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
-
-            CurveDataRequest request =
-                    new CurveDataRequest(
-                            info.getId(),
-                            from,
-                            to,
-                            null,
-                            false,
-                            false,
-                            dispatcher.getConfig().HISTORY_REQUEST_LIMIT,
-                            dispatcher.getConfig().HISTORY_NUID + "." + info.getId()
-                    );
-
-            dispatcher.addRequestTask(new CurveDispatcher.RequestTask(request, type));
+            CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
+            dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
             loadStatus = LoadStatus.IN_QUEUE;
+        }
+    }
+
+    private synchronized void doItemsRequest() {
+        String from = findFrom();
+        String to = findTo();
+        CurveDataRequest request =
+                new CurveDataRequest(
+                        info.getId(),
+                        from,
+                        to,
+                        null,
+                        false,
+                        false,
+                        dispatcher.getConfig().HISTORY_REQUEST_LIMIT,
+                        dispatcher.getConfig().HISTORY_NUID + "." + info.getId()
+                );
+
+        log.info("Request: {}", request);
+        Message response = NatsConnector.sendRequest(dispatcher.getConfig().SUBJECT, StaticMapper.toBytes(request));
+        if (response != null) {
+            log.info("Response: {}", new String(response.getData()));
+
+            ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
+            switch (Objects.requireNonNull(apiMessage).getType()) {
+
+                case CURVE_INFO:
+                    break;
+
+                case STATUS:
+                    StatusMessage statusMessage = (StatusMessage) apiMessage;
+                    if (statusMessage.getStatus() != EResult.OK) {
+                        log.error("Error curveData request for {}, message {}", info.getId(), statusMessage);
+                    }
+                    return;
+
+                default:
+                    log.error("Unknown response {}", new String(response.getData()));
+            }
         }
     }
 
