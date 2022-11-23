@@ -93,7 +93,7 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         return result;
     }
 
-    @Cacheable("authentication")
+    @Cacheable(value = "authentication", condition = "#result != null")
     public Authentication getAuthentication(String jwt) {
 
         if (jwt == null || jwt.isEmpty() || jwt.equalsIgnoreCase("null")) {
