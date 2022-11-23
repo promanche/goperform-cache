@@ -151,7 +151,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 AtomicDouble to = new AtomicDouble(-1);
                 AtomicInteger count = new AtomicInteger(0);
                 realItemCache.removeIf(item -> {
-                    boolean alreadySaved = Double.compare(lastSaved.getKey(), item.getKey()) >= 0;
+                    boolean alreadySaved = lastSaved != null && Double.compare(lastSaved.getKey(), item.getKey()) >= 0;
                     if (alreadySaved) {
                         if (from.get() == -1 || Double.compare(item.getKey(), from.get()) < 0) {
                             from.set(item.getKey().longValue());
