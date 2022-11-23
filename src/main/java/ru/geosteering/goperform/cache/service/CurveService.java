@@ -134,7 +134,8 @@ public class CurveService {
         }
 
         log.info("Response for ids {} prepared. Result list size: {}", Arrays.toString(ids), response.getData().size() + "x" + ids.length);
-        log.debug("getMultiResponse() operations: parse {} ms, add {} ms, dispatch {} ms, process {} ms"
+        // TODO: change to debug when done optimizing getMultiResponse()
+        log.info("getMultiResponse() operations: parse {} ms, add {} ms, dispatch {} ms, process {} ms"
                 , swParse.getTotalTimeMillis()
                 , swAdd.getTotalTimeMillis()
                 , swDispatch.getTotalTimeMillis()
