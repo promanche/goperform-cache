@@ -1,5 +1,6 @@
 package ru.geosteering.goperform.cache.processor;
 
+import com.google.common.util.concurrent.AtomicDouble;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,8 @@ import java.math.RoundingMode;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -142,7 +145,29 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (sent == 0) {
             if (isActive) {
                 realItemCache.addAll(historyItemCache);
-                realItemCache.removeIf(item -> Double.compare(lastSaved.getKey(), item.getKey()) >= 0);
+
+                //------------ Костыль до перехода на джобы ------------
+                AtomicDouble from = new AtomicDouble(-1);
+                AtomicDouble to = new AtomicDouble(-1);
+                AtomicInteger count = new AtomicInteger(0);
+                realItemCache.removeIf(item -> {
+                    boolean alreadySaved = Double.compare(lastSaved.getKey(), item.getKey()) >= 0;
+                    if (alreadySaved) {
+                        if (from.get() == -1 || Double.compare(item.getKey(), from.get()) < 0) {
+                            from.set(item.getKey().longValue());
+                        }
+                        if (to.get() == -1 || Double.compare(item.getKey(), to.get()) > 0) {
+                            to.set(item.getKey());
+                        }
+                        count.incrementAndGet();
+                    }
+                    return alreadySaved;
+                });
+                if (count.get() > 0) {
+                    log.warn("Duplicate points found: from {}, to {}, count {}", from.get(), to.get(), count.get());
+                }
+                //-------------------------------------------------------
+
                 historyItemCache.clear();
             }
             loadStatus = loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED;
