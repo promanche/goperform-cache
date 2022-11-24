@@ -1,7 +1,8 @@
 package ru.geosteering.goperform.cache.processor;
 
 import io.nats.client.Message;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -29,18 +30,16 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class CurveDispatcher implements ConnectionEventListener {
 
-    @Getter
-    private final Config config;
-    @Getter
-    private final MainRepository repository;
-    @Getter
-    private final WebSocketMessageProcessor webSocketMessageProcessor;
+
+    protected final Config config;
+    protected final MainRepository repository;
+    protected final WebSocketMessageProcessor webSocketMessageProcessor;
 
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
     private final Queue<RequestTask> requestTaskQueue = new PriorityBlockingQueue<>(11, Comparator.comparing(RequestTask::getPriority));
 
-    private final AtomicInteger requestAllowed = new AtomicInteger();
+    protected final AtomicInteger requestAllowed = new AtomicInteger();
 
     private final ScheduledExecutorService statExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService reloadExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -201,6 +200,8 @@ public class CurveDispatcher implements ConnectionEventListener {
                     break;
             }
         }
+
+        requestAllowed.incrementAndGet();
     }
 
     private Long parseId(String subject) {
@@ -227,20 +228,18 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     @Scheduled(fixedRate = 30)
     private void doRequestJob() {
-        int r = requestAllowed.getAndDecrement();
         try {
-            if (r > 0 && !requestTaskQueue.isEmpty()) {
+            if (requestAllowed.getAndDecrement() > 0 && !requestTaskQueue.isEmpty()) {
                 RequestTask requestTask = requestTaskQueue.poll();
                 if (requestTask.type == RequestType.LOAD_ACTIVE || requestTask.type == RequestType.LOAD_REST) {
                     processors.get(requestTask.id).setRequestTimer(System.currentTimeMillis());
                 }
                 requestTask.requestJob.doRequest();
+            } else {
+                requestAllowed.incrementAndGet();
             }
-
         } catch (Exception e) {
             log.error(e.getMessage(), e);
-        } finally {
-            requestAllowed.incrementAndGet();
         }
     }
 
@@ -251,12 +250,12 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    public interface RequestJob {
+    protected interface RequestJob {
         void doRequest();
     }
 
     @AllArgsConstructor
-    public static class RequestTask {
+    protected static class RequestTask {
 
         Long id;
         RequestType type;
@@ -267,7 +266,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    public enum RequestType {
+    protected enum RequestType {
 
         INFO_REST(0),
         INFO_ACTIVE(1),

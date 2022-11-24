@@ -134,8 +134,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private boolean keyNotInRange(Double key) {
-        double minVal = isDateTimeCurve ? dispatcher.getConfig().MIN_TIME_MILLIS : dispatcher.getConfig().MIN_DEPTH_METERS;
-        double maxVal = isDateTimeCurve ? OffsetDateTime.now().toInstant().toEpochMilli() : dispatcher.getConfig().MAX_DEPTH_METERS;
+        double minVal = isDateTimeCurve ? dispatcher.config.MIN_TIME_MILLIS : dispatcher.config.MIN_DEPTH_METERS;
+        double maxVal = isDateTimeCurve ? OffsetDateTime.now().toInstant().toEpochMilli() : dispatcher.config.MAX_DEPTH_METERS;
         return Double.compare(key, minVal) < 0 || Double.compare(key, maxVal) > 0;
     }
 
@@ -196,6 +196,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
             addRequestJob(false);
         }
+
+        dispatcher.requestAllowed.incrementAndGet();
     }
 
     public synchronized Set<Integer> getScaleSet() {
@@ -204,7 +206,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public synchronized List<?> getCurveData(Double from, Double to, Integer scale) {
         if (scale != null && scale > 15) {
-            List<CurveSegment> result = dispatcher.getRepository().getSegmentsFromTo(info.getId(), scale, from, to)
+            List<CurveSegment> result = dispatcher.repository.getSegmentsFromTo(info.getId(), scale, from, to)
                     .stream()
                     .flatMap((Function<String, Stream<CurveSegment>>) str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
                     .collect(Collectors.toList());
@@ -218,7 +220,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             return result;
 
         } else {
-            List<CurveItem> result = dispatcher.getRepository().getItemsFromTo(info.getId(), from, to)
+            List<CurveItem> result = dispatcher.repository.getItemsFromTo(info.getId(), from, to)
                     .stream()
                     .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .collect(Collectors.toList());
@@ -280,19 +282,19 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         segmentCache.clear();
 
         if (lastSaved != null && Double.compare(lastSaved.getKey(), reloadData.from) >= 0) {
-            dispatcher.getRepository().deleteItems(info.getId(), from);
+            dispatcher.repository.deleteItems(info.getId(), from);
             reloadSavedInfo();
             if (isApproximated) {
                 Double segFrom = lastSaved == null ? null : lastSaved.getKey() + 0.0000001;
-                dispatcher.getRepository().deleteSegments(info.getId(), segFrom);
+                dispatcher.repository.deleteSegments(info.getId(), segFrom);
             }
         }
     }
 
     private void reloadSavedInfo() {
-        firstSaved = dispatcher.getRepository().getFirstItem(info.getId()).orElse(null);
-        lastSaved = dispatcher.getRepository().getLastItem(info.getId()).orElse(null);
-        savedCount = dispatcher.getRepository().getItemsRecordsCount(info.getId()) * dispatcher.getConfig().BATCH_SIZE;
+        firstSaved = dispatcher.repository.getFirstItem(info.getId()).orElse(null);
+        lastSaved = dispatcher.repository.getLastItem(info.getId()).orElse(null);
+        savedCount = dispatcher.repository.getItemsRecordsCount(info.getId()) * dispatcher.config.BATCH_SIZE;
     }
 
     private void collect(CurveItem item, boolean isReal) {
@@ -317,12 +319,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             int tmpCount = 0;
 
             SegmentCreator segmentCreator = new SegmentCreator();
-            while (realItemCache.size() >= dispatcher.getConfig().BATCH_SIZE + dispatcher.getConfig().MARGIN_SIZE) {
-                ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
-                for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
+            while (realItemCache.size() >= dispatcher.config.BATCH_SIZE + dispatcher.config.MARGIN_SIZE) {
+                ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.config.BATCH_SIZE);
+                for (int i = 0; i < dispatcher.config.BATCH_SIZE; i++) {
                     itemsBatch.add(realItemCache.pollFirst());
                 }
-                dispatcher.getRepository().saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch)));
+                dispatcher.repository.saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch)));
 
                 if (tmpFirst == null) {
                     tmpFirst = itemsBatch.get(0);
@@ -330,7 +332,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 tmpLast = itemsBatch.get(itemsBatch.size() - 1);
                 tmpCount += itemsBatch.size();
 
-                dispatcher.getRepository().saveOrUpdateInfo(info);
+                dispatcher.repository.saveOrUpdateInfo(info);
 
                 firstSaved = tmpFirst;
                 lastSaved = tmpLast;
@@ -349,10 +351,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         CurveItem tmpLast = lastSaved;
         int tmpCount = 0;
 
-        while (historyItemCache.size() >= dispatcher.getConfig().BATCH_SIZE) {
-            ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.getConfig().BATCH_SIZE);
+        while (historyItemCache.size() >= dispatcher.config.BATCH_SIZE) {
+            ArrayList<CurveItem> itemsBatch = new ArrayList<>(dispatcher.config.BATCH_SIZE);
 
-            for (int i = 0; i < dispatcher.getConfig().BATCH_SIZE; i++) {
+            for (int i = 0; i < dispatcher.config.BATCH_SIZE; i++) {
                 itemsBatch.add(historyItemCache.pollFirst());
             }
 
@@ -365,7 +367,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             tmpCount += itemsBatch.size();
         }
 
-        dispatcher.getRepository().saveItems(transfer);
+        dispatcher.repository.saveItems(transfer);
         firstSaved = tmpFirst;
         lastSaved = tmpLast;
         savedCount = savedCount + tmpCount;
@@ -397,7 +399,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
 
         updateMaxMinValue(loadBuffer.toArray(new CurveItem[0]));
-        dispatcher.getRepository().saveOrUpdateInfo(info);
+        dispatcher.repository.saveOrUpdateInfo(info);
     }
 
     private void updateMaxMinValue(CurveItem... items) {
@@ -453,12 +455,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         null,
                         false,
                         false,
-                        dispatcher.getConfig().HISTORY_REQUEST_LIMIT,
-                        dispatcher.getConfig().HISTORY_NUID + "." + info.getId()
+                        dispatcher.config.HISTORY_REQUEST_LIMIT,
+                        dispatcher.config.HISTORY_NUID + "." + info.getId()
                 );
 
         log.info("Request: {}", request);
-        Message response = NatsConnector.sendRequest(dispatcher.getConfig().SUBJECT, StaticMapper.toBytes(request));
+        Message response = NatsConnector.sendRequest(dispatcher.config.SUBJECT, StaticMapper.toBytes(request));
         if (response != null) {
             log.info("Response: {}", new String(response.getData()));
 
@@ -484,7 +486,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private String findFrom() {
         Double key = historyItemCache.isEmpty() ? lastSaved == null ? null : lastSaved.getKey() : historyItemCache.last().getKey();
         if (key == null) {
-            key = isDateTimeCurve ? dispatcher.getConfig().MIN_TIME_MILLIS : dispatcher.getConfig().MIN_DEPTH_METERS;
+            key = isDateTimeCurve ? dispatcher.config.MIN_TIME_MILLIS : dispatcher.config.MIN_DEPTH_METERS;
         }
         return getKeyAsString(key, info.getIndexType());
     }
@@ -492,7 +494,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private String findTo() {
         Double key = realItemCache.isEmpty() ? null : realItemCache.first().getKey();
         if (key == null) {
-            key = isDateTimeCurve ? OffsetDateTime.now().plusHours(1).toInstant().toEpochMilli() : dispatcher.getConfig().MAX_DEPTH_METERS;
+            key = isDateTimeCurve ? OffsetDateTime.now().plusHours(1).toInstant().toEpochMilli() : dispatcher.config.MAX_DEPTH_METERS;
         }
         return getKeyAsString(key, info.getIndexType());
     }
@@ -507,7 +509,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void sendWsMessage(WsMessage message) {
-        dispatcher.getWebSocketMessageProcessor().sendMessage(info.getId(), message);
+        dispatcher.webSocketMessageProcessor.sendMessage(info.getId(), message);
     }
 
     private boolean isApproximatedScale(Integer scale) {
@@ -537,7 +539,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
         public SegmentCreator createSegments(Collection<CurveItem> items) {
             if (isApproximated && lastSaved != null && firstSaved != null) {
-                for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
+                for (Integer scale : dispatcher.config.SCALE_MINUTES) {
                     int itemsOnPixel = findItemsOnPixel(scale);
                     if (isApproximatedScale(scale)) {
                         createScaleSegments(items, scale, itemsOnPixel);
@@ -594,20 +596,20 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private void saveSegments(List<CurveSegment> segments, int scale) {
         List<SegmentDto> transfer = new ArrayList<>();
         int first = 0;
-        while (segments.size() - first > dispatcher.getConfig().BATCH_SIZE) {
-            transfer.add(SegmentDto.fromLinesList(info.getId(), scale, segments.subList(first, first + dispatcher.getConfig().BATCH_SIZE)));
-            first = first + dispatcher.getConfig().BATCH_SIZE;
+        while (segments.size() - first > dispatcher.config.BATCH_SIZE) {
+            transfer.add(SegmentDto.fromLinesList(info.getId(), scale, segments.subList(first, first + dispatcher.config.BATCH_SIZE)));
+            first = first + dispatcher.config.BATCH_SIZE;
         }
 
         transfer.add(SegmentDto.fromLinesList(info.getId(), scale, segments.subList(first, segments.size())));
-        dispatcher.getRepository().saveSegments(transfer);
+        dispatcher.repository.saveSegments(transfer);
     }
 
     private void loadLost() {
         if (isApproximated && lastSaved != null && firstSaved != null) {
-            Map<Integer, Double> scaleLast = dispatcher.getRepository().getScalesLast(info.getId());
+            Map<Integer, Double> scaleLast = dispatcher.repository.getScalesLast(info.getId());
 
-            for (Integer scale : dispatcher.getConfig().SCALE_MINUTES) {
+            for (Integer scale : dispatcher.config.SCALE_MINUTES) {
                 if (isApproximatedScale(scale)) {
                     scaleLast.putIfAbsent(scale, Double.MIN_VALUE);
                 }
@@ -615,7 +617,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
             Double from = scaleLast.values().stream().min(Double::compareTo).orElse(Double.MIN_VALUE);
 
-            List<CurveItem> items = dispatcher.getRepository().getItemsFromTo(info.getId(), from, Double.MAX_VALUE)
+            List<CurveItem> items = dispatcher.repository.getItemsFromTo(info.getId(), from, Double.MAX_VALUE)
                     .stream()
                     .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .collect(Collectors.toList());
