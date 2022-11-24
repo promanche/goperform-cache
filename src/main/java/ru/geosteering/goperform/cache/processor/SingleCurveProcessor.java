@@ -114,6 +114,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (isReal) {
 
             if (keyNotInRange(item.getKey())) {
+                log.warn("Curve {} received point outside the allowed range: {}", info.getId(), StaticMapper.toJson(item));
                 return;
             }
 
@@ -156,7 +157,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     boolean alreadySaved = lastSaved != null && Double.compare(lastSaved.getKey(), item.getKey()) >= 0;
                     if (alreadySaved) {
                         if (from.get() == -1 || Double.compare(item.getKey(), from.get()) < 0) {
-                            from.set(item.getKey().longValue());
+                            from.set(item.getKey());
                         }
                         if (to.get() == -1 || Double.compare(item.getKey(), to.get()) > 0) {
                             to.set(item.getKey());
@@ -166,7 +167,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     return alreadySaved;
                 });
                 if (count.get() > 0) {
-                    log.warn("Duplicate points found: from {}, to {}, count {}", from.get(), to.get(), count.get());
+                    log.warn("Curve {} duplicate points found: from {}, to {}, count {}", info.getId(), from.get(), to.get(), count.get());
                 }
                 //-------------------------------------------------------
 
