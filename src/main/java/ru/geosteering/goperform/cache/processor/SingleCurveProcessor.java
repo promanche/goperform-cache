@@ -135,7 +135,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private boolean keyNotInRange(Double key) {
         double minVal = isDateTimeCurve ? dispatcher.config.MIN_TIME_MILLIS : dispatcher.config.MIN_DEPTH_METERS;
-        double maxVal = isDateTimeCurve ? OffsetDateTime.now().toInstant().toEpochMilli() : dispatcher.config.MAX_DEPTH_METERS;
+        double maxVal = isDateTimeCurve ? OffsetDateTime.now().plusHours(24).toInstant().toEpochMilli() : dispatcher.config.MAX_DEPTH_METERS;
         return Double.compare(key, minVal) < 0 || Double.compare(key, maxVal) > 0;
     }
 
