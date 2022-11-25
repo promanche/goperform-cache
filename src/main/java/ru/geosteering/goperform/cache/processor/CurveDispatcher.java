@@ -38,9 +38,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
     private final Queue<RequestTask> requestTaskQueue = new PriorityBlockingQueue<>(11, Comparator.comparing(RequestTask::getPriority));
-
-    protected final AtomicInteger requestAllowed = new AtomicInteger();
-
+    private final AtomicInteger requestAllowed = new AtomicInteger();
     private final ScheduledExecutorService statExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService reloadExecutor = Executors.newSingleThreadScheduledExecutor();
     private final AtomicInteger histCount = new AtomicInteger();
@@ -53,23 +51,25 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         statExecutor.scheduleAtFixedRate(() -> {
             try {
-                Map<String, Integer> curvesInfo = processors.values().stream()
-                        .map(SingleCurveProcessor::getLoadStatus)
-                        .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
-                curvesInfo.put("ACTIVE", activeCurves.size());
-                curvesInfo.put("BROKEN", brokenCurves.size());
-                log.info("CURVES INFO: {}", curvesInfo);
+                synchronized (processors) {
+                    Map<String, Integer> curvesInfo = processors.values().stream()
+                            .map(SingleCurveProcessor::getLoadStatus)
+                            .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
+                    curvesInfo.put("ACTIVE", activeCurves.size());
+                    curvesInfo.put("BROKEN", brokenCurves.size());
+                    log.info("CURVES INFO: {}", curvesInfo);
 
-                long seconds = (System.currentTimeMillis() - timer) / 1000;
-                timer = System.currentTimeMillis();
+                    long seconds = (System.currentTimeMillis() - timer) / 1000;
+                    timer = System.currentTimeMillis();
 
-                int history = histCount.getAndSet(0);
-                int real = realCount.getAndSet(0);
+                    int history = histCount.getAndSet(0);
+                    int real = realCount.getAndSet(0);
 
-                seconds = seconds == 0 ? 1 : seconds;
+                    seconds = seconds == 0 ? 1 : seconds;
 
-                log.info("STATISTICS FOR THE PERIOD: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
-                        history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
+                    log.info("STATISTICS FOR THE PERIOD: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
+                            history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
+                }
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
@@ -230,11 +230,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private void doRequestJob() {
         try {
             if (requestAllowed.getAndDecrement() > 0 && !requestTaskQueue.isEmpty()) {
-                RequestTask requestTask = requestTaskQueue.poll();
-                if (requestTask.type == RequestType.LOAD_ACTIVE || requestTask.type == RequestType.LOAD_REST) {
-                    processors.get(requestTask.id).setRequestTimer(System.currentTimeMillis());
-                }
-                requestTask.requestJob.doRequest();
+                requestTaskQueue.poll().requestJob.doRequest();
             } else {
                 requestAllowed.incrementAndGet();
             }

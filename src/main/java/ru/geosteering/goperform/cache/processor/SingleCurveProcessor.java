@@ -60,7 +60,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private final ReloadData reloadData = new ReloadData();
 
     private long pointTimer;
-    @Setter
     private long requestTimer;
 
     /**
@@ -196,8 +195,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
             addRequestJob(false);
         }
-
-        dispatcher.requestAllowed.incrementAndGet();
     }
 
     public synchronized Set<Integer> getScaleSet() {
@@ -460,6 +457,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 );
 
         log.info("Request: {}", request);
+        requestTimer = System.currentTimeMillis();
         Message response = NatsConnector.sendRequest(dispatcher.config.SUBJECT, StaticMapper.toBytes(request));
         if (response != null) {
             log.info("Response: {}", new String(response.getData()));
