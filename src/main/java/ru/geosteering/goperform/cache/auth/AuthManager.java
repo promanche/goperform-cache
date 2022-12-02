@@ -79,7 +79,7 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         log.debug("checkBatchReadAccess for {}: {}", auth.getName(), ids);
         boolean result = true;
         for (long id : ids) {
-            if (!checkObjectReadAccess(auth, id)) {
+            if (!objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.READ)) {
                 result = false;
                 break;
             }

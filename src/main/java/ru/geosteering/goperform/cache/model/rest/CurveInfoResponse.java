@@ -2,6 +2,7 @@ package ru.geosteering.goperform.cache.model.rest;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import lombok.*;
+import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
 import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.*;
 
@@ -31,4 +32,5 @@ public class CurveInfoResponse {
     private int saved;
     private Set<Integer> scaleSet;
     private Object lastValue;
+    private SingleCurveProcessor.LoadStatus status;
 }

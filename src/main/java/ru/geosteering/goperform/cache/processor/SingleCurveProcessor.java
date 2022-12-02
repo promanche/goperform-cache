@@ -99,7 +99,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     @Override
     public synchronized void onDisconnect() {
-        if (loadStatus != LoadStatus.BLOCKED && loadStatus != LoadStatus.LOADED) {
+        if (loadStatus != LoadStatus.BLOCKED) {
             loadStatus = LoadStatus.UNKNOWN;
         }
         realItemCache.clear();
@@ -256,6 +256,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public synchronized void updateReloadData(Double from, int delayMinutes) {
         loadStatus = LoadStatus.BLOCKED;
+        log.debug("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
         reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
         dispatcher.removeFromRequestQueue(info.getId());
@@ -263,7 +264,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public synchronized void reload() {
         if (reloadData.reloadTime != null && reloadData.reloadTime.isBefore(LocalDateTime.now()) && loadBuffer.isEmpty()) {
-            log.info("Curve {} will be reload from {}", info.getId(), reloadData.from);
+            log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
             clearData(reloadData.from);
             loadLost();
             reloadData.reloadTime = null;
