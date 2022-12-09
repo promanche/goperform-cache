@@ -43,7 +43,7 @@ dependencies {
 }
 
 group = 'ru.geosteering'
-version = '0.0.1-SNAPSHOT'
+version = '1.0.0'
 description = 'goperform-cache'
 java.sourceCompatibility = JavaVersion.VERSION_11
 
