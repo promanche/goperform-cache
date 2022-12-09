@@ -8,11 +8,19 @@ plugins {
     id 'org.springframework.boot' version '2.7.0'
     id 'io.spring.dependency-management' version '1.0.11.RELEASE'
     id 'io.freefair.lombok' version '6.5.0.2'
+    id 'com.bmuschko.docker-spring-boot-application' version '8.1.0'
 }
 
 repositories {
     mavenLocal()
     mavenCentral()
+    maven {
+        url "$nexusUrl/repository/maven-gostream-utils"
+        credentials{
+            username nexusUsername
+            password nexusPassword
+        }
+    }
 }
 
 dependencies {
@@ -28,8 +36,8 @@ dependencies {
     implementation 'io.nats:jnats:2.15.3'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
     implementation 'org.postgresql:postgresql'
-    implementation 'ru.geosteering:common-models:1.7.0'
-    implementation 'ru.geosteering:witsml-library:1.1.8'
+    implementation 'ru.geosteering:common-models:1.14.0'
+    implementation 'ru.geosteering:witsml-library:1.1.10'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
 }
@@ -49,4 +57,12 @@ publishing {
 
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
+}
+
+docker {
+    springBootApplication {
+        baseImage = 'openjdk:11-jre-slim'
+        ports = [9010]
+        images = ['nexus.geosteering.ru:5001/gostream/goperform-cache-service:latest']
+    }
 }
