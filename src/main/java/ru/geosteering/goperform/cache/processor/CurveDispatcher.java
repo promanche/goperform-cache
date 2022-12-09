@@ -113,12 +113,17 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public void onDataEndMessage(DataEndMessage message, String subject) {
-        Long id = parseId(subject);
-        LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
-        if (id != null) {
-            processors.get(id).onDataEndMessage(message);
+        try {
+            Long id = parseId(subject);
+            LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
+            if (id != null) {
+                processors.get(id).onDataEndMessage(message);
+            }
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+        } finally {
+            requestAllowed.incrementAndGet();
         }
-        requestAllowed.incrementAndGet();
     }
 
     public void addRequestTask(RequestTask task) {
