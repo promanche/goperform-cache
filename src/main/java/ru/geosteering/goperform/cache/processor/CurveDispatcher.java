@@ -119,6 +119,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             if (id != null) {
                 processors.get(id).onDataEndMessage(message);
             }
+
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         } finally {
@@ -171,42 +172,47 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     private void doInfoRequest(Long id, boolean fromRest) {
-        CurveDataRequest request = new CurveDataRequest();
-        request.setCurveId(id);
-        request.setInfoOnly(true);
-        request.setWithRange(true);
-        log.info("Request: {}", request);
-        Message response = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
+        try {
+            CurveDataRequest request = new CurveDataRequest();
+            request.setCurveId(id);
+            request.setInfoOnly(true);
+            request.setWithRange(true);
+            log.info("Request: {}", request);
+            Message response = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
 
-        if (response != null) {
-            log.info("Response: {}", new String(response.getData()));
+            if (response != null) {
+                log.info("Response: {}", new String(response.getData()));
 
-            ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
+                ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
 
-            switch (Objects.requireNonNull(apiMessage).getType()) {
+                switch (Objects.requireNonNull(apiMessage).getType()) {
 
-                case CURVE_INFO:
-                    CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
-                    ExtraCurveInfo info = new ExtraCurveInfo(curveInfo);
-                    repository.saveOrUpdateInfo(info);
-                    processors.computeIfAbsent(curveInfo.getId(), k -> new SingleCurveProcessor(info, fromRest, this));
-                    break;
+                    case CURVE_INFO:
+                        CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
+                        ExtraCurveInfo info = new ExtraCurveInfo(curveInfo);
+                        repository.saveOrUpdateInfo(info);
+                        processors.computeIfAbsent(curveInfo.getId(), k -> new SingleCurveProcessor(info, fromRest, this));
+                        break;
 
-                case STATUS:
-                    StatusMessage statusMessage = (StatusMessage) apiMessage;
-                    if (statusMessage.getStatus() != EResult.OK) {
-                        log.error("Missing curveInfo for {}, message {}", id, statusMessage);
-                        brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
-                    }
-                    break;
+                    case STATUS:
+                        StatusMessage statusMessage = (StatusMessage) apiMessage;
+                        if (statusMessage.getStatus() != EResult.OK) {
+                            log.error("Missing curveInfo for {}, message {}", id, statusMessage);
+                            brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
+                        }
+                        break;
 
-                default:
-                    log.error("Unknown response {}", new String(response.getData()));
-                    break;
+                    default:
+                        log.error("Unknown response {}", new String(response.getData()));
+                        break;
+                }
             }
-        }
 
-        requestAllowed.incrementAndGet();
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+        } finally {
+            requestAllowed.incrementAndGet();
+        }
     }
 
     private Long parseId(String subject) {
