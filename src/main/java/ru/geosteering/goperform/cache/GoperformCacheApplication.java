@@ -20,6 +20,6 @@ public class GoperformCacheApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        connector.connect();
+        connector.initConnectionScheduler();
     }
 }

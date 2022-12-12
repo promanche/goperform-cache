@@ -11,7 +11,6 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -19,15 +18,14 @@ import java.util.concurrent.Executors;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class RealtimeMessageHandler implements MessageHandler {
+public class RealtimeMessageHandler implements MessageHandler, ConnectionEventListener {
 
     private final Config config;
     private final CurveDispatcher curveDispatcher;
 
     private ExecutorService executor;
 
-    @PostConstruct
-    public void initExecutor() {
+    private void initExecutor() {
         executor = Executors.newFixedThreadPool(config.REALTIME_THREADS);
     }
 
@@ -72,6 +70,17 @@ public class RealtimeMessageHandler implements MessageHandler {
             return false;
         }
     }
+
+    @Override
+    public void onConnect() {
+        initExecutor();
+    }
+
+    @Override
+    public void onDisconnect() {
+        waitTerminated();
+    }
+
 
     @PreDestroy
     public void waitTerminated() {

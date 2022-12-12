@@ -9,8 +9,7 @@ import ru.geosteering.goperform.cache.config.Config;
 
 import javax.annotation.PreDestroy;
 import java.io.IOException;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.*;
 
 @Component
 @Slf4j
@@ -21,11 +20,29 @@ public class NatsConnector {
     private final HistoryMessageHandler historyHandler;
     private final ConnectionEventDispatcher connectionEventDispatcher;
     private final Config config;
-    private final AtomicBoolean reconnecting = new AtomicBoolean(false);
+    //    private final AtomicBoolean reconnecting = new AtomicBoolean(false);
+    private final ScheduledExecutorService connectionScheduler = Executors.newSingleThreadScheduledExecutor();
+
+    private long lastConnectionTry = System.currentTimeMillis();
 
     private static Connection connection;
 
-    public void connect() {
+    public void initConnectionScheduler() {
+        connectionScheduler.scheduleWithFixedDelay(() -> {
+            if (!isConnected()) {
+                int timeout = (int) ((System.currentTimeMillis() - lastConnectionTry) / 1000);
+                if (timeout >= config.RECONNECT_TIMEOUT_SECONDS) {
+                    log.info("Connecting...");
+                    lastConnectionTry = System.currentTimeMillis();
+                    connect();
+                } else {
+                    log.info("Connecting wait..." + (config.RECONNECT_TIMEOUT_SECONDS - timeout));
+                }
+            }
+        }, 0, 1, TimeUnit.SECONDS);
+    }
+
+    private void connect() {
 
         Options options = new Options.Builder()
                 .connectionName("goperform-cache")
@@ -33,11 +50,8 @@ public class NatsConnector {
                         ((conn, status) -> new Thread(() -> {
                                     log.info("Nats connection status: {}", status.name());
 
-                                    if (status == ConnectionListener.Events.DISCONNECTED && reconnecting.compareAndSet(false, true)) {
-                                        realtimeHandler.waitTerminated();
-                                        historyHandler.waitTerminated();
+                                    if (status == ConnectionListener.Events.DISCONNECTED) {
                                         connectionEventDispatcher.onDisconnect();
-                                        reconnect();
                                     }
 
                                     if (status == ConnectionListener.Events.CONNECTED) {
@@ -105,25 +119,25 @@ public class NatsConnector {
         }
     }
 
-    void reconnect() {
-        try {
-            closeConnection();
-
-            int seconds = config.RECONNECT_TIMEOUT_SECONDS;
-            while (seconds > 0) {
-                log.info("Reconnect waiting... " + seconds);
-                Thread.sleep(1000);
-                seconds--;
-            }
-
-            realtimeHandler.initExecutor();
-            historyHandler.initExecutor();
-            connect();
-
-        } catch (InterruptedException e) {
-            log.error(e.getMessage(), e);
-        } finally {
-            reconnecting.set(false);
-        }
-    }
+//    void reconnect() {
+//        try {
+//            closeConnection();
+//
+//            int seconds = config.RECONNECT_TIMEOUT_SECONDS;
+//            while (seconds > 0) {
+//                log.info("Reconnect waiting... " + seconds);
+//                Thread.sleep(1000);
+//                seconds--;
+//            }
+//
+//            realtimeHandler.initExecutor();
+//            historyHandler.initExecutor();
+//            connect();
+//
+//        } catch (InterruptedException e) {
+//            log.error(e.getMessage(), e);
+//        } finally {
+//            reconnecting.set(false);
+//        }
+//    }
 }

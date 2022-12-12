@@ -10,7 +10,6 @@ import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
-import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -18,15 +17,14 @@ import java.util.concurrent.Executors;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class HistoryMessageHandler implements MessageHandler {
+public class HistoryMessageHandler implements MessageHandler, ConnectionEventListener {
 
     private final Config config;
     private final CurveDispatcher curveDispatcher;
 
     private ExecutorService executor;
 
-    @PostConstruct
-    public void initExecutor() {
+    private void initExecutor() {
         executor = Executors.newFixedThreadPool(config.HISTORY_THREADS);
     }
 
@@ -61,6 +59,16 @@ public class HistoryMessageHandler implements MessageHandler {
         } catch (Exception e) {
             log.error("Subject: {}, message {}", new String(msg.getData()), msg.getSubject(), e);
         }
+    }
+
+    @Override
+    public void onConnect() {
+        initExecutor();
+    }
+
+    @Override
+    public void onDisconnect() {
+        waitTerminated();
     }
 
     @PreDestroy
