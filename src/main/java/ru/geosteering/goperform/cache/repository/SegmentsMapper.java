@@ -14,7 +14,7 @@ public interface SegmentsMapper {
     @Select("select data from segments where curve_id=#{id} and scale=#{scale} and #{from} <= last and #{to} >= first order by first")
     List<String> getFromTo(@Param("id") Long id, @Param("scale") int scale, @Param("from") Double from, @Param("to") Double to);
 
-    @Select("select curve_id as id, scale, first, last, data from segments where curve_id in (#{ids}) and scale=#{scale} and #{from} <= last and #{to} >= first order by first")
+    @Select("select curve_id as id, scale, first, last, data from segments where curve_id in (${ids}) and scale=#{scale} and #{from} <= last and #{to} >= first order by first")
     List<SegmentDto> getMulti(@Param("ids") String ids, @Param("scale") int scale, @Param("from") Double from, @Param("to") Double to);
 
     @Select("select data from segments where curve_id=#{id} and scale=#{scale} order by first")

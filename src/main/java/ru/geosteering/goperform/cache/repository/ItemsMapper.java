@@ -14,7 +14,7 @@ public interface ItemsMapper {
     @Select("select data from items where curve_id=#{id} and #{from} <= last and #{to} >= first order by first")
     List<String> getFromTo(@Param("id") Long id, @Param("from") Double from, @Param("to") Double to);
 
-    @Select("select curve_id as id, first, last, data from items where curve_id in (#{ids}) and #{from} <= last and #{to} >= first order by first")
+    @Select("select curve_id as id, first, last, data from items where curve_id in (${ids}) and #{from} <= last and #{to} >= first order by first")
     List<ItemDto> getMulti(@Param("ids") String ids, @Param("from") Double from, @Param("to") Double to);
 
     @Select("select data from items where curve_id=#{id} order by first")
