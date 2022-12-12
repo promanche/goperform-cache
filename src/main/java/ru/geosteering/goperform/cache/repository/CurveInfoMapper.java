@@ -3,8 +3,6 @@ package ru.geosteering.goperform.cache.repository;
 import org.apache.ibatis.annotations.*;
 import ru.geosteering.goperform.cache.repository.dto.CurveInfoDto;
 
-import java.util.List;
-
 @Mapper
 public interface CurveInfoMapper {
 
