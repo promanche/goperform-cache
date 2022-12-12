@@ -261,6 +261,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     protected void onErrorDataRequest(Long id) {
         brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
+        processors.remove(id);
         requestAllowed.incrementAndGet();
     }
 
