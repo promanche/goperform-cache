@@ -3,7 +3,8 @@ package ru.geosteering.goperform.cache.repository;
 import org.apache.ibatis.annotations.*;
 import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
 
-import java.util.*;
+import java.util.List;
+import java.util.Map;
 
 @Mapper
 public interface SegmentsMapper {
