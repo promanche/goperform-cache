@@ -474,10 +474,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     if (statusMessage.getStatus() != EResult.OK) {
                         log.error("Error curveData request for {}, message {}", info.getId(), statusMessage);
                     }
-                    return;
+                    dispatcher.onErrorDataRequest(info.getId());
+                    break;
 
                 default:
                     log.error("Unknown response {}", new String(response.getData()));
+                    dispatcher.onErrorDataRequest(info.getId());
+                    break;
             }
         }
     }

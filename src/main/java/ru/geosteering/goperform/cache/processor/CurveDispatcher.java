@@ -127,11 +127,11 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    public void addRequestTask(RequestTask task) {
+    protected void addRequestTask(RequestTask task) {
         requestTaskQueue.add(task);
     }
 
-    public void removeFromRequestQueue(Long id) {
+    protected void removeFromRequestQueue(Long id) {
         synchronized (requestTaskQueue) {
             requestTaskQueue.removeIf(task -> Objects.equals(task.id, id)
                     && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
@@ -142,7 +142,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         return brokenCurves.containsKey(id);
     }
 
-    public void incrementHistCount(int count) {
+    protected void incrementHistCount(int count) {
         histCount.addAndGet(count);
     }
 
@@ -257,6 +257,11 @@ public class CurveDispatcher implements ConnectionEventListener {
         synchronized (brokenCurves) {
             brokenCurves.entrySet().removeIf(entry -> entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now()));
         }
+    }
+
+    protected void onErrorDataRequest(Long id) {
+        brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
+        requestAllowed.incrementAndGet();
     }
 
     protected interface RequestJob {
