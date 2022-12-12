@@ -473,8 +473,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     StatusMessage statusMessage = (StatusMessage) apiMessage;
                     if (statusMessage.getStatus() != EResult.OK) {
                         log.error("Error curveData request for {}, message {}", info.getId(), statusMessage);
+                        dispatcher.onErrorDataRequest(info.getId());
                     }
-                    dispatcher.onErrorDataRequest(info.getId());
                     break;
 
                 default:
