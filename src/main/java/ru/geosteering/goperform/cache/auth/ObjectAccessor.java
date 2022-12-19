@@ -14,6 +14,11 @@ import ru.geosteering.goperform.cache.utils.StaticMapper;
 @Slf4j
 public class ObjectAccessor {
 
+    /**
+     * Порог логгирования: проверки доступа, проведённые быстрее данного порога, не должны логгироваться, чтобы не захламлять лог.
+     */
+    public static final long LOG_THRESHOLD_MILLIS = 100;
+
     @Cacheable(value = "objectAccess", condition = "#result")
     public boolean check(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
 

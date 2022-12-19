@@ -5,6 +5,7 @@ import lombok.*;
 @Getter
 @Setter
 @ToString(callSuper = true)
+// TODO зачем дублировать ru.geosteering.commonModels.authService.requests.CheckObjectAccessRequest?
 public class CheckObjectAccessRequest extends Request {
     private final String username;        // логин
     private final Long objectId;          // id объекта, доступ к которому проверяется
