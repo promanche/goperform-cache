@@ -51,32 +51,30 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         }
     }
 
-    public boolean checkObjectReadAccess(Authentication auth, long id) {
-        log.debug("checkObjectReadAccess started. User: {}, id {}", auth.getName(), id);
-        boolean result = objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.READ);
+    public boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permit) {
+        long startMillis = System.currentTimeMillis();
+        boolean result = objectAccessor.check(auth, id, permit);
 
-        if (result) {
-            log.debug("checkObjectReadAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
-        } else {
-            log.warn("checkObjectReadAccess completed. User: {}, id {}, result: {}", auth.getName(), id, false);
+        long endMillis = System.currentTimeMillis();
+        if( !result ) {
+            log.warn("checkObjectAccess( {}, {}, {} ): access denied in {} ms", auth.getName(), id, permit, endMillis-startMillis);
+        } else if( endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS ) {
+            log.info("checkObjectAccess( {}, {}, {} ): took too long, duration {} ms", auth.getName(), id, permit, endMillis-startMillis);
         }
+
         return result;
+    }
+
+    public boolean checkObjectReadAccess(Authentication auth, long id) {
+        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
     }
 
     public boolean checkObjectWriteAccess(Authentication auth, long id) {
-        log.debug("checkObjectWriteAccess START. User: {}, id {}", auth.getName(), id);
-        boolean result = objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
-
-        if (result) {
-            log.debug("checkObjectWriteAccess completed. User: {}, id {}, result: {}", auth.getName(), id, true);
-        } else {
-            log.warn("checkObjectWriteAccess completed. User: {}, id {}, result: {}", auth.getName(), id, false);
-        }
-        return result;
+        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
     }
 
     public boolean checkBatchReadAccess(Authentication auth, long[] ids) {
-        log.debug("checkBatchReadAccess for {}: {}", auth.getName(), ids);
+        long startMillis = System.currentTimeMillis();
         boolean result = true;
         for (long id : ids) {
             if (!objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.READ)) {
@@ -85,10 +83,11 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
             }
         }
 
-        if (result) {
-            log.debug("checkBatchReadAccess: permission granted for {}", auth.getName());
-        } else {
-            log.warn("checkBatchReadAccess: permission denied for {}", auth.getName());
+        long endMillis = System.currentTimeMillis();
+        if( !result ) {
+            log.warn("checkBatchReadAccess( {}, {} ): access denied in {} ms", auth.getName(), ids, endMillis-startMillis);
+        } else if( endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS ) {
+            log.info("checkBatchReadAccess( {}, {} ): took too long, duration {} ms", auth.getName(), ids, endMillis-startMillis);
         }
         return result;
     }
