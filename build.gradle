@@ -61,8 +61,8 @@ tasks.withType(JavaCompile) {
 
 docker {
     springBootApplication {
-        baseImage = 'openjdk:11-jre-slim'
+        baseImage = "openjdk:17-jre-slim"
         ports = [9010]
-        images = ['nexus.geosteering.ru:5001/gostream/goperform-cache-service:latest']
+        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:latest"]
     }
 }
