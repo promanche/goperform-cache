@@ -61,7 +61,7 @@ java \
 ## Опубликовать образ
 
 ```shell
-./gradlew dockerPublishImage
+./gradlew dockerPushImage
 ```
 
 ## Запустить приложение
