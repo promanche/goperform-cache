@@ -45,7 +45,7 @@ dependencies {
 group = 'ru.geosteering'
 version = '1.0.1'
 description = 'goperform-cache'
-java.sourceCompatibility = JavaVersion.VERSION_11
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
 publishing {
     publications {
@@ -61,7 +61,7 @@ tasks.withType(JavaCompile) {
 
 docker {
     springBootApplication {
-        baseImage = "openjdk:17-jre-slim"
+        baseImage = "eclipse-temurin:17-jre-alpine"
         ports = [9010]
         images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:latest"]
     }
