@@ -19,7 +19,7 @@ public class ObjectAccessor {
      */
     public static final long LOG_THRESHOLD_MILLIS = 100;
 
-    @Cacheable(value = "objectAccess", condition = "#result")
+    @Cacheable(value = "objectAccess", unless = "#result == false", key = "#auth.getName() + #id + #permission.toString()")
     public boolean check(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
 
         try {
