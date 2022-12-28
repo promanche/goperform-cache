@@ -33,4 +33,8 @@ public class CurveInfoResponse {
     private Set<Integer> scaleSet;
     private Object lastValue;
     private SingleCurveProcessor.LoadStatus status;
+    @JsonSerialize(using = CustomDoubleSerializer.class)
+    private Double minLoadedKey;
+    @JsonSerialize(using = CustomDoubleSerializer.class)
+    private Double maxLoadedKey;
 }
