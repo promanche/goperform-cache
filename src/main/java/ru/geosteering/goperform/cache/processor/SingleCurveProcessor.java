@@ -148,7 +148,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             if (isActive) {
                 realItemCache.addAll(historyItemCache);
 
-                //------------ Костыль до перехода на джобы ------------
+                //------------ Костыль до перехода на джобы (оставляем и после перехода) ------------
                 AtomicDouble from = new AtomicDouble(-1);
                 AtomicDouble to = new AtomicDouble(-1);
                 AtomicInteger count = new AtomicInteger(0);
@@ -383,6 +383,14 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setLastValue(String.valueOf(item.getValue()));
         }
 
+        if (info.getMaxLoadedKey() == null || Double.compare(info.getMaxLoadedKey(), key) <= 0) {
+            info.setMaxLoadedKey(key);
+        }
+
+        if (info.getMinLoadedKey() == null || Double.compare(info.getMinLoadedKey(), key) > 0) {
+            info.setMinLoadedKey(key);
+        }
+
         updateMaxMinValue(item);
     }
 
@@ -394,6 +402,14 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (info.getMaxKey() == null || Double.compare(info.getMaxKey(), loadBuffer.last().getKey()) <= 0) {
             info.setMaxKey(loadBuffer.last().getKey());
             info.setLastValue(String.valueOf(loadBuffer.first().getValue()));
+        }
+
+        if (info.getMaxLoadedKey() == null || Double.compare(info.getMaxLoadedKey(), loadBuffer.last().getKey()) <= 0) {
+            info.setMaxLoadedKey(loadBuffer.last().getKey());
+        }
+
+        if (info.getMinLoadedKey() == null || Double.compare(info.getMinLoadedKey(), loadBuffer.first().getKey()) > 0) {
+            info.setMinLoadedKey(loadBuffer.first().getKey());
         }
 
         updateMaxMinValue(loadBuffer.toArray(new CurveItem[0]));
@@ -622,7 +638,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             List<CurveItem> items = dispatcher.repository.getItemsFromTo(info.getId(), from, Double.MAX_VALUE)
                     .stream()
                     .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
-                    .collect(Collectors.toList());
+                    .toList();
 
             log.info("{} lost items for {} loaded", items.size(), info.getId());
 

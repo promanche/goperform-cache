@@ -24,6 +24,8 @@ public class ExtraCurveInfo {
     private Double minValue;
     private Double maxValue;
     private Object lastValue;
+    private Double minLoadedKey;
+    private Double maxLoadedKey;
 
     public ExtraCurveInfo(CurveInfo info) {
         id = info.getId();
