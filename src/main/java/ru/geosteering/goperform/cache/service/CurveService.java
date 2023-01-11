@@ -173,7 +173,9 @@ public class CurveService {
                 curveProcessor.getSavedCount(),
                 curveProcessor.getScaleSet(),
                 info.getLastValue(),
-                curveProcessor.getLoadStatus());
+                curveProcessor.getLoadStatus(),
+                info.getMinLoadedKey(),
+                info.getMaxLoadedKey());
     }
 
     public CurveInfoResponse[] getCurveInfoResponse(Long[] ids) {
