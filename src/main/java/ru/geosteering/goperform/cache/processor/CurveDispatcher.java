@@ -51,12 +51,13 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         statExecutor.scheduleAtFixedRate(() -> {
             try {
-                synchronized (processors) {
+                synchronized (this) {
                     Map<String, Integer> curvesInfo = processors.values().stream()
                             .map(SingleCurveProcessor::getLoadStatus)
                             .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
                     curvesInfo.put("ACTIVE", activeCurves.size());
                     curvesInfo.put("BROKEN", brokenCurves.size());
+                    curvesInfo.put("REQUEST_ALLOWED", requestAllowed.get());
                     log.info("CURVES INFO: {}", curvesInfo);
 
                     long seconds = (System.currentTimeMillis() - timer) / 1000;
@@ -103,7 +104,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             activeCurves.add(id);
             realCount.incrementAndGet();
         }
-        if (brokenCurves.containsKey(id)) {
+        if (isBroken(id)) {
             return;
         }
         SingleCurveProcessor curveProcessor = getCurveProcessor(id, false);
@@ -186,25 +187,20 @@ public class CurveDispatcher implements ConnectionEventListener {
                 ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
 
                 switch (Objects.requireNonNull(apiMessage).getType()) {
-
-                    case CURVE_INFO:
+                    case CURVE_INFO -> {
                         CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
                         ExtraCurveInfo info = new ExtraCurveInfo(curveInfo);
                         repository.saveOrUpdateInfo(info);
                         processors.computeIfAbsent(curveInfo.getId(), k -> new SingleCurveProcessor(info, fromRest, this));
-                        break;
-
-                    case STATUS:
+                    }
+                    case STATUS -> {
                         StatusMessage statusMessage = (StatusMessage) apiMessage;
                         if (statusMessage.getStatus() != EResult.OK) {
                             log.error("Missing curveInfo for {}, message {}", id, statusMessage);
                             brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
                         }
-                        break;
-
-                    default:
-                        log.error("Unknown response {}", new String(response.getData()));
-                        break;
+                    }
+                    default -> log.error("Unknown response {}", new String(response.getData()));
                 }
             }
 
@@ -255,13 +251,36 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Scheduled(fixedDelay = 3, timeUnit = TimeUnit.MINUTES)
     private void clearBroken() {
         synchronized (brokenCurves) {
-            brokenCurves.entrySet().removeIf(entry -> entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now()));
+            AtomicInteger count = new AtomicInteger();
+            brokenCurves.entrySet().removeIf(entry -> {
+                boolean removable = entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now());
+                if (removable) {
+                    count.getAndIncrement();
+                }
+                return removable;
+            });
+            if (count.get() > 0) {
+                log.info("{} curves removed from broken", count);
+            }
         }
     }
 
     protected void onErrorDataRequest(Long id) {
-        brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
-        processors.remove(id);
+        if (!brokenCurves.containsKey(id)) {
+            LocalDateTime now = LocalDateTime.now();
+            brokenCurves.put(id, now);
+            log.warn("Curve {} is marked as broken at {} for 30 minutes", id, now);
+        } else {
+            log.debug("Curve {} is already marked as broken", id);
+        }
+
+        SingleCurveProcessor removed = processors.remove(id);
+        if (removed != null) {
+            log.warn("Curve {} processor was removed", id);
+        } else {
+            log.debug("Curve {} processor is null", id);
+        }
+
         requestAllowed.incrementAndGet();
     }
 

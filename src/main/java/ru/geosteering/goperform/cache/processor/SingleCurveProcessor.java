@@ -45,6 +45,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private final TreeSet<CurveItem> historyItemCache = new TreeSet<>(Comparator.comparing(CurveItem::getKey));
     private final TreeSet<CurveItem> loadBuffer = new TreeSet<>(Comparator.comparing(CurveItem::getKey));
     private final Map<Integer, List<CurveSegment>> segmentCache = new HashMap<>(); // scale -> segments
+    private final AtomicInteger historyPoints = new AtomicInteger();
 
     @Getter
     private CurveItem lastSaved;
@@ -140,8 +141,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     public synchronized void onDataEndMessage(DataEndMessage message) {
         int sent = message.getSentCount();
-        int received = loadBuffer.size();
-
+        int received = historyPoints.getAndSet(0);
         dispatcher.incrementHistCount(received);
 
         if (sent == 0) {
@@ -181,6 +181,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             addRequestJob(false);
 
         } else {
+            if (received != loadBuffer.size()) {
+                log.error("Buffer size {} not equals to received {}", loadBuffer.size(), received);
+            }
+
             long millis = Math.max(1, System.currentTimeMillis() - pointTimer);
             long pointsPerSecond = received * 1000L / millis;
             log.info("Curve {} received {} items with avg speed {} points/sec. Request->firstPoint {} ms, firstPoint->lastPoint {} ms",
@@ -301,7 +305,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             saveRealItems();
 
         } else {
-            if (loadBuffer.isEmpty()) {
+            if (historyPoints.getAndIncrement() == 0) {
                 pointTimer = System.currentTimeMillis();
                 loadStatus = loadStatus == LoadStatus.IN_QUEUE ? LoadStatus.IN_PROGRESS : loadStatus;
             }
@@ -481,22 +485,19 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
             ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
             switch (Objects.requireNonNull(apiMessage).getType()) {
-
-                case CURVE_INFO:
-                    break;
-
-                case STATUS:
+                case CURVE_INFO -> {
+                }
+                case STATUS -> {
                     StatusMessage statusMessage = (StatusMessage) apiMessage;
                     if (statusMessage.getStatus() != EResult.OK) {
                         log.error("Error curveData request for {}, message {}", info.getId(), statusMessage);
                         dispatcher.onErrorDataRequest(info.getId());
                     }
-                    break;
-
-                default:
+                }
+                default -> {
                     log.error("Unknown response {}", new String(response.getData()));
                     dispatcher.onErrorDataRequest(info.getId());
-                    break;
+                }
             }
         }
     }
