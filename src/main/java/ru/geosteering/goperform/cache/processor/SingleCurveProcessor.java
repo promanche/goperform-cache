@@ -2,7 +2,8 @@ package ru.geosteering.goperform.cache.processor;
 
 import com.google.common.util.concurrent.AtomicDouble;
 import io.nats.client.Message;
-import lombok.*;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
@@ -273,6 +274,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         loadStatus = LoadStatus.BLOCKED;
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
         reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
+        dispatcher.removeFromRequestQueue(info.getId());
+    }
+
+    public synchronized void updateReloadData() {
+        loadStatus = LoadStatus.BLOCKED;
+        reloadData.from = 0.0;
+        reloadData.reloadTime = LocalDateTime.now();
         dispatcher.removeFromRequestQueue(info.getId());
     }
 

@@ -157,9 +157,9 @@ public class CurveService {
         return response;
     }
 
-    public void reloadCurve(Long id, Double from) {
+    public void reloadCurve(Long id) {
         checkCurve(id, null);
-        curveDispatcher.getCurveProcessor(id, true).updateReloadData(from, 0);
+        curveDispatcher.getCurveProcessor(id, true).updateReloadData();
     }
 
     public CurveInfoResponse getCurveInfoResponse(Long id) {
@@ -269,7 +269,7 @@ public class CurveService {
 
             if (statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0) {
                 if (update) {
-                    reloadCurve(id, comment.getKey());
+                    reloadCurve(id);
                 }
             } else {
                 throw new BadRequestException(statusMessage.getMessage());
@@ -303,7 +303,7 @@ public class CurveService {
             StatusMessage statusMessage = (StatusMessage) apiMessage;
 
             if (statusMessage.getStatus() == EResult.OK && Integer.parseInt(statusMessage.getMessage()) > 0) {
-                reloadCurve(id, key);
+                reloadCurve(id);
             } else {
                 throw new BadRequestException(statusMessage.getMessage());
             }

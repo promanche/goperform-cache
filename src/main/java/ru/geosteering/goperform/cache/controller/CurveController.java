@@ -8,24 +8,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.Authentication;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-
+import org.springframework.web.bind.annotation.*;
 import ru.geosteering.goperform.cache.auth.AuthManager;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.model.auth.CheckObjectAccessRequest;
-import ru.geosteering.goperform.cache.model.rest.Comment;
-import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
-import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
-import ru.geosteering.goperform.cache.model.rest.MultiResponse;
+import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.service.CurveService;
 
 import java.time.OffsetDateTime;
@@ -44,7 +31,7 @@ public class CurveController {
 
     @GetMapping("/curve/writable")
     public ResponseEntity<Boolean> isWritable(Authentication auth, @RequestParam Long id) {
-        
+
         boolean result = authManager.checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
 
         return new ResponseEntity<Boolean>(Boolean.valueOf(result), HttpStatus.OK);
@@ -118,24 +105,11 @@ public class CurveController {
         return service.getMultiResponse(ids, doubleFrom, doubleTo, scale);
     }
 
-    @DeleteMapping("/curve/{id}/coordinates/by-time")
+    @DeleteMapping("/curve/{id}")
     @ResponseStatus(HttpStatus.OK)
-    public void reloadByTime(@PathVariable Long id,
-                             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from) {
-
-        log.info("Reload by-time request id {}, from {}", id, from);
-        Double doubleFrom = from == null ? 0 : (double) from.toInstant().toEpochMilli();
-        service.reloadCurve(id, doubleFrom);
-    }
-
-    @DeleteMapping("/curve/{id}/coordinates/by-depth")
-    @ResponseStatus(HttpStatus.OK)
-    public void reloadByDepth(@PathVariable Long id,
-                              @RequestParam(required = false) Double from) {
-
-        log.info("Reload by-depth request id {}, from {}", id, from);
-        Double doubleFrom = from == null ? Double.MIN_VALUE : from;
-        service.reloadCurve(id, doubleFrom);
+    public void reloadCurve(@PathVariable Long id) {
+        log.info("Reload curve {} request", id);
+        service.reloadCurve(id);
     }
 
     @PostMapping("/curve")
