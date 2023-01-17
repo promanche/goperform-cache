@@ -19,6 +19,7 @@ import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -189,7 +190,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                 switch (Objects.requireNonNull(apiMessage).getType()) {
                     case CURVE_INFO -> {
                         CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
-                        ExtraCurveInfo info = new ExtraCurveInfo(curveInfo);
+                        ExtraCurveInfo info = new ExtraCurveInfo(prepareInfoKeys(curveInfo));
                         repository.saveOrUpdateInfo(info);
                         processors.computeIfAbsent(curveInfo.getId(), k -> new SingleCurveProcessor(info, fromRest, this));
                     }
@@ -209,6 +210,29 @@ public class CurveDispatcher implements ConnectionEventListener {
         } finally {
             requestAllowed.incrementAndGet();
         }
+    }
+
+    private CurveInfo prepareInfoKeys(CurveInfo info) {
+
+        Double mdMin = info.getMdMin();
+        Double mdMax = info.getMdMax();
+        if (mdMin != null && (mdMin < config.MIN_DEPTH_METERS || mdMin > config.MAX_DEPTH_METERS)) {
+            info.setMdMin(null);
+        }
+        if (mdMax != null && (mdMax < config.MIN_DEPTH_METERS || mdMax > config.MAX_DEPTH_METERS)) {
+            info.setMdMax(null);
+        }
+
+        OffsetDateTime timeMin = info.getTimeMin();
+        OffsetDateTime timeMax = info.getTimeMax();
+        if (timeMin != null && (timeMin.toInstant().toEpochMilli() < config.MIN_TIME_MILLIS || timeMin.toInstant().toEpochMilli() > OffsetDateTime.now().plusHours(24).toInstant().toEpochMilli())) {
+            info.setTimeMin(null);
+        }
+        if (timeMax != null && (timeMax.toInstant().toEpochMilli() < config.MIN_TIME_MILLIS || timeMax.toInstant().toEpochMilli() > OffsetDateTime.now().plusHours(24).toInstant().toEpochMilli())) {
+            info.setTimeMax(null);
+        }
+
+        return info;
     }
 
     private Long parseId(String subject) {
