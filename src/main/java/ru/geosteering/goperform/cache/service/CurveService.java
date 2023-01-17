@@ -25,8 +25,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 @Service
 @Slf4j
@@ -72,6 +71,18 @@ public class CurveService {
     }
 
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
+
+        List<Long> checked = new ArrayList<>();
+        for (long id : ids) {
+            try {
+                checkCurve(id, scale);
+                checked.add(id);
+            } catch (Exception e) {
+                log.info(id + " " + e.getMessage());
+            }
+        }
+        ids = checked.stream().mapToLong(Long::longValue).toArray();
+
         MultiResponse response = new MultiResponse(ids);
 
         StopWatch swDispatch = new StopWatch();
