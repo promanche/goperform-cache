@@ -2,8 +2,7 @@ package ru.geosteering.goperform.cache.processor;
 
 import com.google.common.util.concurrent.AtomicDouble;
 import io.nats.client.Message;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
@@ -76,6 +75,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
      */
     private static final long MINMAX_ERROR_REPORT_THRESHOLD = 3 * 60 * 1000L;
 
+    private long lastBlockedLogTime = 0;
+    private long lastUpdateReloadLogTime = 0;
+
     public SingleCurveProcessor(ExtraCurveInfo info, boolean fromRest, CurveDispatcher dispatcher) {
         this.info = info;
         this.fromRest = fromRest;
@@ -125,7 +127,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
             } else {
-                updateReloadData(item.getKey(), 5);
+                updateReloadData(item, 5);
             }
 
         } else {
@@ -258,22 +260,47 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return result;
     }
 
-    public synchronized void updateReloadData(Double from, int delayMinutes) {
+    public synchronized void updateReloadData(CurveItem item, int delayMinutes) {
+        Double from = item.getKey();
+
+        if (loadStatus != LoadStatus.BLOCKED) {
+            log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
+        } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
+            log.info("Curve {} blocking extended by {} minutes due to point {}", info.getId(), delayMinutes, item);
+            lastUpdateReloadLogTime = System.currentTimeMillis();
+        }
+
         loadStatus = LoadStatus.BLOCKED;
-        log.debug("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
         reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
         dispatcher.removeFromRequestQueue(info.getId());
     }
 
     public synchronized void reload() {
-        if (reloadData.reloadTime != null && reloadData.reloadTime.isBefore(LocalDateTime.now()) && loadBuffer.isEmpty()) {
-            log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
-            clearData(reloadData.from);
-            loadLost();
-            reloadData.reloadTime = null;
-            reloadData.from = null;
-            addRequestJob(true);
+        if (loadStatus == LoadStatus.BLOCKED) {
+            boolean reloadTimeNotNull = reloadData.reloadTime != null;
+            boolean reloadTimeIsCome = reloadTimeNotNull && reloadData.reloadTime.isBefore(LocalDateTime.now());
+            boolean loadBufferIsEmpty = loadBuffer.isEmpty();
+            if (reloadTimeNotNull && reloadTimeIsCome && loadBufferIsEmpty) {
+                log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
+                clearData(reloadData.from);
+                loadLost();
+                reloadData.reloadTime = null;
+                reloadData.from = null;
+                addRequestJob(true);
+            } else if (System.currentTimeMillis() - lastBlockedLogTime > 60000) {
+                String reason;
+                if (!reloadTimeNotNull) {
+                    reason = "reload time is null";
+                } else if (!reloadTimeIsCome) {
+                    reason = "reload time has not come yet (expected at " + reloadData.reloadTime + ")";
+                } else {
+                    reason = "load buffer is not empty (size = " + loadBuffer.size() + ")";
+                }
+                log.info("Curve {} is still blocked by reason of {}", info.getId(), reason);
+
+                lastBlockedLogTime = System.currentTimeMillis();
+            }
         }
     }
 
