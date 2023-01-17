@@ -66,3 +66,7 @@ docker {
         images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:latest"]
     }
 }
+
+springBoot {
+    buildInfo()
+}
