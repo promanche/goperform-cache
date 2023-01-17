@@ -508,7 +508,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         requestTimer = System.currentTimeMillis();
         Message response = NatsConnector.sendRequest(dispatcher.config.SUBJECT, StaticMapper.toBytes(request));
         if (response != null) {
-            log.info("Response: {}", new String(response.getData()));
+            log.debug("Response: {}", new String(response.getData()));
 
             ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
             switch (Objects.requireNonNull(apiMessage).getType()) {
@@ -526,6 +526,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     dispatcher.onErrorDataRequest(info.getId());
                 }
             }
+        } else {
+            log.error("Response is null");
         }
     }
 
