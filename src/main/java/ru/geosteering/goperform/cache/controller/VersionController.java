@@ -11,7 +11,7 @@ public class VersionController {
 
     private final BuildProperties buildProperties;
 
-    @GetMapping("/version")
+    @GetMapping("/curve/version")
     public String get() {
         return buildProperties.getVersion();
     }
