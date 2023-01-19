@@ -9,6 +9,7 @@ plugins {
     id 'io.spring.dependency-management' version '1.0.11.RELEASE'
     id 'io.freefair.lombok' version '6.5.0.2'
     id 'com.bmuschko.docker-spring-boot-application' version '8.1.0'
+    id 'com.gorylenko.gradle-git-properties' version '2.4.1'
 }
 
 repositories {
@@ -40,6 +41,7 @@ dependencies {
     implementation 'ru.geosteering:witsml-library:1.1.10'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
 }
 
 group = 'ru.geosteering'
@@ -67,6 +69,7 @@ docker {
     }
 }
 
-springBoot {
-    buildInfo()
+gitProperties {
+    keys = ['git.branch','git.commit.id','git.commit.message.full','git.commit.time']
+    dateFormat = "dd-MM-yyyy HH:mm Z"
 }

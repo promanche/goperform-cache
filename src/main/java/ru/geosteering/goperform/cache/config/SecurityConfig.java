@@ -37,7 +37,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         (auth) -> auth
                                 .antMatchers("/ws").permitAll()
-                                .antMatchers("/curve/version").hasRole("USER")
+                                .antMatchers("/curve/actuator/info").hasRole("USER")
                                 .antMatchers(HttpMethod.GET, "/curve/writable").authenticated()
                                 .antMatchers("/curve/multi/**").hasRole("USER")
                                 .antMatchers(HttpMethod.POST, "/curve").hasRole("USER")
