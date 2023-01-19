@@ -331,6 +331,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private void reloadSavedInfo() {
         firstSaved = dispatcher.repository.getFirstItem(info.getId()).orElse(null);
         lastSaved = dispatcher.repository.getLastItem(info.getId()).orElse(null);
+        if (firstSaved != null) {
+            info.setMinLoadedKey(firstSaved.getKey());
+        }
+        if (lastSaved != null) {
+            info.setMaxLoadedKey(lastSaved.getKey());
+        }
         savedCount = dispatcher.repository.getItemsRecordsCount(info.getId()) * dispatcher.config.BATCH_SIZE;
     }
 
