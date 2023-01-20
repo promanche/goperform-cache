@@ -8,6 +8,7 @@ import lombok.extern.slf4j.Slf4j;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.*;
+import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.*;
 import ru.geosteering.goperform.cache.model.ws.*;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
@@ -542,6 +543,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             }
         } else {
             log.error("Response is null");
+            addRequestJob(false);
+            throw new NullResponseException();
         }
     }
 

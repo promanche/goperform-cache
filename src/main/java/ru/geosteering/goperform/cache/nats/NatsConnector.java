@@ -102,7 +102,7 @@ public class NatsConnector {
 
                 response = connection.request(request).get();
 
-            } catch (InterruptedException | ExecutionException e) {
+            } catch (Exception e) {
                 log.error("Send request exception: {}", e.getMessage(), e);
             }
         }

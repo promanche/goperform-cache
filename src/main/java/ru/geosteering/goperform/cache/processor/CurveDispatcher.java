@@ -11,6 +11,7 @@ import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
@@ -260,14 +261,14 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Scheduled(fixedRate = 30)
     private void doRequestJob() {
         if (NatsConnector.isConnected()) {
-            try {
-                if (requestAllowed.getAndDecrement() > 0 && !requestTaskQueue.isEmpty()) {
+            if (requestAllowed.getAndDecrement() > 0 && !requestTaskQueue.isEmpty()) {
+                try {
                     requestTaskQueue.poll().requestJob.doRequest();
-                } else {
+                } catch (NullResponseException e) {
                     requestAllowed.incrementAndGet();
                 }
-            } catch (Exception e) {
-                log.error(e.getMessage(), e);
+            } else {
+                requestAllowed.incrementAndGet();
             }
         }
     }
