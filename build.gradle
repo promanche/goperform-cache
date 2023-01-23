@@ -45,7 +45,7 @@ dependencies {
 }
 
 group = 'ru.geosteering'
-version = '1.0.3'
+version = generateVersion()
 description = 'goperform-cache'
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
@@ -72,4 +72,15 @@ docker {
 gitProperties {
     keys = ['git.branch','git.commit.id','git.commit.message.full','git.commit.time']
     dateFormat = "dd-MM-yyyy HH:mm Z"
+}
+
+springBoot {
+    buildInfo()
+}
+
+def generateVersion(){
+    def workDir = new File("${projectDir}")
+    def branch = 'git rev-parse --abbrev-ref HEAD'.execute(null, workDir).text.trim()
+    def commit = 'git rev-parse --short HEAD'.execute(null, workDir).text.trim()
+    return branch + commit
 }
