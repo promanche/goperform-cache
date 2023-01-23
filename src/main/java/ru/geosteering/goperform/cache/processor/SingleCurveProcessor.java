@@ -116,14 +116,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         CurveItem item = CurveItem.fromAbstractDataItem(message.getData(), isDateTimeCurve);
 
         if (isReal) {
-
+            isActive = true;
             if (keyNotInRange(item.getKey())) {
                 log.warn("Curve {} received point outside the allowed range: {}", info.getId(), StaticMapper.toJson(item));
                 return;
             }
-
-            isActive = true;
             if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
+
+                if (!loadBuffer.isEmpty() && Double.compare(item.getKey(), loadBuffer.last().getKey()) < 0) {
+                    log.warn("Real time point {} is precedes than last history point {}", item, loadBuffer.last());
+                }
+
                 collect(item, true);
                 updateInfo(item);
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
@@ -557,10 +560,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private String findTo() {
-        Double key = realItemCache.isEmpty() ? null : realItemCache.first().getKey();
-        if (key == null) {
-            key = isDateTimeCurve ? OffsetDateTime.now().plusHours(1).toInstant().toEpochMilli() : dispatcher.config.MAX_DEPTH_METERS;
-        }
+        Double key = isDateTimeCurve ? OffsetDateTime.now().plusHours(24).toInstant().toEpochMilli() : dispatcher.config.MAX_DEPTH_METERS;
         return getKeyAsString(key, info.getIndexType());
     }
 
