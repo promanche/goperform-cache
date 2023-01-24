@@ -262,10 +262,12 @@ public class CurveDispatcher implements ConnectionEventListener {
     private void doRequestJob() {
         if (NatsConnector.isConnected()) {
             if (requestAllowed.getAndDecrement() > 0 && !requestTaskQueue.isEmpty()) {
+                RequestTask task = requestTaskQueue.poll();
                 try {
-                    requestTaskQueue.poll().requestJob.doRequest();
+                    task.requestJob.doRequest();
                 } catch (NullResponseException e) {
                     requestAllowed.incrementAndGet();
+                    requestTaskQueue.add(task);
                 }
             } else {
                 requestAllowed.incrementAndGet();
