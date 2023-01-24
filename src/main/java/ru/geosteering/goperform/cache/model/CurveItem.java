@@ -9,6 +9,7 @@ import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
 @Getter
 @EqualsAndHashCode
 @AllArgsConstructor
+@ToString
 public class CurveItem {
 
     @JsonSerialize(using = CustomDoubleSerializer.class)
