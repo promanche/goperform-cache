@@ -281,18 +281,22 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     @Scheduled(fixedDelay = 3, timeUnit = TimeUnit.MINUTES)
     private void clearBroken() {
-        synchronized (brokenCurves) {
-            AtomicInteger count = new AtomicInteger();
-            brokenCurves.entrySet().removeIf(entry -> {
-                boolean removable = entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now());
-                if (removable) {
-                    count.getAndIncrement();
+        try {
+            synchronized (brokenCurves) {
+                AtomicInteger count = new AtomicInteger();
+                brokenCurves.entrySet().removeIf(entry -> {
+                    boolean removable = entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now());
+                    if (removable) {
+                        count.getAndIncrement();
+                    }
+                    return removable;
+                });
+                if (count.get() > 0) {
+                    log.info("{} curves removed from broken", count);
                 }
-                return removable;
-            });
-            if (count.get() > 0) {
-                log.info("{} curves removed from broken", count);
             }
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
         }
     }
 
