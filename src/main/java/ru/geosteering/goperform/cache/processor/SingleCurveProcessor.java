@@ -124,7 +124,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
 
                 if (!loadBuffer.isEmpty() && Double.compare(item.getKey(), loadBuffer.last().getKey()) < 0) {
-                    log.warn("Real time point {} is precedes than last history point {}", item, loadBuffer.last());
+                    log.warn("Curve {} real time point {} is precedes than last history point {}", info.getId(), item, loadBuffer.last());
                 }
 
                 collect(item, true);
