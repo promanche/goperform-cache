@@ -272,8 +272,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (loadStatus != LoadStatus.BLOCKED) {
             log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
+            String lastReal = realItemCache.isEmpty() ? "null" : realItemCache.last().toString();
+            String lastSaved = this.lastSaved == null ? "null" : this.lastSaved.toString();
             log.info("Curve {} blocking extended by {} minutes due to point {}. Last saved point {}, last realtime point in memory {}. {} more old points suppressed",
-                    info.getId(), delayMinutes, item, lastSaved, realItemCache.last(), suppressedOldPoints);
+                    info.getId(), delayMinutes, item, lastSaved, lastReal, suppressedOldPoints);
             lastUpdateReloadLogTime = System.currentTimeMillis();
             suppressedOldPoints = 0;
         } else {
