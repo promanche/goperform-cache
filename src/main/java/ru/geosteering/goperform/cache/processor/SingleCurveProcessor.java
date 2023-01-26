@@ -79,6 +79,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private long lastBlockedLogTime = 0;
     private long lastUpdateReloadLogTime = 0;
+    private int suppressedOldPoints = 0;
 
     public SingleCurveProcessor(ExtraCurveInfo info, boolean fromRest, CurveDispatcher dispatcher) {
         this.info = info;
@@ -271,8 +272,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (loadStatus != LoadStatus.BLOCKED) {
             log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
-            log.info("Curve {} blocking extended by {} minutes due to point {}", info.getId(), delayMinutes, item);
+            log.info("Curve {} blocking extended by {} minutes due to point {}. Last saved point {}, last realtime point in memory {}. {} more old points suppressed",
+                    info.getId(), delayMinutes, item, lastSaved, realItemCache.last(), suppressedOldPoints);
             lastUpdateReloadLogTime = System.currentTimeMillis();
+            suppressedOldPoints = 0;
+        } else {
+            suppressedOldPoints++;
         }
 
         loadStatus = LoadStatus.BLOCKED;
