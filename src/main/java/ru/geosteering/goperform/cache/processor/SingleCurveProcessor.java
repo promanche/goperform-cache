@@ -57,7 +57,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     @Setter
     private boolean fromRest;
-    private boolean isActive;
 
     private final ReloadData reloadData = new ReloadData();
 
@@ -85,7 +84,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         this.info = info;
         this.fromRest = fromRest;
         this.dispatcher = dispatcher;
-        this.isActive = !fromRest;
 
         isDateTimeCurve = info.getIndexType() != LogIndexType.MEASURED_DEPTH;
 
@@ -118,15 +116,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         CurveItem item = CurveItem.fromAbstractDataItem(message.getData(), isDateTimeCurve);
 
         if (isReal) {
-
-            if (!isActive) {
-                isActive = true;
-                if (loadStatus == LoadStatus.LOADED) {
-                    realItemCache.addAll(historyItemCache);
-                    historyItemCache.clear();
-                }
-            }
-
             if (keyNotInRange(item.getKey())) {
                 log.warn("Curve {} received point outside the allowed range: {}", info.getId(), StaticMapper.toJson(item));
                 return;
@@ -161,33 +150,31 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         dispatcher.incrementHistCount(received);
 
         if (sent == 0) {
-            if (isActive) {
-                realItemCache.addAll(historyItemCache);
+            realItemCache.addAll(historyItemCache);
 
-                //------------ Костыль до перехода на джобы (оставляем и после перехода) ------------
-                AtomicDouble from = new AtomicDouble(-1);
-                AtomicDouble to = new AtomicDouble(-1);
-                AtomicInteger count = new AtomicInteger(0);
-                realItemCache.removeIf(item -> {
-                    boolean alreadySaved = lastSaved != null && Double.compare(lastSaved.getKey(), item.getKey()) >= 0;
-                    if (alreadySaved) {
-                        if (from.get() == -1 || Double.compare(item.getKey(), from.get()) < 0) {
-                            from.set(item.getKey());
-                        }
-                        if (to.get() == -1 || Double.compare(item.getKey(), to.get()) > 0) {
-                            to.set(item.getKey());
-                        }
-                        count.incrementAndGet();
+            //------------ Удаляем дубликаты точек, которые могли прийти в реалтайм во время загрузки (бывает такое) ------------
+            AtomicDouble from = new AtomicDouble(-1);
+            AtomicDouble to = new AtomicDouble(-1);
+            AtomicInteger count = new AtomicInteger(0);
+            realItemCache.removeIf(item -> {
+                boolean alreadySaved = lastSaved != null && Double.compare(lastSaved.getKey(), item.getKey()) >= 0;
+                if (alreadySaved) {
+                    if (from.get() == -1 || Double.compare(item.getKey(), from.get()) < 0) {
+                        from.set(item.getKey());
                     }
-                    return alreadySaved;
-                });
-                if (count.get() > 0) {
-                    log.warn("Curve {} duplicate points found: from {}, to {}, count {}", info.getId(), from.get(), to.get(), count.get());
+                    if (to.get() == -1 || Double.compare(item.getKey(), to.get()) > 0) {
+                        to.set(item.getKey());
+                    }
+                    count.incrementAndGet();
                 }
-                //-------------------------------------------------------
-
-                historyItemCache.clear();
+                return alreadySaved;
+            });
+            if (count.get() > 0) {
+                log.warn("Curve {} duplicate points found: from {}, to {}, count {}", info.getId(), from.get(), to.get(), count.get());
             }
+            //-------------------------------------------------------
+
+            historyItemCache.clear();
             loadStatus = loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED;
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
