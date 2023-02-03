@@ -53,7 +53,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         statExecutor.scheduleAtFixedRate(() -> {
             try {
-                synchronized (this) {
+                synchronized (processors) {
                     Map<String, Integer> curvesInfo = processors.values().stream()
                             .map(SingleCurveProcessor::getLoadStatus)
                             .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
