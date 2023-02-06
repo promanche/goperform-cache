@@ -67,7 +67,8 @@ docker {
     springBootApplication {
         baseImage = "eclipse-temurin:17-jre-alpine"
         ports = [9010]
-        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:$version"]
+        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:$version",
+                  "$dockerTargetRegistryUrl/gostream/goperform-cache-service:latest"]
     }
 }
 
