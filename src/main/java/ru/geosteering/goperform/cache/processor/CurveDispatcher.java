@@ -51,32 +51,30 @@ public class CurveDispatcher implements ConnectionEventListener {
     @PostConstruct
     private void runExecutors() {
 
-        statExecutor.scheduleAtFixedRate(() -> {
+        statExecutor.scheduleWithFixedDelay(() -> {
             try {
-                synchronized (processors) {
-                    Map<String, Integer> curvesInfo = processors.values().stream()
-                            .map(SingleCurveProcessor::getLoadStatus)
-                            .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
-                    curvesInfo.put("ACTIVE", activeCurves.size());
-                    curvesInfo.put("BROKEN", brokenCurves.size());
-                    curvesInfo.put("REQUEST_ALLOWED", requestAllowed.get());
-                    log.info("CURVES INFO: {}", curvesInfo);
+                Map<String, Integer> curvesInfo = processors.values().stream()
+                        .map(SingleCurveProcessor::getLoadStatus)
+                        .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
+                curvesInfo.put("ACTIVE", activeCurves.size());
+                curvesInfo.put("BROKEN", brokenCurves.size());
+                curvesInfo.put("REQUEST_ALLOWED", requestAllowed.get());
+                log.info("CURVES INFO: {}", curvesInfo);
 
-                    long seconds = (System.currentTimeMillis() - timer) / 1000;
-                    timer = System.currentTimeMillis();
+                long seconds = (System.currentTimeMillis() - timer) / 1000;
+                timer = System.currentTimeMillis();
 
-                    int history = histCount.getAndSet(0);
-                    int real = realCount.getAndSet(0);
+                int history = histCount.getAndSet(0);
+                int real = realCount.getAndSet(0);
 
-                    seconds = seconds == 0 ? 1 : seconds;
+                seconds = seconds == 0 ? 1 : seconds;
 
-                    log.info("STATISTICS FOR THE PERIOD: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
-                            history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
-                }
+                log.info("STATISTICS FOR THE PERIOD: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
+                        history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
-        }, config.STATISTIC_PERIOD_SECONDS, config.STATISTIC_PERIOD_SECONDS, TimeUnit.SECONDS);
+        }, 0, config.STATISTIC_PERIOD_SECONDS, TimeUnit.SECONDS);
 
         reloadExecutor.scheduleWithFixedDelay(() -> {
             try {

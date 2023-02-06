@@ -84,5 +84,5 @@ def generateVersion() {
     def workDir = new File("${projectDir}")
     def date = LocalDate.now().toString()
     def commit = 'git rev-parse --short HEAD'.execute(null, workDir).text.trim()
-    return date + "/" + commit
+    return date + "_" + commit
 }
