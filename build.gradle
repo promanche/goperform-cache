@@ -67,8 +67,8 @@ docker {
     springBootApplication {
         baseImage = "eclipse-temurin:17-jre-alpine"
         ports = [9010]
-        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:$version",
-                  "$dockerTargetRegistryUrl/gostream/goperform-cache-service:latest"]
+        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getCurrentGitBranch()}_${version}",
+                  "$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getCurrentGitBranch()}_latest"]
     }
 }
 
@@ -83,7 +83,18 @@ springBoot {
 
 def generateVersion() {
     def workDir = new File("${projectDir}")
-    def date = LocalDate.now().toString()
+    def date = LocalDate.now().toString().replaceAll("-", "")
     def commit = 'git rev-parse --short HEAD'.execute(null, workDir).text.trim()
     return date + "_" + commit
+}
+
+def getCurrentGitBranch() {
+    def gitBranch = ""
+    def workingDir = new File("${projectDir}")
+    def result = 'git rev-parse --abbrev-ref HEAD'.execute(null, workingDir)
+    result.waitFor()
+    if (result.exitValue() == 0) {
+        gitBranch = result.text.trim()
+    }
+    return gitBranch
 }
