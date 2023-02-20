@@ -29,6 +29,7 @@ public class SecurityConfig {
 
     private final AuthManager authManager;
     private final AuthFilter authFilter;
+    private final Config config;
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
@@ -37,12 +38,13 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         (auth) -> auth
                                 .antMatchers("/ws").permitAll()
-                                .antMatchers("/curve/actuator/info").permitAll()
-                                .antMatchers(HttpMethod.GET, "/curve/writable").authenticated()
-                                .antMatchers("/curve/multi/**").hasRole("USER")
-                                .antMatchers(HttpMethod.POST, "/curve").hasRole("USER")
-                                .antMatchers(HttpMethod.DELETE, "/curve/{id}").hasRole("USER")
-                                .antMatchers("/curve/{id}/**").access(authManager)
+                                .antMatchers("/actuator/info").permitAll()
+                                .antMatchers("/v?/permission/homefolder").hasRole("USER")
+                                .antMatchers(HttpMethod.GET, "/v?/curve/writable").authenticated()
+                                .antMatchers("/v?/curve/multi/**").hasRole("USER")
+                                .antMatchers(HttpMethod.POST, "/v?/curve").hasRole("USER")
+                                .antMatchers(HttpMethod.DELETE, "/v?/curve/{id}").hasRole("USER")
+                                .antMatchers("/v?/curve/{id}/**").access(authManager)
                                 .anyRequest().denyAll()
                 )
                 .addFilterBefore(authFilter, FilterSecurityInterceptor.class)
@@ -70,7 +72,7 @@ public class SecurityConfig {
                 return new ConcurrentMapCache(
                         name,
                         CacheBuilder.newBuilder()
-                                .expireAfterWrite(15, TimeUnit.MINUTES)
+                                .expireAfterWrite(config.CACHEABLE_DURATION_MINUTES, TimeUnit.MINUTES)
                                 .build().asMap(),
                         false);
             }
