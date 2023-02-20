@@ -11,7 +11,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.geosteering.goperform.cache.auth.AuthManager;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.model.auth.CheckObjectAccessRequest;
 import ru.geosteering.goperform.cache.model.rest.*;
 import ru.geosteering.goperform.cache.service.CurveService;
 
@@ -20,7 +19,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @RestController
-@RequestMapping
+@RequestMapping("/v1/curve")
 @RequiredArgsConstructor
 @Slf4j
 public class CurveController {
@@ -29,15 +28,15 @@ public class CurveController {
     private final Config config;
     private final AuthManager authManager;
 
-    @GetMapping("/curve/writable")
+    @GetMapping("/writable")
     public ResponseEntity<Boolean> isWritable(Authentication auth, @RequestParam Long id) {
 
-        boolean result = authManager.checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
+        boolean result = authManager.checkObjectWriteAccess(auth, id);
 
         return new ResponseEntity<Boolean>(Boolean.valueOf(result), HttpStatus.OK);
     }
 
-    @GetMapping("/curve/{id}/coordinates/by-time")
+    @GetMapping("/{id}/coordinates/by-time")
     public ResponseEntity<List<?>> getByTime(@PathVariable Long id,
                                              @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
                                              @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
@@ -49,35 +48,35 @@ public class CurveController {
         return new ResponseEntity<>(service.getCurveData(id, doubleFrom, doubleTo, scale), HttpStatus.OK);
     }
 
-    @GetMapping("/curve/{id}/coordinates/by-depth")
+    @GetMapping("/{id}/coordinates/by-depth")
     public ResponseEntity<List<?>> getByDepth(@PathVariable Long id) {
 
         log.info("By-depth request id {}", id);
         return getWithoutParams(id);
     }
 
-    @GetMapping("/curve/{id}/coordinates/image")
+    @GetMapping("/{id}/coordinates/image")
     public ResponseEntity<List<?>> getImage(@PathVariable Long id) {
 
         log.info("Image request id {}", id);
         return getWithoutParams(id);
     }
 
-    @GetMapping("/curve/{id}/coordinates/comments")
+    @GetMapping("/{id}/coordinates/comments")
     public ResponseEntity<List<?>> getComments(@PathVariable Long id) {
 
         log.info("Comments request id {}", id);
         return getWithoutParams(id);
     }
 
-    @GetMapping("/curve/{id}")
+    @GetMapping("/{id}")
     public ResponseEntity<CurveInfoResponse> getCurveInfo(@PathVariable Long id) {
 
         log.info("Curve-info request id {}", id);
         return new ResponseEntity<>(service.getCurveInfoResponse(id), HttpStatus.OK);
     }
 
-    @GetMapping("/curve/multi")
+    @GetMapping("/multi")
     @PreAuthorize("@authManager.checkBatchReadAccess(authentication, #ids)")
     public ResponseEntity<CurveInfoResponse[]> getCurveInfo(@RequestParam Long[] ids) {
         log.info("Curve-info request ids {}", Arrays.toString(ids));
@@ -90,7 +89,7 @@ public class CurveController {
         return new ResponseEntity<>(infos, HttpStatus.OK);
     }
 
-    @GetMapping("/curve/multi/coordinates/by-time")
+    @GetMapping("/multi/coordinates/by-time")
     @PreAuthorize("@authManager.checkBatchReadAccess(authentication, #ids)")
     @ResponseStatus(HttpStatus.OK)
     public MultiResponse getByTime(@RequestParam long[] ids,
@@ -105,14 +104,14 @@ public class CurveController {
         return service.getMultiResponse(ids, doubleFrom, doubleTo, scale);
     }
 
-    @DeleteMapping("/curve/{id}")
+    @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.OK)
     public void reloadCurve(@PathVariable Long id) {
         log.info("Reload curve {} request", id);
         service.reloadCurve(id);
     }
 
-    @PostMapping("/curve")
+    @PostMapping()
     @PreAuthorize("@authManager.checkObjectWriteAccess(authentication, #request.logId)")
     public ResponseEntity<Long> create(@RequestBody @Validated CreateCurveRequest request,
                                        Authentication authentication) {
@@ -121,7 +120,7 @@ public class CurveController {
         return new ResponseEntity<>(service.createCurve(request, authentication.getName()), HttpStatus.OK);
     }
 
-    @PostMapping("/curve/{id}/comments")
+    @PostMapping("/{id}/comments")
     @ResponseStatus(HttpStatus.OK)
     public void addComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
@@ -129,7 +128,7 @@ public class CurveController {
         service.writeComment(id, comment, authentication.getName(), false);
     }
 
-    @PutMapping("/curve/{id}/comments")
+    @PutMapping("/{id}/comments")
     @ResponseStatus(HttpStatus.OK)
     public void updateComment(@PathVariable Long id, @RequestBody @Validated Comment comment, Authentication authentication) {
 
@@ -137,7 +136,7 @@ public class CurveController {
         service.writeComment(id, comment, authentication.getName(), true);
     }
 
-    @DeleteMapping("/curve/{id}/comments")
+    @DeleteMapping("/{id}/comments")
     @ResponseStatus(HttpStatus.OK)
     public void deleteComment(@PathVariable Long id, @RequestParam Double key, Authentication authentication) {
 

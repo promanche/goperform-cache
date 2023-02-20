@@ -56,6 +56,7 @@ public class Config {
     @NotNull
     public final List<Integer> SCALE_MINUTES;
 
+    @NotNull
     @Positive
     public final int STATISTIC_PERIOD_SECONDS;
 
@@ -66,6 +67,13 @@ public class Config {
     public final double MIN_DEPTH_METERS;
 
     public final double MAX_DEPTH_METERS;
+
+    @NotBlank
+    public final String DATA_SERVICE_BASEURL;
+
+    @NotNull
+    @Positive
+    public final int CACHEABLE_DURATION_MINUTES;
 
     public Config(@Value("${goperform" + '.' + "subject}") String subject,
                   @Value("${goperform.host}") String host,
@@ -78,7 +86,9 @@ public class Config {
                   @Value("${goperform.nats-onetime-requests}") int natsOnetimeRequests,
                   @Value("${goperform.reconnect-timeout-sec:10}") int reconnectTimeoutSeconds,
                   @Value("#{${goperform.scale-minutes}}") List<Integer> scaleMinutes,
-                  @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds) {
+                  @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds,
+                  @Value("${goperform.dataservice-baseurl}") String dataServiceBaseUrl,
+                  @Value("${goperform.cacheable-duration-min:10}") int cacheableDurationMin) {
         this.SUBJECT = subject;
         this.HOST = host;
         this.REALTIME_THREADS = realtimeThreads;
@@ -96,5 +106,8 @@ public class Config {
         this.MIN_TIME_MILLIS = OffsetDateTime.of(2000, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC).toInstant().toEpochMilli();
         this.MIN_DEPTH_METERS = 0;
         this.MAX_DEPTH_METERS = 13000;
+
+        this.DATA_SERVICE_BASEURL = dataServiceBaseUrl;
+        this.CACHEABLE_DURATION_MINUTES = cacheableDurationMin;
     }
 }

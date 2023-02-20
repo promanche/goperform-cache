@@ -5,8 +5,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperform.cache.model.auth.ApiResult;
-import ru.geosteering.goperform.cache.model.auth.CheckObjectAccessRequest;
+import ru.geosteering.commonModels.EResult;
+import ru.geosteering.commonModels.TLUserObjectIn;
+import ru.geosteering.commonModels.authService.requests.CheckObjectAccessRequest;
+import ru.geosteering.commonModels.webService.responses.ApiResult;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
@@ -20,7 +22,7 @@ public class ObjectAccessor {
     public static final long LOG_THRESHOLD_MILLIS = 100;
 
     @Cacheable(value = "objectAccess", unless = "#result == false", key = "#auth.getName() + #id + #permission.toString()")
-    public boolean check(Authentication auth, long id, CheckObjectAccessRequest.Permissions permission) {
+    public boolean check(Authentication auth, long id, TLUserObjectIn.Permissions permission) {
 
         try {
             String userName = auth.getName();
@@ -35,7 +37,11 @@ public class ObjectAccessor {
                 return false;
             }
 
-            CheckObjectAccessRequest request = new CheckObjectAccessRequest(userName, id, permission);
+            CheckObjectAccessRequest request = new CheckObjectAccessRequest();
+            request.setAction("checkObjectAccess");
+            request.setUsername(userName);
+            request.setObjectId(id);
+            request.setPermission(permission);
 
             log.trace("Request: {}", request);
             String authSubject = "gostream.auth";
@@ -44,7 +50,7 @@ public class ObjectAccessor {
 
             ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
-            return apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK;
+            return apiResult != null && apiResult.getStatus() == EResult.OK;
 
         } catch (Exception e) {
             log.error(e.getMessage(), e);

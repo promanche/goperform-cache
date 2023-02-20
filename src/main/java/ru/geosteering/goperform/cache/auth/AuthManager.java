@@ -11,7 +11,10 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.stereotype.Component;
-import ru.geosteering.goperform.cache.model.auth.*;
+import ru.geosteering.commonModels.EResult;
+import ru.geosteering.commonModels.TLUserObjectIn;
+import ru.geosteering.commonModels.authService.requests.TokenRequest;
+import ru.geosteering.commonModels.webService.responses.ApiResult;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
@@ -35,59 +38,54 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
 
             String method = object.getRequest().getMethod().toUpperCase();
 
-            switch (method) {
-                case "GET":
-                    return new AuthorizationDecision(checkObjectReadAccess(auth, id));
-                case "POST":
-                case "PUT":
-                case "DELETE":
-                    return new AuthorizationDecision(checkObjectWriteAccess(auth, id));
-                default:
-                    return new AuthorizationDecision(false);
-            }
+            return switch (method) {
+                case "GET" -> new AuthorizationDecision(checkObjectReadAccess(auth, id));
+                case "POST", "PUT", "DELETE" -> new AuthorizationDecision(checkObjectWriteAccess(auth, id));
+                default -> new AuthorizationDecision(false);
+            };
 
         } catch (NumberFormatException e) {
             return new AuthorizationDecision(false);
         }
     }
 
-    public boolean checkObjectAccess(Authentication auth, long id, CheckObjectAccessRequest.Permissions permit) {
+    public boolean checkObjectAccess(Authentication auth, long id, TLUserObjectIn.Permissions permit) {
         long startMillis = System.currentTimeMillis();
         boolean result = objectAccessor.check(auth, id, permit);
 
         long endMillis = System.currentTimeMillis();
-        if( !result ) {
-            log.warn("checkObjectAccess( {}, {}, {} ): access denied in {} ms", auth.getName(), id, permit, endMillis-startMillis);
-        } else if( endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS ) {
-            log.info("checkObjectAccess( {}, {}, {} ): took too long, duration {} ms", auth.getName(), id, permit, endMillis-startMillis);
+        if (!result) {
+            log.warn("checkObjectAccess( {}, {}, {} ): access denied in {} ms", auth.getName(), id, permit, endMillis - startMillis);
+        } else if (endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS) {
+            log.info("checkObjectAccess( {}, {}, {} ): took too long, duration {} ms", auth.getName(), id, permit, endMillis - startMillis);
         }
 
         return result;
     }
 
     public boolean checkObjectReadAccess(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.READ);
+        return checkObjectAccess(auth, id, TLUserObjectIn.Permissions.READ);
     }
 
     public boolean checkObjectWriteAccess(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, CheckObjectAccessRequest.Permissions.WRITE);
+        return checkObjectAccess(auth, id, TLUserObjectIn.Permissions.WRITE);
     }
 
     public boolean checkBatchReadAccess(Authentication auth, long[] ids) {
         long startMillis = System.currentTimeMillis();
         boolean result = true;
         for (long id : ids) {
-            if (!objectAccessor.check(auth, id, CheckObjectAccessRequest.Permissions.READ)) {
+            if (!objectAccessor.check(auth, id, TLUserObjectIn.Permissions.READ)) {
                 result = false;
                 break;
             }
         }
 
         long endMillis = System.currentTimeMillis();
-        if( !result ) {
-            log.warn("checkBatchReadAccess( {}, {} ): access denied in {} ms", auth.getName(), ids, endMillis-startMillis);
-        } else if( endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS ) {
-            log.info("checkBatchReadAccess( {}, {} ): took too long, duration {} ms", auth.getName(), ids, endMillis-startMillis);
+        if (!result) {
+            log.warn("checkBatchReadAccess( {}, {} ): access denied in {} ms", auth.getName(), ids, endMillis - startMillis);
+        } else if (endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS) {
+            log.info("checkBatchReadAccess( {}, {} ): took too long, duration {} ms", auth.getName(), ids, endMillis - startMillis);
         }
         return result;
     }
@@ -101,7 +99,9 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
 
         UserAuthentication authentication = null;
 
-        TokenRequest request = new TokenRequest(jwt);
+        TokenRequest request = new TokenRequest();
+        request.setAction("validateToken");
+        request.setToken(jwt);
 
         log.trace("Request: {}", request);
         Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
@@ -109,7 +109,7 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
 
         ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
 
-        if (apiResult != null && apiResult.getStatus() == ApiResult.EResult.OK) {
+        if (apiResult != null && apiResult.getStatus() == EResult.OK) {
 
             authentication = new UserAuthentication();
             authentication.setUserName((String) apiResult.getResult());
