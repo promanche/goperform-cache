@@ -37,16 +37,16 @@ public class CurveService {
     private final MainRepository repository;
 
     public void checkCurve(Long id, Integer scale) {
+        if (curveDispatcher.getCurveProcessor(id, true) == null) {
+            throw new CurveProcessorNotExistException();
+        }
+
         if (curveDispatcher.isBroken(id)) {
             throw new BrokenCurveException(id);
         }
 
         if (scale != null && !config.SCALE_MINUTES.contains(scale)) {
             throw new BadRequestException("Scale " + scale + " not provided by configuration");
-        }
-
-        if (curveDispatcher.getCurveProcessor(id, true) == null) {
-            throw new CurveProcessorNotExistException();
         }
     }
 
@@ -159,7 +159,7 @@ public class CurveService {
 
     public void reloadCurve(Long id) {
         checkCurve(id, null);
-        curveDispatcher.getCurveProcessor(id, true).updateReloadData();
+        curveDispatcher.fullCurveReload(id);
     }
 
     public CurveInfoResponse getCurveInfoResponse(Long id) {

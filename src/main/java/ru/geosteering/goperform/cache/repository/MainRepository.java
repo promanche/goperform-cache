@@ -128,6 +128,10 @@ public class MainRepository {
         return optional;
     }
 
+    public void deleteInfo(Long id) {
+        curveInfoMapper.delete(id);
+    }
+
     public void saveSegments(List<SegmentDto> list) {
         log.trace("saveSegments started");
         long started = System.currentTimeMillis();

@@ -130,7 +130,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
             } else {
-                updateReloadData(item, 5);
+                updateReloadData(item);
             }
 
         } else {
@@ -261,16 +261,29 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return result;
     }
 
-    public synchronized void updateReloadData(CurveItem item, int delayMinutes) {
+    private String reloadLog(CurveItem received) {
+        Map<String, String> data = new TreeMap<>();
+        data.put("curve id", String.valueOf(info.getId()));
+        data.put("mnemonic", info.getMnemonic());
+        data.put("received point", received.toString());
+        data.put("last point in db", lastSaved.toString());
+        data.put("received - last in db", (received.getKey() - lastSaved.getKey()) + " ms");
+        data.put("last point in memory", realItemCache.isEmpty() ? "null" : realItemCache.last().toString());
+        data.put("received - last in memory", realItemCache.isEmpty() ? "null" : (received.getKey() - realItemCache.last().getKey()) + " ms");
+        data.put("points in memory", String.valueOf(realItemCache.size()));
+        return data.toString();
+    }
+
+    private void updateReloadData(CurveItem item) {
         Double from = item.getKey();
 
         if (loadStatus != LoadStatus.BLOCKED) {
-            log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
+            log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), 5, from);
+            log.info(reloadLog(item));
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
-            String lastReal = realItemCache.isEmpty() ? "null" : realItemCache.last().toString();
-            String lastSaved = this.lastSaved == null ? "null" : this.lastSaved.toString();
-            log.info("Curve {} blocking extended by {} minutes due to point {}. Last saved point {}, last realtime point in memory {}. {} more old points suppressed",
-                    info.getId(), delayMinutes, item, lastSaved, lastReal, suppressedOldPoints);
+            log.info("Curve {} blocking extended by {} minutes due to point {}. {} more old points suppressed",
+                    info.getId(), 5, item, suppressedOldPoints);
+            log.info(reloadLog(item));
             lastUpdateReloadLogTime = System.currentTimeMillis();
             suppressedOldPoints = 0;
         } else {
@@ -279,18 +292,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
         loadStatus = LoadStatus.BLOCKED;
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
-        reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
-        dispatcher.removeFromRequestQueue(info.getId());
+        reloadData.reloadTime = LocalDateTime.now().plusMinutes(5);
+        dispatcher.removeLoadTask(info.getId());
     }
 
-    public synchronized void updateReloadData() {
-        loadStatus = LoadStatus.BLOCKED;
-        reloadData.from = 0.0;
-        reloadData.reloadTime = LocalDateTime.now();
-        dispatcher.removeFromRequestQueue(info.getId());
-    }
-
-    public synchronized void reload() {
+    protected synchronized void reload() {
         if (loadStatus == LoadStatus.BLOCKED) {
             boolean reloadTimeNotNull = reloadData.reloadTime != null;
             boolean reloadTimeIsCome = reloadTimeNotNull && reloadData.reloadTime.isBefore(LocalDateTime.now());

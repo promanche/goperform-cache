@@ -25,6 +25,7 @@ import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 @Component
@@ -39,7 +40,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
-    private final Queue<RequestTask> requestTaskQueue = new PriorityBlockingQueue<>(11, Comparator.comparing(RequestTask::getPriority));
+    private final SynchronizedRequestQueue requestQueue = new SynchronizedRequestQueue();
     private final AtomicInteger requestAllowed = new AtomicInteger();
     private final ScheduledExecutorService statExecutor = Executors.newSingleThreadScheduledExecutor();
     private final ScheduledExecutorService reloadExecutor = Executors.newSingleThreadScheduledExecutor();
@@ -94,8 +95,8 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Override
     public void onDisconnect() {
         requestAllowed.set(0);
-        requestTaskQueue.clear();
         processors.values().forEach(SingleCurveProcessor::onDisconnect);
+        requestQueue.clear();
     }
 
     public void onCurveDataMessage(CurveDataMessage message, boolean isReal) {
@@ -128,15 +129,13 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    protected void addRequestTask(RequestTask task) {
-        requestTaskQueue.add(task);
+    protected void addRequestTask(RequestTask newTask) {
+        requestQueue.add(newTask);
     }
 
-    protected void removeFromRequestQueue(Long id) {
-        synchronized (requestTaskQueue) {
-            requestTaskQueue.removeIf(task -> Objects.equals(task.id, id)
-                    && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
-        }
+    protected void removeLoadTask(Long id) {
+        requestQueue.removeIf(task -> Objects.equals(task.id, id)
+                && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
     }
 
     public boolean isBroken(Long id) {
@@ -158,15 +157,13 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         if (curveProcessor != null) {
             curveProcessor.setFromRest(fromRest);
-        }
-
-        if (curveProcessor == null && notContainsRequest(id)) {
+        } else {
             CurveDataRequest request = new CurveDataRequest();
             request.setCurveId(id);
             request.setInfoOnly(true);
             request.setWithRange(true);
             RequestType type = fromRest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
-            requestTaskQueue.add(new RequestTask(id, type, () -> doInfoRequest(id, fromRest)));
+            addRequestTask(new RequestTask(id, type, () -> doInfoRequest(id, fromRest)));
         }
 
         return curveProcessor;
@@ -245,23 +242,12 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    private boolean notContainsRequest(Long id) {
-        synchronized (requestTaskQueue) {
-            for (RequestTask task : requestTaskQueue) {
-                if (Objects.equals(task.id, id)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-
     @Scheduled(fixedRate = 30)
     private void doRequestJob() {
         if (NatsConnector.isConnected()) {
-            if (requestAllowed.getAndDecrement() > 0 && !requestTaskQueue.isEmpty()) {
+            if (requestAllowed.getAndDecrement() > 0 && !requestQueue.isEmpty()) {
                 try {
-                    requestTaskQueue.poll().requestJob.doRequest();
+                    requestQueue.poll().requestJob.doRequest();
                 } catch (NullResponseException e) {
                     requestAllowed.incrementAndGet();
                 }
@@ -274,18 +260,16 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Scheduled(fixedDelay = 3, timeUnit = TimeUnit.MINUTES)
     private void clearBroken() {
         try {
-            synchronized (brokenCurves) {
-                AtomicInteger count = new AtomicInteger();
-                brokenCurves.entrySet().removeIf(entry -> {
-                    boolean removable = entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now());
-                    if (removable) {
-                        count.getAndIncrement();
-                    }
-                    return removable;
-                });
-                if (count.get() > 0) {
-                    log.info("{} curves removed from broken", count);
+            AtomicInteger count = new AtomicInteger();
+            brokenCurves.entrySet().removeIf(entry -> {
+                boolean removable = entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now());
+                if (removable) {
+                    count.getAndIncrement();
                 }
+                return removable;
+            });
+            if (count.get() > 0) {
+                log.info("{} curves removed from broken", count);
             }
         } catch (Exception e) {
             log.error(e.getMessage(), e);
@@ -309,6 +293,17 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
 
         requestAllowed.incrementAndGet();
+    }
+
+    public void fullCurveReload(Long id) {
+        processors.compute(id, (k, v) -> {
+            removeLoadTask(id);
+            repository.deleteInfo(id);
+            repository.deleteSegments(id, null);
+            repository.deleteItems(id, null);
+            addRequestTask(new RequestTask(id, RequestType.INFO_REST, () -> doInfoRequest(id, true)));
+            return null;
+        });
     }
 
     protected interface RequestJob {
@@ -338,6 +333,45 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         RequestType(int priority) {
             this.priority = priority;
+        }
+    }
+
+    private static class SynchronizedRequestQueue {
+
+        private final PriorityQueue<RequestTask> queue;
+
+        public SynchronizedRequestQueue() {
+            this.queue = new PriorityQueue<>(Comparator.comparing(RequestTask::getPriority));
+        }
+
+        public synchronized void add(RequestTask newTask) {
+            boolean contains = false;
+            for (RequestTask task : queue) {
+                if (Objects.equals(task.id, newTask.id)) {
+                    contains = true;
+                    break;
+                }
+            }
+            if (!contains) {
+                queue.add(newTask);
+
+            }
+        }
+
+        public synchronized void clear() {
+            queue.clear();
+        }
+
+        public synchronized void removeIf(Predicate<? super RequestTask> filter) {
+            queue.removeIf(filter);
+        }
+
+        public synchronized RequestTask poll() {
+            return queue.poll();
+        }
+
+        public synchronized boolean isEmpty() {
+            return queue.isEmpty();
         }
     }
 }
