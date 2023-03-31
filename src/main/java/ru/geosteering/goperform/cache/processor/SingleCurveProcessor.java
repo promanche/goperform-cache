@@ -29,6 +29,38 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Обработчик одной конкретной кривой с уникальным id. Все публичные методы синхронизированы.
+ * <p>Принимает из диспетчера для обработки два вида сообщений {@link CurveDataMessage}  и {@link DataEndMessage}.
+ * {@link CurveDataMessage} могут поступать из 2-х источников: данные в реальном времени и исторические данные по запросу.
+ * После создания обработчик автоматически отправляет запрос на загрузку исторических данных.
+ *
+ * <p>{@link LoadStatus} показывает статус загрузки исторических данных по кривой.
+ * {@linkplain LoadStatus#UNKNOWN UNKNOWN} дефолтный статус при создании обработчика,
+ * {@linkplain LoadStatus#IN_QUEUE IN_QUEUE} запрос на загрузку исторических данных добавлен в очередь загрузки,
+ * {@linkplain LoadStatus#IN_PROGRESS IN_PROGRESS} запрос на загрузку исторических данных выполняется,
+ * {@linkplain LoadStatus#LOADED LOADED} исторические данные загружены.
+ *
+ * <p>Запросы истории выполняются пакетно с лимитом точек {@linkplain ru.geosteering.goperform.cache.config.Config#HISTORY_REQUEST_LIMIT HISTORY_REQUEST_LIMIT}.
+ * Во время загрузки очередного пакета точки собираются в {@linkplain #loadBuffer буфер загрузки}.
+ * Окончанием загрузки пакета считается {@link DataEndMessage}.
+ * Если количество загруженных точек соответствует указанному в {@link DataEndMessage}, то они отправляются в {@link #historyItemCache} для последующей обработки.
+ * В противном случае точки из буфера игнорируются.
+ * Если получен {@link DataEndMessage} с sentCount = 0, считаем что исторические данные полностью загружены (LoadStatus=LOADED).
+ *
+ * <p>Точки в реальном времени собираются в {@link #realItemCache}. Пока история не загружена полностью {@link #realItemCache} просто копит точки.
+ * После загрузки истории последние точки из {@link #historyItemCache} передаем в {@link #realItemCache} и далее по мере накопления сохраняем в БД.
+ *
+ * <p>Сохранение точек в БД происходит пачками по {@linkplain ru.geosteering.goperform.cache.config.Config#BATCH_SIZE BATCH_SIZE} штук в jsonb формате.
+ *
+ * <p>При сохранении очередного пакета точек в БД также сохраняется обновленная информация по кривой.
+ *
+ * <p>При сохранении очередного пакета точек в БД также создаются и сохраняются наборы отрезков для кривых по заданным шкалам сегментации.
+ * См. {@link SegmentCreator}.
+ *
+ * <p>Механизм автоматической перезагрузки данных.
+ * Если в реалтайм получена точка старше {@link #lastSaved}, кривая подлежит перезагрузке. См. {@link #reload()}
+ */
 @Slf4j
 public class SingleCurveProcessor implements ConnectionEventListener {
 
@@ -262,7 +294,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private String reloadLog(CurveItem received) {
-        Map<String, String> data = new TreeMap<>();
+        Map<String, String> data = new LinkedHashMap<>();
         data.put("curve id", String.valueOf(info.getId()));
         data.put("mnemonic", info.getMnemonic());
         data.put("received point", received.toString());
@@ -278,12 +310,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         Double from = item.getKey();
 
         if (loadStatus != LoadStatus.BLOCKED) {
-            log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), 5, from);
-            log.info(reloadLog(item));
+            log.info("Curve blocked for 5 minutes. Details: {}", reloadLog(item));
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
-            log.info("Curve {} blocking extended by {} minutes due to point {}. {} more old points suppressed",
-                    info.getId(), 5, item, suppressedOldPoints);
-            log.info(reloadLog(item));
+            log.info("Curve blocking extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
             lastUpdateReloadLogTime = System.currentTimeMillis();
             suppressedOldPoints = 0;
         } else {

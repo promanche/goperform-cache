@@ -28,6 +28,17 @@ import java.util.concurrent.locks.LockSupport;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+/**
+ * Диспетчер обработчиков кривых. Хранит {@linkplain #processors карту} с {@linkplain SingleCurveProcessor обработчиками кривых}.
+ *
+ * <p> При получении точки кривой или rest запроса передает данные в соответствующий обработчик.
+ * При отсутствии нужного обработчика создает запрос на получение информации по кривой и создает обработчик.
+ *
+ * <p> Содержит {@linkplain #requestQueue очередь задач} для запросов в NATS и следит, чтобы одновременно выполнялось не более {@link Config#NATS_ONETIME_REQUESTS} запросов.
+ * См. {@link RequestTask} и {@link #doRequestJob()}. Запросы асинхронные с приоритетом.
+ *
+ * <p> Также содержит scheduled сервисы для вывода статистики и перезагрузки кривых
+ */
 @Component
 @Slf4j
 @RequiredArgsConstructor
