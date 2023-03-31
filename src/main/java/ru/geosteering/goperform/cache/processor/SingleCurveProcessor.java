@@ -90,7 +90,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     @Setter
     private boolean fromRest;
 
-    private final ReloadData reloadData = new ReloadData();
+    @Getter
+    private ReloadData reloadData;
 
     private long pointTimer;
     private long requestTimer;
@@ -124,21 +125,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
         reloadSavedInfo();
         loadLost();
-        addRequestJob(false);
+        addRequestJob();
     }
 
     @Override
     public synchronized void onConnect() {
-        if (loadStatus == LoadStatus.UNKNOWN) {
-            addRequestJob(false);
-        }
+        addRequestJob();
     }
 
     @Override
     public synchronized void onDisconnect() {
-        if (loadStatus != LoadStatus.BLOCKED) {
-            loadStatus = LoadStatus.UNKNOWN;
-        }
+        loadStatus = LoadStatus.UNKNOWN;
         realItemCache.clear();
         historyItemCache.clear();
         loadBuffer.clear();
@@ -207,13 +204,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             //-------------------------------------------------------
 
             historyItemCache.clear();
-            loadStatus = loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED;
+            loadStatus = LoadStatus.LOADED;
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
 
         } else if (sent != received) {
             log.error("Curve {} received count {} not equals to sent {}", info.getId(), received, sent);
-            addRequestJob(false);
+            addRequestJob();
 
         } else {
             if (received != loadBuffer.size()) {
@@ -232,7 +229,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     .createSegments(loadBuffer)
                     .logResults("onDataEndMessage()");
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
-            addRequestJob(false);
+            addRequestJob();
         }
     }
 
@@ -309,24 +306,24 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private void updateReloadData(CurveItem item) {
         Double from = item.getKey();
 
-        if (loadStatus != LoadStatus.BLOCKED) {
-            log.info("Curve blocked for 5 minutes. Details: {}", reloadLog(item));
+        if (reloadData == null) {
+            log.info("Curve set reload time in 5 minutes. Details: {}", reloadLog(item));
+            reloadData = new ReloadData();
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
-            log.info("Curve blocking extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
+            log.info("Curve reload time extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
             lastUpdateReloadLogTime = System.currentTimeMillis();
             suppressedOldPoints = 0;
         } else {
             suppressedOldPoints++;
         }
 
-        loadStatus = LoadStatus.BLOCKED;
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
         reloadData.reloadTime = LocalDateTime.now().plusMinutes(5);
         dispatcher.removeLoadTask(info.getId());
     }
 
     protected synchronized void reload() {
-        if (loadStatus == LoadStatus.BLOCKED) {
+        if (loadStatus == LoadStatus.LOADED && reloadData != null) {
             boolean reloadTimeNotNull = reloadData.reloadTime != null;
             boolean reloadTimeIsCome = reloadTimeNotNull && reloadData.reloadTime.isBefore(LocalDateTime.now());
             boolean loadBufferIsEmpty = loadBuffer.isEmpty();
@@ -334,9 +331,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
                 clearData(reloadData.from);
                 loadLost();
-                reloadData.reloadTime = null;
-                reloadData.from = null;
-                addRequestJob(true);
+                reloadData = null;
+                addRequestJob();
             } else if (System.currentTimeMillis() - lastBlockedLogTime > 60000) {
                 String reason;
                 if (!reloadTimeNotNull) {
@@ -346,7 +342,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 } else {
                     reason = "load buffer is not empty (size = " + loadBuffer.size() + ")";
                 }
-                log.info("Curve {} is still blocked by reason of {}", info.getId(), reason);
+                log.info("Curve {} can't reload by reason of {}", info.getId(), reason);
 
                 lastBlockedLogTime = System.currentTimeMillis();
             }
@@ -535,13 +531,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    private void addRequestJob(boolean ifBlocked) {
+    private void addRequestJob() {
         loadBuffer.clear();
-        if (loadStatus != LoadStatus.BLOCKED || ifBlocked) {
-            CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
-            dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
-            loadStatus = LoadStatus.IN_QUEUE;
-        }
+        CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
+        dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
+        loadStatus = LoadStatus.IN_QUEUE;
     }
 
     private synchronized void doItemsRequest() {
@@ -583,7 +577,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             }
         } else {
             log.error("Response is null");
-            addRequestJob(false);
+            addRequestJob();
             throw new NullResponseException();
         }
     }
@@ -741,7 +735,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public enum LoadStatus {
-        IN_QUEUE, IN_PROGRESS, BLOCKED, LOADED, UNKNOWN
+        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN
     }
 
     private static class ReloadData {

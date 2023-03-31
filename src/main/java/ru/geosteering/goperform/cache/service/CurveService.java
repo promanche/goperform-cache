@@ -186,7 +186,8 @@ public class CurveService {
                 info.getLastValue(),
                 curveProcessor.getLoadStatus(),
                 info.getMinLoadedKey(),
-                info.getMaxLoadedKey());
+                info.getMaxLoadedKey(),
+                curveProcessor.getReloadData() != null);
     }
 
     public CurveInfoResponse[] getCurveInfoResponse(Long[] ids) {
