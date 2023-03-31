@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <preConditions>
+        <or>
+            <dbms type="postgresql"/>
+        </or>
+    </preConditions>
+
+    <changeSet author="bulat" id="1">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="items"/>
+            </not>
+        </preConditions>
+        <createTable tableName="items">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="created" type="timestamp" defaultValueDate="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="curve_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="first" type="numeric">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last" type="numeric">
+                <constraints nullable="false"/>
+            </column>
+            <column name="min_value" type="numeric"/>
+            <column name="max_value" type="numeric"/>
+            <column name="data" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet author="bulat" id="2">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="info"/>
+            </not>
+        </preConditions>
+        <createTable tableName="info">
+            <column name="curve_id" type="bigint">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="created" type="timestamp" defaultValueDate="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="data" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet author="bulat" id="3">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="segments"/>
+            </not>
+        </preConditions>
+        <createTable tableName="segments">
+            <column name="id" type="bigint" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="created" type="timestamp" defaultValueDate="now()">
+                <constraints nullable="false"/>
+            </column>
+            <column name="curve_id" type="bigint">
+                <constraints nullable="false"/>
+            </column>
+            <column name="scale" type="int">
+                <constraints nullable="false"/>
+            </column>
+            <column name="first" type="numeric">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last" type="numeric">
+                <constraints nullable="false"/>
+            </column>
+            <column name="data" type="jsonb">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="4" author="bulat">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="items" indexName="items_curve_id_idx"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="items" indexName="items_curve_id_idx">
+            <column name="curve_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="5" author="bulat">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="items" indexName="items_curve_id_first_last_idx"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="items" indexName="items_curve_id_first_last_idx">
+            <column name="curve_id"/>
+            <column name="first"/>
+            <column name="last"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="6" author="bulat">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="segments" indexName="segments_curve_id_idx"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="segments" indexName="segments_curve_id_idx">
+            <column name="curve_id"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="7" author="bulat">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="segments" indexName="segments_curve_id_scale_idx"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="segments" indexName="segments_curve_id_scale_idx">
+            <column name="curve_id"/>
+            <column name="scale"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="8" author="bulat">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="items" columnName="min_value"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="items">
+            <column name="min_value" type="numeric"/>
+        </addColumn>
+    </changeSet>
+
+    <changeSet id="9" author="bulat">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <columnExists tableName="items" columnName="max_value"/>
+            </not>
+        </preConditions>
+        <addColumn tableName="items">
+            <column name="max_value" type="numeric"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>

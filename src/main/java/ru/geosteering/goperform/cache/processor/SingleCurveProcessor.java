@@ -375,6 +375,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setMaxLoadedKey(lastSaved.getKey());
         }
         savedCount = dispatcher.repository.getItemsRecordsCount(info.getId()) * dispatcher.config.BATCH_SIZE;
+
+        info.setMaxValue(dispatcher.repository.getItemsMinValue(info.getId()));
+        info.setMaxValue(dispatcher.repository.getItemsMaxValue(info.getId()));
     }
 
     private void collect(CurveItem item, boolean isReal) {
@@ -404,7 +407,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 for (int i = 0; i < dispatcher.config.BATCH_SIZE; i++) {
                     itemsBatch.add(realItemCache.pollFirst());
                 }
-                dispatcher.repository.saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch)));
+                dispatcher.repository.saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch,
+                        info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG))));
 
                 if (tmpFirst == null) {
                     tmpFirst = itemsBatch.get(0);
@@ -438,7 +442,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 itemsBatch.add(historyItemCache.pollFirst());
             }
 
-            transfer.add(ItemDto.fromItemsList(info.getId(), itemsBatch));
+            transfer.add(ItemDto.fromItemsList(info.getId(), itemsBatch,
+                    info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)));
 
             if (tmpFirst == null) {
                 tmpFirst = itemsBatch.get(0);
@@ -473,7 +478,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setMinLoadedKey(key);
         }
 
-        updateMaxMinValue(item);
+        updateMaxMinValue(List.of(item));
     }
 
     private void updateInfoFromBuffer() {
@@ -494,11 +499,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setMinLoadedKey(loadBuffer.first().getKey());
         }
 
-        updateMaxMinValue(loadBuffer.toArray(new CurveItem[0]));
+        updateMaxMinValue(loadBuffer);
         dispatcher.repository.saveOrUpdateInfo(info);
     }
 
-    private void updateMaxMinValue(CurveItem... items) {
+    private void updateMaxMinValue(Collection<CurveItem> items) {
         if (info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)) {
             for (CurveItem item : items) {
                 try {

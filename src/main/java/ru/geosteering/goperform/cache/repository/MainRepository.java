@@ -105,6 +105,14 @@ public class MainRepository {
         return count;
     }
 
+    public Double getItemsMinValue(Long id) {
+        return itemsMapper.getMinValue(id);
+    }
+
+    public Double getItemsMaxValue(Long id) {
+        return itemsMapper.getMaxValue(id);
+    }
+
     public void saveOrUpdateInfo(ExtraCurveInfo info) {
         log.trace("saveOrUpdateInfo started");
         long started = System.currentTimeMillis();

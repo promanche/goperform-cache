@@ -4,6 +4,8 @@ import io.nats.client.*;
 import io.nats.client.impl.NatsMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationStartedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import ru.geosteering.goperform.cache.config.Config;
 
@@ -20,13 +22,13 @@ public class NatsConnector {
     private final HistoryMessageHandler historyHandler;
     private final ConnectionEventDispatcher connectionEventDispatcher;
     private final Config config;
-    //    private final AtomicBoolean reconnecting = new AtomicBoolean(false);
     private final ScheduledExecutorService connectionScheduler = Executors.newSingleThreadScheduledExecutor();
 
     private long lastConnectionTry = System.currentTimeMillis();
 
     private static Connection connection;
 
+    @EventListener(ApplicationStartedEvent.class)
     public void initConnectionScheduler() {
         connectionScheduler.scheduleWithFixedDelay(() -> {
             if (!isConnected()) {
@@ -118,26 +120,4 @@ public class NatsConnector {
             log.error("Exception while closing connection: {}", e.getMessage(), e);
         }
     }
-
-//    void reconnect() {
-//        try {
-//            closeConnection();
-//
-//            int seconds = config.RECONNECT_TIMEOUT_SECONDS;
-//            while (seconds > 0) {
-//                log.info("Reconnect waiting... " + seconds);
-//                Thread.sleep(1000);
-//                seconds--;
-//            }
-//
-//            realtimeHandler.initExecutor();
-//            historyHandler.initExecutor();
-//            connect();
-//
-//        } catch (InterruptedException e) {
-//            log.error(e.getMessage(), e);
-//        } finally {
-//            reconnecting.set(false);
-//        }
-//    }
 }
