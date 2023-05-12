@@ -29,6 +29,38 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+/**
+ * Обработчик одной конкретной кривой с уникальным id. Все публичные методы синхронизированы.
+ * <p>Принимает из диспетчера для обработки два вида сообщений {@link CurveDataMessage}  и {@link DataEndMessage}.
+ * {@link CurveDataMessage} могут поступать из 2-х источников: данные в реальном времени и исторические данные по запросу.
+ * После создания обработчик автоматически отправляет запрос на загрузку исторических данных.
+ *
+ * <p>{@link LoadStatus} показывает статус загрузки исторических данных по кривой.
+ * {@linkplain LoadStatus#UNKNOWN UNKNOWN} дефолтный статус при создании обработчика,
+ * {@linkplain LoadStatus#IN_QUEUE IN_QUEUE} запрос на загрузку исторических данных добавлен в очередь загрузки,
+ * {@linkplain LoadStatus#IN_PROGRESS IN_PROGRESS} запрос на загрузку исторических данных выполняется,
+ * {@linkplain LoadStatus#LOADED LOADED} исторические данные загружены.
+ *
+ * <p>Запросы истории выполняются пакетно с лимитом точек {@linkplain ru.geosteering.goperform.cache.config.Config#HISTORY_REQUEST_LIMIT HISTORY_REQUEST_LIMIT}.
+ * Во время загрузки очередного пакета точки собираются в {@linkplain #loadBuffer буфер загрузки}.
+ * Окончанием загрузки пакета считается {@link DataEndMessage}.
+ * Если количество загруженных точек соответствует указанному в {@link DataEndMessage}, то они отправляются в {@link #historyItemCache} для последующей обработки.
+ * В противном случае точки из буфера игнорируются.
+ * Если получен {@link DataEndMessage} с sentCount = 0, считаем что исторические данные полностью загружены (LoadStatus=LOADED).
+ *
+ * <p>Точки в реальном времени собираются в {@link #realItemCache}. Пока история не загружена полностью {@link #realItemCache} просто копит точки.
+ * После загрузки истории последние точки из {@link #historyItemCache} передаем в {@link #realItemCache} и далее по мере накопления сохраняем в БД.
+ *
+ * <p>Сохранение точек в БД происходит пачками по {@linkplain ru.geosteering.goperform.cache.config.Config#BATCH_SIZE BATCH_SIZE} штук в jsonb формате.
+ *
+ * <p>При сохранении очередного пакета точек в БД также сохраняется обновленная информация по кривой.
+ *
+ * <p>При сохранении очередного пакета точек в БД также создаются и сохраняются наборы отрезков для кривых по заданным шкалам сегментации.
+ * См. {@link SegmentCreator}.
+ *
+ * <p>Механизм автоматической перезагрузки данных.
+ * Если в реалтайм получена точка старше {@link #lastSaved}, кривая подлежит перезагрузке. См. {@link #reload()}
+ */
 @Slf4j
 public class SingleCurveProcessor implements ConnectionEventListener {
 
@@ -58,7 +90,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     @Setter
     private boolean fromRest;
 
-    private final ReloadData reloadData = new ReloadData();
+    @Getter
+    private ReloadData reloadData;
 
     private long pointTimer;
     private long requestTimer;
@@ -92,21 +125,17 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
         reloadSavedInfo();
         loadLost();
-        addRequestJob(false);
+        addRequestJob();
     }
 
     @Override
     public synchronized void onConnect() {
-        if (loadStatus == LoadStatus.UNKNOWN) {
-            addRequestJob(false);
-        }
+        addRequestJob();
     }
 
     @Override
     public synchronized void onDisconnect() {
-        if (loadStatus != LoadStatus.BLOCKED) {
-            loadStatus = LoadStatus.UNKNOWN;
-        }
+        loadStatus = LoadStatus.UNKNOWN;
         realItemCache.clear();
         historyItemCache.clear();
         loadBuffer.clear();
@@ -130,7 +159,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
             } else {
-                updateReloadData(item, 5);
+                updateReloadData(item);
             }
 
         } else {
@@ -175,13 +204,13 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             //-------------------------------------------------------
 
             historyItemCache.clear();
-            loadStatus = loadStatus == LoadStatus.BLOCKED ? LoadStatus.BLOCKED : LoadStatus.LOADED;
+            loadStatus = LoadStatus.LOADED;
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
 
         } else if (sent != received) {
             log.error("Curve {} received count {} not equals to sent {}", info.getId(), received, sent);
-            addRequestJob(false);
+            addRequestJob();
 
         } else {
             if (received != loadBuffer.size()) {
@@ -200,7 +229,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     .createSegments(loadBuffer)
                     .logResults("onDataEndMessage()");
             sendWsMessage(new PartMessage(info.getId(), loadBuffer.first().getKey(), loadBuffer.last().getKey()));
-            addRequestJob(false);
+            addRequestJob();
         }
     }
 
@@ -261,37 +290,40 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return result;
     }
 
-    public synchronized void updateReloadData(CurveItem item, int delayMinutes) {
+    private String reloadLog(CurveItem received) {
+        Map<String, String> data = new LinkedHashMap<>();
+        data.put("curve id", String.valueOf(info.getId()));
+        data.put("mnemonic", info.getMnemonic());
+        data.put("received point", received.toString());
+        data.put("last point in db", lastSaved.toString());
+        data.put("received - last in db", (received.getKey() - lastSaved.getKey()) + " ms");
+        data.put("last point in memory", realItemCache.isEmpty() ? "null" : realItemCache.last().toString());
+        data.put("received - last in memory", realItemCache.isEmpty() ? "null" : (received.getKey() - realItemCache.last().getKey()) + " ms");
+        data.put("points in memory", String.valueOf(realItemCache.size()));
+        return data.toString();
+    }
+
+    private void updateReloadData(CurveItem item) {
         Double from = item.getKey();
 
-        if (loadStatus != LoadStatus.BLOCKED) {
-            log.warn("Curve {} is blocked for next reloading in {} minutes from {}", info.getId(), delayMinutes, from);
+        if (reloadData == null) {
+            log.info("Curve set reload time in 5 minutes. Details: {}", reloadLog(item));
+            reloadData = new ReloadData();
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
-            String lastReal = realItemCache.isEmpty() ? "null" : realItemCache.last().toString();
-            String lastSaved = this.lastSaved == null ? "null" : this.lastSaved.toString();
-            log.info("Curve {} blocking extended by {} minutes due to point {}. Last saved point {}, last realtime point in memory {}. {} more old points suppressed",
-                    info.getId(), delayMinutes, item, lastSaved, lastReal, suppressedOldPoints);
+            log.info("Curve reload time extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
             lastUpdateReloadLogTime = System.currentTimeMillis();
             suppressedOldPoints = 0;
         } else {
             suppressedOldPoints++;
         }
 
-        loadStatus = LoadStatus.BLOCKED;
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
-        reloadData.reloadTime = LocalDateTime.now().plusMinutes(delayMinutes);
-        dispatcher.removeFromRequestQueue(info.getId());
+        reloadData.reloadTime = LocalDateTime.now().plusMinutes(5);
+        dispatcher.removeLoadTask(info.getId());
     }
 
-    public synchronized void updateReloadData() {
-        loadStatus = LoadStatus.BLOCKED;
-        reloadData.from = 0.0;
-        reloadData.reloadTime = LocalDateTime.now();
-        dispatcher.removeFromRequestQueue(info.getId());
-    }
-
-    public synchronized void reload() {
-        if (loadStatus == LoadStatus.BLOCKED) {
+    protected synchronized void reload() {
+        if (loadStatus == LoadStatus.LOADED && reloadData != null) {
             boolean reloadTimeNotNull = reloadData.reloadTime != null;
             boolean reloadTimeIsCome = reloadTimeNotNull && reloadData.reloadTime.isBefore(LocalDateTime.now());
             boolean loadBufferIsEmpty = loadBuffer.isEmpty();
@@ -299,9 +331,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
                 clearData(reloadData.from);
                 loadLost();
-                reloadData.reloadTime = null;
-                reloadData.from = null;
-                addRequestJob(true);
+                reloadData = null;
+                addRequestJob();
             } else if (System.currentTimeMillis() - lastBlockedLogTime > 60000) {
                 String reason;
                 if (!reloadTimeNotNull) {
@@ -311,7 +342,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 } else {
                     reason = "load buffer is not empty (size = " + loadBuffer.size() + ")";
                 }
-                log.info("Curve {} is still blocked by reason of {}", info.getId(), reason);
+                log.info("Curve {} can't reload by reason of {}", info.getId(), reason);
 
                 lastBlockedLogTime = System.currentTimeMillis();
             }
@@ -344,6 +375,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setMaxLoadedKey(lastSaved.getKey());
         }
         savedCount = dispatcher.repository.getItemsRecordsCount(info.getId()) * dispatcher.config.BATCH_SIZE;
+
+        info.setMaxValue(dispatcher.repository.getItemsMinValue(info.getId()));
+        info.setMaxValue(dispatcher.repository.getItemsMaxValue(info.getId()));
     }
 
     private void collect(CurveItem item, boolean isReal) {
@@ -373,7 +407,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 for (int i = 0; i < dispatcher.config.BATCH_SIZE; i++) {
                     itemsBatch.add(realItemCache.pollFirst());
                 }
-                dispatcher.repository.saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch)));
+                dispatcher.repository.saveItems(List.of(ItemDto.fromItemsList(info.getId(), itemsBatch,
+                        info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG))));
 
                 if (tmpFirst == null) {
                     tmpFirst = itemsBatch.get(0);
@@ -407,7 +442,8 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 itemsBatch.add(historyItemCache.pollFirst());
             }
 
-            transfer.add(ItemDto.fromItemsList(info.getId(), itemsBatch));
+            transfer.add(ItemDto.fromItemsList(info.getId(), itemsBatch,
+                    info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)));
 
             if (tmpFirst == null) {
                 tmpFirst = itemsBatch.get(0);
@@ -442,7 +478,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setMinLoadedKey(key);
         }
 
-        updateMaxMinValue(item);
+        updateMaxMinValue(List.of(item));
     }
 
     private void updateInfoFromBuffer() {
@@ -463,11 +499,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             info.setMinLoadedKey(loadBuffer.first().getKey());
         }
 
-        updateMaxMinValue(loadBuffer.toArray(new CurveItem[0]));
+        updateMaxMinValue(loadBuffer);
         dispatcher.repository.saveOrUpdateInfo(info);
     }
 
-    private void updateMaxMinValue(CurveItem... items) {
+    private void updateMaxMinValue(Collection<CurveItem> items) {
         if (info.getAxisDefinition() == null && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG)) {
             for (CurveItem item : items) {
                 try {
@@ -500,13 +536,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
-    private void addRequestJob(boolean ifBlocked) {
+    private void addRequestJob() {
         loadBuffer.clear();
-        if (loadStatus != LoadStatus.BLOCKED || ifBlocked) {
-            CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
-            dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
-            loadStatus = LoadStatus.IN_QUEUE;
-        }
+        CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
+        dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
+        loadStatus = LoadStatus.IN_QUEUE;
     }
 
     private synchronized void doItemsRequest() {
@@ -548,7 +582,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             }
         } else {
             log.error("Response is null");
-            addRequestJob(false);
+            addRequestJob();
             throw new NullResponseException();
         }
     }
@@ -706,7 +740,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public enum LoadStatus {
-        IN_QUEUE, IN_PROGRESS, BLOCKED, LOADED, UNKNOWN
+        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN
     }
 
     private static class ReloadData {

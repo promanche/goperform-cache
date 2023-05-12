@@ -37,4 +37,5 @@ public class CurveInfoResponse {
     private Double minLoadedKey;
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double maxLoadedKey;
+    private boolean waitReload;
 }

@@ -105,6 +105,14 @@ public class MainRepository {
         return count;
     }
 
+    public Double getItemsMinValue(Long id) {
+        return itemsMapper.getMinValue(id);
+    }
+
+    public Double getItemsMaxValue(Long id) {
+        return itemsMapper.getMaxValue(id);
+    }
+
     public void saveOrUpdateInfo(ExtraCurveInfo info) {
         log.trace("saveOrUpdateInfo started");
         long started = System.currentTimeMillis();
@@ -126,6 +134,10 @@ public class MainRepository {
         }
         log.trace("getInfo completed in {} ms", System.currentTimeMillis() - started);
         return optional;
+    }
+
+    public void deleteInfo(Long id) {
+        curveInfoMapper.delete(id);
     }
 
     public void saveSegments(List<SegmentDto> list) {
