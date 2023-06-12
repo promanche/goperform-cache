@@ -591,9 +591,27 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
     }
 
+    private Double findFromDouble() {
+        Double result = null;
+        String logMessage = "THIS MESSAGE MUST NEVER GET LOGGED!";
+        if( !historyItemCache.isEmpty() ) {
+            result = historyItemCache.last().getKey();
+            logMessage = "last history item";
+        } else if( lastSaved != null ) {
+            result = lastSaved.getKey();
+            logMessage = "last saved item key";
+        } else {
+            result = isDateTimeCurve ? dispatcher.config.MIN_TIME_MILLIS : dispatcher.config.MIN_DEPTH_METERS;
+            logMessage = "default";
+        }
+        log.debug("findFromDouble() for {}: {} key is {}", getInfo().getId(), logMessage, result);
+        return result;
+    }
+
     private String findFrom() {
-        Double key = historyItemCache.isEmpty() ? lastSaved == null ? null : lastSaved.getKey() : historyItemCache.last().getKey();
+        Double key = findFromDouble();
         if (key == null) {
+            log.error("findFrom(): key for {} must not be null", getInfo().getId() );
             key = isDateTimeCurve ? dispatcher.config.MIN_TIME_MILLIS : dispatcher.config.MIN_DEPTH_METERS;
         }
         return getKeyAsString(key, info.getIndexType());
@@ -608,9 +626,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (key == null) {
             return null;
         }
-        return type == LogIndexType.MEASURED_DEPTH ?
-                new BigDecimal(key).setScale(4, RoundingMode.HALF_UP).stripTrailingZeros().toPlainString() :
-                OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+        return type == LogIndexType.MEASURED_DEPTH 
+            ? new BigDecimal(key).setScale(4, RoundingMode.UP).stripTrailingZeros().toPlainString() // FIXME: зачем округление?
+            : OffsetDateTime.ofInstant(Instant.ofEpochMilli(key.longValue()), ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
     }
 
     private void sendWsMessage(WsMessage message) {
