@@ -650,7 +650,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         createScaleSegments(items, scale, itemsOnPixel);
 
                     } else {
-                        log.debug("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", info.getId(), items.size(), scale, itemsOnPixel);
+                        log.trace("Curve id {} items {} NOT ADDED for approximating in scale {} with density {} points/pxl", info.getId(), items.size(), scale, itemsOnPixel);
                     }
                 }
             }
@@ -663,7 +663,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             if (segments.size() > 1) {
                 CurveSegment last = segments.remove(segments.size() - 1);
                 saveSegments(segments, scale);
-                log.debug("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), info.getId(), scale, scale * 60 / 120, itemsOnPixel);
+                log.trace("{} segments saved: curve id {}, scale {}, seconds/pxl {}, points/pxl {}", segments.size(), info.getId(), scale, scale * 60 / 120, itemsOnPixel);
                 segments.clear();
                 segments.add(last);
             }
