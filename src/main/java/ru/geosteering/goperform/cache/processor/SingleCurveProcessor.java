@@ -178,6 +178,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         int received = historyPoints.getAndSet(0);
         dispatcher.incrementHistCount(received);
 
+        if( !loadBuffer.isEmpty() ) {
+            log.debug("Data end msg for curve {}, last point {}", getInfo().getId(), loadBuffer.last());
+        }
+
         if (sent == 0) {
             realItemCache.addAll(historyItemCache);
 
