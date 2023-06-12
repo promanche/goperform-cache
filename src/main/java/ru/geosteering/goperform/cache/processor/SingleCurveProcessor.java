@@ -44,7 +44,7 @@ import java.util.stream.Stream;
  * <p>Запросы истории выполняются пакетно с лимитом точек {@linkplain ru.geosteering.goperform.cache.config.Config#HISTORY_REQUEST_LIMIT HISTORY_REQUEST_LIMIT}.
  * Во время загрузки очередного пакета точки собираются в {@linkplain #loadBuffer буфер загрузки}.
  * Окончанием загрузки пакета считается {@link DataEndMessage}.
- * Если количество загруженных точек соответствует указанному в {@link DataEndMessage}, то они отправляются в {@link #historyItemCache} для последующей обработки.
+ * Если количество загруженных точек соответствует указанному в {@link DataEndMessage}, то они отправляются в {@link #historyItemxCache} для последующей обработки.
  * В противном случае точки из буфера игнорируются.
  * Если получен {@link DataEndMessage} с sentCount = 0, считаем что исторические данные полностью загружены (LoadStatus=LOADED).
  *
@@ -124,7 +124,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 && (info.getTypeLogData() == LogDataType.DOUBLE || info.getTypeLogData() == LogDataType.LONG);
 
         reloadSavedInfo();
-        loadLost();
+        restoreScaledSegments();
         addRequestJob();
     }
 
@@ -330,7 +330,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             if (reloadTimeNotNull && reloadTimeIsCome && loadBufferIsEmpty) {
                 log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
                 clearData(reloadData.from);
-                loadLost();
+                restoreScaledSegments();
                 reloadData = null;
                 addRequestJob();
             } else if (System.currentTimeMillis() - lastBlockedLogTime > 60000) {
@@ -706,7 +706,11 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         dispatcher.repository.saveSegments(transfer);
     }
 
-    private void loadLost() {
+    /**
+     * Восстановить состояние подсчёта "штрихов" (агрегатов точек для отображения малых масштабов). Поднимает из БД кэшированные точки, 
+     * штрихи для которых не были сохранены, и передаёт их построителю штрихов ({link #SegmentCreator}).
+     */
+    private void restoreScaledSegments() {
         if (isApproximated && lastSaved != null && firstSaved != null) {
             Map<Integer, Double> scaleLast = dispatcher.repository.getScalesLast(info.getId());
 
@@ -723,7 +727,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     .flatMap((Function<String, Stream<CurveItem>>) str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                     .toList();
 
-            log.info("{} lost items for {} loaded", items.size(), info.getId());
+            log.info("{} cached items for {} re-scaling loaded", items.size(), info.getId());
 
             SegmentCreator segmentCreator = new SegmentCreator();
             scaleLast.forEach((scale, last) -> {
@@ -735,7 +739,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                     segmentCreator.createScaleSegments(lost, scale, findItemsOnPixel(scale));
                 }
             });
-            segmentCreator.logResults("loadLost()");
+            segmentCreator.logResults("restoreScaledSegments()");
         }
     }
 
