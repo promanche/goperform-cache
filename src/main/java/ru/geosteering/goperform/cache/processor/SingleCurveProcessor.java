@@ -96,6 +96,15 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private long pointTimer;
     private long requestTimer;
 
+    private void toggleLoadStatus( LoadStatus newStatus ) {
+        LoadStatus oldStatus = loadStatus;
+        if( oldStatus == newStatus ) {
+            return;
+        }
+        log.debug("Curve {} status {} -> {}", getInfo().getId(), oldStatus, newStatus );
+        loadStatus = newStatus;
+    }
+
     /**
      * Миллисекунды последней записи в логе об ошибках вычисления минимумов-максимумов (предположительно, на некорретных данных)
      */
@@ -135,7 +144,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     @Override
     public synchronized void onDisconnect() {
-        loadStatus = LoadStatus.UNKNOWN;
+        toggleLoadStatus(LoadStatus.UNKNOWN);
         realItemCache.clear();
         historyItemCache.clear();
         loadBuffer.clear();
@@ -178,9 +187,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         int received = historyPoints.getAndSet(0);
         dispatcher.incrementHistCount(received);
 
-        if( !loadBuffer.isEmpty() ) {
-            log.debug("Data end msg for curve {}, last point {}", getInfo().getId(), loadBuffer.last());
-        }
+        log.debug("End msg for {}: {}, last point {}", getInfo().getId(), message, loadBuffer.isEmpty() ? null : loadBuffer.last());
 
         if (sent == 0) {
             realItemCache.addAll(historyItemCache);
@@ -208,7 +215,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             //-------------------------------------------------------
 
             historyItemCache.clear();
-            loadStatus = LoadStatus.LOADED;
+            toggleLoadStatus(LoadStatus.LOADED);
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
 
@@ -392,7 +399,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         } else {
             if (historyPoints.getAndIncrement() == 0) {
                 pointTimer = System.currentTimeMillis();
-                loadStatus = loadStatus == LoadStatus.IN_QUEUE ? LoadStatus.IN_PROGRESS : loadStatus;
+                toggleLoadStatus( loadStatus == LoadStatus.IN_QUEUE ? LoadStatus.IN_PROGRESS : loadStatus );
             }
             loadBuffer.add(item);
         }
@@ -534,7 +541,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         minMaxErrorCounter++;
                     }
 
-                    log.debug(e.getMessage(), e);
+                    log.trace(e.getMessage(), e);
                 }
             }
         }
@@ -544,7 +551,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         loadBuffer.clear();
         CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
         dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
-        loadStatus = LoadStatus.IN_QUEUE;
+        toggleLoadStatus(LoadStatus.IN_QUEUE);
     }
 
     private synchronized void doItemsRequest() {
@@ -709,7 +716,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         log.info("Create segment exception. Message: {}, item: {}", e.getMessage(), StaticMapper.toJson(item));
                     }
                     invalidItems++;
-                    log.debug(e.getMessage(), e);
+                    log.trace(e.getMessage(), e);
                 }
             }
             return this;
