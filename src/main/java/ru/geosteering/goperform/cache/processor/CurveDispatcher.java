@@ -141,6 +141,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     protected void addRequestTask(RequestTask newTask) {
+        log.debug("Adding request task {} for {}", newTask.type, newTask.id, new Exception("addRequestTask() invocation"));
         requestQueue.add(newTask);
     }
 
