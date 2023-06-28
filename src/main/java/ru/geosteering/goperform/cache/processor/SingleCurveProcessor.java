@@ -44,7 +44,7 @@ import java.util.stream.Stream;
  * <p>Запросы истории выполняются пакетно с лимитом точек {@linkplain ru.geosteering.goperform.cache.config.Config#HISTORY_REQUEST_LIMIT HISTORY_REQUEST_LIMIT}.
  * Во время загрузки очередного пакета точки собираются в {@linkplain #loadBuffer буфер загрузки}.
  * Окончанием загрузки пакета считается {@link DataEndMessage}.
- * Если количество загруженных точек соответствует указанному в {@link DataEndMessage}, то они отправляются в {@link #historyItemxCache} для последующей обработки.
+ * Если количество загруженных точек соответствует указанному в {@link DataEndMessage}, то они отправляются в {@link #historyItemCache} для последующей обработки.
  * В противном случае точки из буфера игнорируются.
  * Если получен {@link DataEndMessage} с sentCount = 0, считаем что исторические данные полностью загружены (LoadStatus=LOADED).
  *
@@ -103,6 +103,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
         log.debug("Curve {} status {} -> {}", getInfo().getId(), oldStatus, newStatus );
         loadStatus = newStatus;
+    }
+
+    public long totalBufferSize() {
+        return realItemCache.size()+historyItemCache.size()+loadBuffer.size();
     }
 
     /**

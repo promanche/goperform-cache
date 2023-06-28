@@ -68,10 +68,11 @@ public class CurveDispatcher implements ConnectionEventListener {
                 Map<String, Integer> curvesInfo = processors.values().stream()
                         .map(SingleCurveProcessor::getLoadStatus)
                         .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
+                Long totalPoints = processors.values().stream().collect(Collectors.summingLong(SingleCurveProcessor::totalBufferSize));
                 curvesInfo.put("ACTIVE", activeCurves.size());
                 curvesInfo.put("BROKEN", brokenCurves.size());
                 curvesInfo.put("REQUEST_ALLOWED", requestAllowed.get());
-                log.info("CURVES INFO: {}", curvesInfo);
+                log.info("DispatcherState.Curves: {}, total points {}", curvesInfo, totalPoints);
 
                 long seconds = (System.currentTimeMillis() - timer) / 1000;
                 timer = System.currentTimeMillis();
@@ -81,8 +82,13 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                 seconds = seconds == 0 ? 1 : seconds;
 
-                log.info("STATISTICS FOR THE PERIOD: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
+                log.info("DispatcherState.Statistics: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
                         history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
+                log.info("DispatcherState.MemoryKb: free {} / total {} / max {}"
+                        , Runtime.getRuntime().freeMemory()/1024
+                        , Runtime.getRuntime().totalMemory()/1024
+                        , Runtime.getRuntime().maxMemory()/1024
+                        );
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
