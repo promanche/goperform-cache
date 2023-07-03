@@ -72,7 +72,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                 curvesInfo.put("ACTIVE", activeCurves.size());
                 curvesInfo.put("BROKEN", brokenCurves.size());
                 curvesInfo.put("REQUEST_ALLOWED", requestAllowed.get());
-                log.info("DispatcherState.Curves: {}, total points {}", curvesInfo, totalPoints);
+                log.info("DispatcherState.Curves: {}, total {} curves with {} points.", curvesInfo, processors.size(), totalPoints);
 
                 long seconds = (System.currentTimeMillis() - timer) / 1000;
                 timer = System.currentTimeMillis();
@@ -82,13 +82,8 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                 seconds = seconds == 0 ? 1 : seconds;
 
-                log.info("DispatcherState.Statistics: histPoints - {}, histPoints/sec - {}, histPoint/sec/req - {}, real points - {}",
-                        history, history / seconds, history / (seconds * config.NATS_ONETIME_REQUESTS), real);
-                log.info("DispatcherState.MemoryKb: free {} / total {} / max {}"
-                        , Runtime.getRuntime().freeMemory()/1024
-                        , Runtime.getRuntime().totalMemory()/1024
-                        , Runtime.getRuntime().maxMemory()/1024
-                        );
+                log.info("DispatcherState.Statistics: histPoints - {}, histPoints/sec - {}, real points - {}",
+                        history, history / seconds, real);
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
@@ -147,11 +142,12 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     protected void addRequestTask(RequestTask newTask) {
-        log.debug("Adding request task {} for {}", newTask.type, newTask.id, new Exception("addRequestTask() invocation"));
+        log.debug("Adding request task {} for {}", newTask.type, newTask.id);
         requestQueue.add(newTask);
     }
 
     protected void removeLoadTask(Long id) {
+        log.debug("Removing load task for {} (if any)", id);
         requestQueue.removeIf(task -> Objects.equals(task.id, id)
                 && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
     }
