@@ -165,7 +165,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
             if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
                 if (!loadBuffer.isEmpty() && Double.compare(item.getKey(), loadBuffer.last().getKey()) < 0) {
-                    log.warn("Curve {} real time point {} is precedes than last history point {}", info.getId(), item, loadBuffer.last());
+                    log.warn("Curve {} real time point {} precedes last history point {}", info.getId(), item, loadBuffer.last());
                 }
                 collect(item, true);
                 updateInfo(item);
@@ -333,31 +333,25 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
 
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
-        reloadData.reloadTime = LocalDateTime.now().plusMinutes(5);
+        reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
         dispatcher.removeLoadTask(info.getId());
     }
 
     protected synchronized void reload() {
-        if (loadStatus == LoadStatus.LOADED && reloadData != null) {
-            boolean reloadTimeNotNull = reloadData.reloadTime != null;
-            boolean reloadTimeIsCome = reloadTimeNotNull && reloadData.reloadTime.isBefore(LocalDateTime.now());
-            boolean loadBufferIsEmpty = loadBuffer.isEmpty();
-            if (reloadTimeNotNull && reloadTimeIsCome && loadBufferIsEmpty) {
+        if (reloadData != null) {
+            boolean reloadTimeHasCome = reloadData.reloadTime.isBefore(LocalDateTime.now());
+            if (reloadTimeHasCome && loadStatus != LoadStatus.IN_PROGRESS) {
                 log.info("Curve {} will now be reloaded from {}", info.getId(), reloadData.from);
                 clearData(reloadData.from);
                 restoreScaledSegments();
                 reloadData = null;
                 addRequestJob();
             } else if (System.currentTimeMillis() - lastBlockedLogTime > 60000) {
-                String reason;
-                if (!reloadTimeNotNull) {
-                    reason = "reload time is null";
-                } else if (!reloadTimeIsCome) {
-                    reason = "reload time has not come yet (expected at " + reloadData.reloadTime + ")";
-                } else {
-                    reason = "load buffer is not empty (size = " + loadBuffer.size() + ")";
-                }
-                log.info("Curve {} can't reload by reason of {}", info.getId(), reason);
+                String reason =
+                    reloadTimeHasCome
+                    ? "history load is active (buffered size = " + loadBuffer.size() + ")"
+                    : "reload time has not come yet (expected at " + reloadData.reloadTime + ")";
+                log.info("Curve {} can't reload because {}", info.getId(), reason);
 
                 lastBlockedLogTime = System.currentTimeMillis();
             }
@@ -403,7 +397,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         } else {
             if (historyPoints.getAndIncrement() == 0) {
                 pointTimer = System.currentTimeMillis();
-                toggleLoadStatus( loadStatus == LoadStatus.IN_QUEUE ? LoadStatus.IN_PROGRESS : loadStatus );
             }
             loadBuffer.add(item);
         }
@@ -582,6 +575,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             ApiMessage apiMessage = StaticMapper.parseObject(new String(response.getData()), ApiMessage.class);
             switch (Objects.requireNonNull(apiMessage).getType()) {
                 case CURVE_INFO -> {
+                    if( loadStatus != LoadStatus.IN_QUEUE ) {
+                        log.warn( "Curve {} status is {} when must be {}", info.getId(), loadStatus, LoadStatus.IN_QUEUE);
+                    }
+                    toggleLoadStatus(LoadStatus.IN_PROGRESS);
                 }
                 case STATUS -> {
                     StatusMessage statusMessage = (StatusMessage) apiMessage;
