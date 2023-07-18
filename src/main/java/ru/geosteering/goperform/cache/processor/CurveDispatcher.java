@@ -146,8 +146,14 @@ public class CurveDispatcher implements ConnectionEventListener {
         requestQueue.add(newTask);
     }
 
-    protected void removeLoadTask(Long id) {
-        log.debug("Removing load task for {} (if any)", id);
+    private void removeLoadTask(Long id) {
+        removeLoadTask(id, false);
+    }
+
+    protected void removeLoadTask(Long id, boolean skipLogging) {
+        if(!skipLogging) {
+            log.debug("Removing load task for {} (if any)", id);
+        }
         requestQueue.removeIf(task -> Objects.equals(task.id, id)
                 && (task.type == RequestType.LOAD_ACTIVE || task.type == RequestType.LOAD_REST));
     }

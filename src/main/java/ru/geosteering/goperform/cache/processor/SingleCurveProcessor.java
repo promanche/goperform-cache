@@ -320,6 +320,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private void updateReloadData(CurveItem item) {
         Double from = item.getKey();
+        boolean skipLogging = false;
 
         if (reloadData == null) {
             log.info("Curve set reload time in 5 minutes. Details: {}", reloadLog(item));
@@ -330,11 +331,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             suppressedOldPoints = 0;
         } else {
             suppressedOldPoints++;
+            skipLogging = true;
         }
 
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
         reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
-        dispatcher.removeLoadTask(info.getId());
+        dispatcher.removeLoadTask(info.getId(), skipLogging);
     }
 
     protected synchronized void reload() {
