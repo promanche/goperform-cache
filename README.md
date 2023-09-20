@@ -12,8 +12,8 @@ dockerTargetRegistryUrl=nexus.geosteering.ru:5001
 ```
 # Подготовка БД
 
-Пока что кэш не умеет самостоятельно создавать таблицы, поэтому и создание БД, и создание таблиц
-требуется проводить до первого запуска:
+Пока что кэш не умеет самостоятельно создавать таблицы (todo: уточнить, liquibase внедрён, может уже и уметь), 
+поэтому создание таблиц требуется проводить до первого запуска:
 ```sql
 create user goperform_user password 'password';
 create database goperform_db owner goperform_user;
