@@ -1,0 +1,60 @@
+package ru.geosteering.goperform.cache.auth;
+
+import io.nats.client.Message;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.security.core.Authentication;
+import org.springframework.stereotype.Component;
+import ru.geosteering.commonModels.EResult;
+import ru.geosteering.commonModels.TLUserObjectIn;
+import ru.geosteering.commonModels.authService.requests.CheckObjectAccessRequest;
+import ru.geosteering.commonModels.webService.responses.ApiResult;
+import ru.geosteering.goperform.cache.nats.NatsConnector;
+import ru.geosteering.goperform.cache.utils.StaticMapper;
+
+@Component
+@Slf4j
+public class ObjectAccessor {
+
+    /**
+     * Порог логгирования: проверки доступа, проведённые быстрее данного порога, не должны логгироваться, чтобы не захламлять лог.
+     */
+    public static final long LOG_THRESHOLD_MILLIS = 100;
+
+    @Cacheable(value = "objectAccess", unless = "#result == false", key = "#auth.getName() + #id + #permission.toString()")
+    public boolean check(Authentication auth, long id, TLUserObjectIn.Permissions permission) {
+
+        try {
+            String userName = auth.getName();
+
+            if (
+                    userName == null
+                            || userName.isEmpty()
+                            || userName.equalsIgnoreCase("anonymousUser")
+                            || userName.equalsIgnoreCase("anonymous")
+            ) {
+
+                return false;
+            }
+
+            CheckObjectAccessRequest request = new CheckObjectAccessRequest();
+            request.setAction("checkObjectAccess");
+            request.setUsername(userName);
+            request.setObjectId(id);
+            request.setPermission(permission);
+
+            log.trace("Request: {}", request);
+            String authSubject = "gostream.auth";
+            Message response = NatsConnector.sendRequest(authSubject, StaticMapper.toBytes(request));
+            log.trace("Response: {}", response);
+
+            ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
+
+            return apiResult != null && apiResult.getStatus() == EResult.OK;
+
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            return false;
+        }
+    }
+}
