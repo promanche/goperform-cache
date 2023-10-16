@@ -387,7 +387,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
         savedCount = dispatcher.repository.getItemsRecordsCount(info.getId()) * dispatcher.config.BATCH_SIZE;
 
-        info.setMaxValue(dispatcher.repository.getItemsMinValue(info.getId()));
+        info.setMinValue(dispatcher.repository.getItemsMinValue(info.getId()));
         info.setMaxValue(dispatcher.repository.getItemsMaxValue(info.getId()));
     }
 
