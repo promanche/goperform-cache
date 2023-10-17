@@ -218,22 +218,26 @@ public class CurveService {
 
         log.info("Request: {}", request);
         Message message = NatsConnector.sendRequest("gostream.curvesAdd", StaticMapper.toBytes(request));
-        log.info("Response: {}", message);
 
-        ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+        if (message != null) {
+            log.info("Response: {}", message);
+            ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
 
-        if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
+            if (apiMessage != null && apiMessage.getType() == ApiMessage.MessageType.STATUS) {
 
-            StatusMessage statusMessage = (StatusMessage) apiMessage;
+                StatusMessage statusMessage = (StatusMessage) apiMessage;
 
-            if (statusMessage.getStatus() == EResult.OK) {
-                return Long.valueOf(statusMessage.getMessage());
-            } else {
-                throw new BadRequestException(statusMessage.getMessage());
+                if (statusMessage.getStatus() == EResult.OK) {
+                    return Long.valueOf(statusMessage.getMessage());
+                } else {
+                    throw new BadRequestException(statusMessage.getMessage());
+                }
             }
+            return null;
+        }else {
+            log.error("Response from GOstream is null");
+            throw new NullPointerException("Response from GOstream is null");
         }
-
-        return null;
     }
 
     public void writeComment(Long id, Comment comment, String user, boolean update) {
