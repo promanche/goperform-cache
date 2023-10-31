@@ -80,3 +80,12 @@ docker run --rm --name goperform-cache-service \
 
 * ``application.properties``
 * ``app.creds``
+
+## Экспорт логов в Graylog
+
+Чтобы логи отправлялись в Graylog необходимо добавить следующие переменные окружения:
+
+* LOG_CONFIG=classpath:logback-env.xml
+* GRAYLOG_SOURCE - указать условное имя хоста, например, `perform.corp.geosteering.ru`
+
+Имя хоста не обязательно должно совпадать с реальным именем хоста, где развернуто приложение - это скорее способ отличать стенды
