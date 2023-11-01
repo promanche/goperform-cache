@@ -59,6 +59,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final AtomicInteger realCount = new AtomicInteger();
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private long timer = System.currentTimeMillis();
+    private final Map<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
 
     @PostConstruct
     private void runExecutors() {
@@ -122,6 +123,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
         SingleCurveProcessor curveProcessor = getCurveProcessor(id, false);
         if (curveProcessor != null) {
+            curvesLastChange.put(id, LocalDateTime.now());
             curveProcessor.onCurveDataMessage(message, isReal);
         }
     }
@@ -131,6 +133,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             Long id = parseId(subject);
             LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
             if (id != null) {
+                curvesLastChange.put(id, LocalDateTime.now());
                 processors.get(id).onDataEndMessage(message);
             }
 
@@ -167,6 +170,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public SingleCurveProcessor getCurveProcessor(Long id, boolean fromRest) {
+        curvesLastChange.put(id, LocalDateTime.now());
         SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
             ExtraCurveInfo info = repository.getInfo(id).orElse(null);
             if (info != null) {
@@ -316,6 +320,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public void fullCurveReload(Long id) {
+        curvesLastChange.put(id, LocalDateTime.now());
         processors.compute(id, (k, v) -> {
             removeLoadTask(id);
             repository.deleteInfo(id);
@@ -323,6 +328,18 @@ public class CurveDispatcher implements ConnectionEventListener {
             repository.deleteItems(id, null);
             addRequestTask(new RequestTask(id, RequestType.INFO_REST, () -> doInfoRequest(id, true)));
             return null;
+        });
+    }
+
+    /**
+     * Если кривая больше не запрашивалась больше чем 3 минуты
+     */
+    @Scheduled(fixedDelay = 60_000)
+    private void checkUnusedCurves() {
+        curvesLastChange.forEach((k, v) -> {
+            if(v.isBefore(LocalDateTime.now().minusMinutes(3))){
+                log.debug("Curve {} must be removed from the cache", k);
+            }
         });
     }
 
