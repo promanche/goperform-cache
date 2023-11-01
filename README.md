@@ -7,22 +7,29 @@ nexusUsername=username
 nexusPassword=password
 
 # Данная настройка необходима только при сборке и публикации докер-образа
-#dockerTargetRegistryUrl=lib.geosteering.ru:5001
+# dockerTargetRegistryUrl=lib.geosteering.ru:5001
 dockerTargetRegistryUrl=nexus.geosteering.ru:5001
 ```
+
+
 # Подготовка БД
 
-Пока что кэш не умеет самостоятельно создавать таблицы (todo: уточнить, liquibase внедрён, может уже и уметь), 
-поэтому создание таблиц требуется проводить до первого запуска:
+Пока что кэш не умеет самостоятельно создавать таблицы (todo: уточнить, liquibase внедрён, может уже и уметь),  поэтому создание таблиц требуется проводить до первого запуска:
+
 ```sql
 create user goperform_user password 'password';
 create database goperform_db owner goperform_user;
 ```
+
 **Важно!** Создавать таблицы следует от имени пользователя, под которым будет работать приложение:
+
 ```shell
 cat CreateTables.sql | psql postgresql://goperform_user:password@db_host:5432/goperform_db
 ```
+
+
 # Сборка и запуск bootJar
+
 1. Клонировать ветку dev, перейти в папку с проектом.
 2. ``./gradlew bootJar``
 3. Собранный jar искать в папке ``../build/libs``
@@ -38,9 +45,11 @@ java \
  > /dev/null 2>&1 &
 ```
 
+
 # Сборка и запуск в Docker
 
 ## Предусловия
+
 1. На сборочном хосте должен быть запущен docker daemon (при большом желании можно настроиться и на удалённый сервер, RTFM).
 2. Указать урл, логин и пароль репо для публикации в файле ``~/.docker/config.json``:
 ```json
@@ -53,11 +62,13 @@ java \
     }
 }
 ```
-## Cобрать образ
+
+## Собрать образ
 
 ```shell
 ./gradlew dockerBuildImage
 ```
+
 ## Опубликовать образ
 
 ```shell
@@ -71,17 +82,21 @@ java \
 ```shell
 docker run --rm --name goperform-cache-service \
   -p 9010:9010 \
-  -v $(pwd)/application.properties:/app/application.properties \
   -v $(pwd)/app.creds:/app/app.creds \
+  -e GOSTREAM_DATA_SERVICE_URL="http://localhost:9002/api"
+  -e DB_URL="jdbc:postgresql://localhost:5432/goperform_cache"
+  -e DB_USR="goperform_cache"
+  -e DB_PSW="goperform_cache"
+  -e NATS_URL="nats://localhost:4222"
   nexus.geosteering.ru:5001/gostream/goperform-cache-service:latest
 ```
 
-В директории, откуда будет выполняться эта команда, должны находиться два файла:
+В переменных окружения (`-e ...`) должны быть указаны корректные значения
 
-* ``application.properties``
-* ``app.creds``
+В директории, откуда будет выполняться эта команда, должен находиться файл `app.creds`
 
-## Экспорт логов в Graylog
+
+# Экспорт логов в Graylog
 
 Чтобы логи отправлялись в Graylog необходимо добавить следующие переменные окружения:
 
