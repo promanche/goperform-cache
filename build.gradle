@@ -103,5 +103,5 @@ def getCurrentGitBranch() {
     if (result.exitValue() == 0) {
         gitBranch = result.text.trim()
     }
-    return gitBranch
+    return gitBranch.replaceAll('/', '_')
 }
