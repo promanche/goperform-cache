@@ -74,8 +74,8 @@ docker {
     springBootApplication {
         baseImage = "eclipse-temurin:17-jre-alpine"
         ports = [9010]
-        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getCurrentGitBranch()}_${version}",
-                  "$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getCurrentGitBranch()}_latest"]
+        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getDockerImageTag()}_${version}",
+                  "$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getDockerImageTag()}_latest"]
     }
 }
 
@@ -103,5 +103,10 @@ def getCurrentGitBranch() {
     if (result.exitValue() == 0) {
         gitBranch = result.text.trim()
     }
-    return gitBranch.replaceAll('/', '_')
+    return gitBranch
+}
+
+def getDockerImageTag() {
+    def branchName = getCurrentGitBranch()
+    return branchName.replaceAll('/', '_')
 }
