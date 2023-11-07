@@ -59,7 +59,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final AtomicInteger realCount = new AtomicInteger();
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private long timer = System.currentTimeMillis();
-    private final Map<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
+    private final ConcurrentMap<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
 
     @PostConstruct
     private void runExecutors() {
@@ -123,7 +123,6 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
         SingleCurveProcessor curveProcessor = getCurveProcessor(id, false);
         if (curveProcessor != null) {
-            curvesLastChange.put(id, LocalDateTime.now());
             curveProcessor.onCurveDataMessage(message, isReal);
         }
     }
@@ -133,10 +132,8 @@ public class CurveDispatcher implements ConnectionEventListener {
             Long id = parseId(subject);
             LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(300));
             if (id != null) {
-                curvesLastChange.put(id, LocalDateTime.now());
-                processors.get(id).onDataEndMessage(message);
+                getCurveProcessor(id, false).onDataEndMessage(message);
             }
-
         } catch (Exception e) {
             log.error(e.getMessage(), e);
         } finally {
@@ -170,7 +167,6 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public SingleCurveProcessor getCurveProcessor(Long id, boolean fromRest) {
-        curvesLastChange.put(id, LocalDateTime.now());
         SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
             ExtraCurveInfo info = repository.getInfo(id).orElse(null);
             if (info != null) {
@@ -178,8 +174,8 @@ public class CurveDispatcher implements ConnectionEventListener {
             }
             return null;
         });
-
         if (curveProcessor != null) {
+            curvesLastChange.put(id, LocalDateTime.now());
             curveProcessor.setFromRest(fromRest);
         } else {
             CurveDataRequest request = new CurveDataRequest();
