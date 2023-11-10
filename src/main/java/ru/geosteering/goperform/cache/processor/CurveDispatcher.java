@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Predicate;
@@ -60,6 +61,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private long timer = System.currentTimeMillis();
     private final ConcurrentMap<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
+    private final AtomicBoolean isDeleteInactiveCurvesWorking = new AtomicBoolean();
 
     @PostConstruct
     private void runExecutors() {
@@ -151,7 +153,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     protected void removeLoadTask(Long id, boolean skipLogging) {
-        if(!skipLogging) {
+        if (!skipLogging) {
             log.debug("Removing load task for {} (if any)", id);
         }
         requestQueue.removeIf(task -> Objects.equals(task.id, id)
@@ -328,15 +330,25 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Если кривая больше не запрашивалась больше чем 3 минуты
+     * Удаление кривых если они неактивны больше 3 минут
      */
-    @Scheduled(fixedDelay = 60_000)
-    private void checkUnusedCurves() {
-        curvesLastChange.forEach((k, v) -> {
-            if(v.isBefore(LocalDateTime.now().minusMinutes(3))){
-                log.debug("Curve {} must be removed from the cache", k);
-            }
-        });
+    @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.MINUTES)
+    private void deleteInactiveCurves() {
+        if (!isDeleteInactiveCurvesWorking.get()) {
+            isDeleteInactiveCurvesWorking.set(true);
+            curvesLastChange.forEach((id, lastChange) -> {
+                if (lastChange.isBefore(LocalDateTime.now().minusMinutes(3))) {
+                    processors.remove(id);
+
+                    removeLoadTask(id);
+                    repository.deleteInfo(id);
+                    repository.deleteSegments(id, null);
+                    repository.deleteItems(id, null);
+                    log.debug("Curve {} was removed because it was inactive", id);
+                }
+            });
+            isDeleteInactiveCurvesWorking.set(false);
+        }
     }
 
     protected interface RequestJob {
