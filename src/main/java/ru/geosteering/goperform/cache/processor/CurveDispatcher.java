@@ -23,7 +23,6 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.*;
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Predicate;
@@ -61,7 +60,6 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private long timer = System.currentTimeMillis();
     private final ConcurrentMap<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
-    private final AtomicBoolean isDeleteInactiveCurvesWorking = new AtomicBoolean();
 
     @PostConstruct
     private void runExecutors() {
@@ -99,6 +97,25 @@ public class CurveDispatcher implements ConnectionEventListener {
                 log.error(e.getMessage(), e);
             }
         }, 0, 5, TimeUnit.SECONDS);
+
+        repository.getInfoIds().forEach(id -> {
+            CurveDataRequest request = new CurveDataRequest();
+            request.setCurveId(id);
+            request.setInfoOnly(true);
+
+            Message message = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
+            if (message != null) {
+
+                ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+
+                if (apiMessage.getType().equals(ApiMessage.MessageType.CURVE_INFO)) {
+
+                    LocalDateTime lastChanged = ((CurveInfoMessage) apiMessage).getCurveInfo().getLastChanged().toLocalDateTime();
+
+                    curvesLastChange.put(id, lastChanged);
+                }
+            }
+        });
     }
 
     @Override
@@ -330,25 +347,21 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Удаление кривых если они неактивны больше 3 минут
+     * Удаление кривых если они неактивны больше 2 дней
      */
-    @Scheduled(fixedDelay = 1, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedDelayString = "P1D", initialDelayString = "PT5H")
     private void deleteInactiveCurves() {
-        if (!isDeleteInactiveCurvesWorking.get()) {
-            isDeleteInactiveCurvesWorking.set(true);
-            curvesLastChange.forEach((id, lastChange) -> {
-                if (lastChange.isBefore(LocalDateTime.now().minusMinutes(3))) {
-                    processors.remove(id);
+        curvesLastChange.forEach((id, lastChange) -> {
+            if (lastChange.isBefore(LocalDateTime.now().minusDays(2))) {
+                processors.remove(id);
 
-                    removeLoadTask(id);
-                    repository.deleteInfo(id);
-                    repository.deleteSegments(id, null);
-                    repository.deleteItems(id, null);
-                    log.debug("Curve {} was removed because it was inactive", id);
-                }
-            });
-            isDeleteInactiveCurvesWorking.set(false);
-        }
+                removeLoadTask(id);
+                repository.deleteInfo(id);
+                repository.deleteSegments(id, null);
+                repository.deleteItems(id, null);
+                log.debug("Curve {} was removed because it was inactive", id);
+            }
+        });
     }
 
     protected interface RequestJob {

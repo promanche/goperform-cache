@@ -136,6 +136,14 @@ public class MainRepository {
         return optional;
     }
 
+    public List<Long> getInfoIds(){
+        log.trace("getInfoIds started");
+        long started = System.currentTimeMillis();
+        List<Long> all = curveInfoMapper.getAll();
+        log.trace("getInfoIds completed in {} ms", System.currentTimeMillis() - started);
+        return all;
+    }
+
     public void deleteInfo(Long id) {
         curveInfoMapper.delete(id);
     }
