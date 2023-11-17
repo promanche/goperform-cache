@@ -139,7 +139,7 @@ public class MainRepository {
     public List<Long> getInfoIds(){
         log.trace("getInfoIds started");
         long started = System.currentTimeMillis();
-        List<Long> all = curveInfoMapper.getAll();
+        List<Long> all = curveInfoMapper.getAllIds();
         log.trace("getInfoIds completed in {} ms", System.currentTimeMillis() - started);
         return all;
     }

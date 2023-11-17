@@ -4,6 +4,8 @@ import io.nats.client.Message;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationStartedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.EResult;
@@ -98,24 +100,46 @@ public class CurveDispatcher implements ConnectionEventListener {
             }
         }, 0, 5, TimeUnit.SECONDS);
 
-        repository.getInfoIds().forEach(id -> {
-            CurveDataRequest request = new CurveDataRequest();
-            request.setCurveId(id);
-            request.setInfoOnly(true);
+    }
 
-            Message message = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
-            if (message != null) {
+    @EventListener(ApplicationStartedEvent.class)
+    public void initCurvesLastChange(){
+        try {
+            boolean isConnected = false;
 
-                ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+            while (!isConnected){
 
-                if (apiMessage.getType().equals(ApiMessage.MessageType.CURVE_INFO)) {
+                if(NatsConnector.isConnected()){
 
-                    LocalDateTime lastChanged = ((CurveInfoMessage) apiMessage).getCurveInfo().getLastChanged().toLocalDateTime();
+                    isConnected = true;
 
-                    curvesLastChange.put(id, lastChanged);
+                    List<Long> infoIds = repository.getInfoIds();
+                    log.info("There are {} curves stored in cache", infoIds.size());
+                    infoIds.forEach(id -> {
+                        CurveDataRequest request = new CurveDataRequest();
+                        request.setCurveId(id);
+                        request.setInfoOnly(true);
+
+                        Message message = NatsConnector.sendRequest(config.SUBJECT, StaticMapper.toBytes(request));
+                        if (message != null) {
+
+                            ApiMessage apiMessage = StaticMapper.parseObject(new String(message.getData()), ApiMessage.class);
+
+                            if (Objects.requireNonNull(apiMessage).getType().equals(ApiMessage.MessageType.CURVE_INFO)) {
+
+                                LocalDateTime lastChanged = ((CurveInfoMessage) apiMessage).getCurveInfo().getLastChanged().toLocalDateTime();
+
+                                curvesLastChange.put(id, lastChanged);
+                                log.info("Curve {} last change was {}", id, lastChanged);
+                            }
+                        }
+                    });
                 }
+                Thread.sleep(1000);
             }
-        });
+        } catch (InterruptedException e) {
+            log.error(e.getMessage(), e);
+        }
     }
 
     @Override

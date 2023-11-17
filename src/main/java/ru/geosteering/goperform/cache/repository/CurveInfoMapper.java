@@ -21,7 +21,7 @@ public interface CurveInfoMapper {
     String get(@Param("id") Long id);
 
     @Select("select curve_id from info")
-    List<Long> getAll();
+    List<Long> getAllIds();
 
     @Delete("delete from info where curve_id=#{id}")
     void delete(@Param("id") Long id);
