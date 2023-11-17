@@ -127,7 +127,9 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                             if (Objects.requireNonNull(apiMessage).getType().equals(ApiMessage.MessageType.CURVE_INFO)) {
 
-                                LocalDateTime lastChanged = ((CurveInfoMessage) apiMessage).getCurveInfo().getLastChanged().toLocalDateTime();
+                                OffsetDateTime lastChangedCurveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo().getLastChanged();
+
+                                LocalDateTime lastChanged = (lastChangedCurveInfo == null) ? LocalDateTime.now() : lastChangedCurveInfo.toLocalDateTime();
 
                                 curvesLastChange.put(id, lastChanged);
                                 log.info("Curve {} last change was {}", id, lastChanged);
@@ -371,12 +373,12 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Удаление кривых если они неактивны больше 2 дней
+     * Удаление кривых если они неактивны больше 1 дня
      */
-    @Scheduled(fixedDelayString = "P1D", initialDelayString = "PT5H")
+    @Scheduled(fixedDelayString = "PT12H", initialDelayString = "PT5H")
     private void deleteInactiveCurves() {
         curvesLastChange.forEach((id, lastChange) -> {
-            if (lastChange.isBefore(LocalDateTime.now().minusDays(2))) {
+            if (lastChange.isBefore(LocalDateTime.now().minusDays(1))) {
                 processors.remove(id);
 
                 removeLoadTask(id);
