@@ -40,7 +40,7 @@ dependencies {
     implementation 'com.google.guava:guava:31.1-jre'
     implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 
-    implementation 'ru.geosteering:common-models:1.14.0'
+    implementation 'ru.geosteering:common-models:1.21.0'
     implementation 'ru.geosteering:witsml-library:1.1.10'
 
     implementation 'org.postgresql:postgresql'
