@@ -169,7 +169,7 @@ public class Config {
 
     public Config(@Value("${goperform" + '.' + "subject}") String subject,
                   @Value("${goperform" + '.' + "objects}") String objects,
-                  @Value("${goperform" + '.' + "auth") String auth,
+                  @Value("${goperform" + '.' + "auth}") String auth,
                   @Value("${goperform.host}") String host,
                   @Value("${goperform.nats.username}") String username,
                   @Value("${goperform.nats.password}") String password,

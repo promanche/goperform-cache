@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.User;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -56,7 +57,7 @@ public class ApiServiceDataClient {
     private void connect() {
 
         Options options = new Options.Builder()
-                .connectionName("goperform-cache")
+                .connectionName("goperform-cache-1")
                 .noReconnect()
                 .errorListener(new ErrorListenerLoggerImpl())
                 .authHandler(Nats.credentials(config.CREDENTIALS_FILE))
@@ -96,10 +97,12 @@ public class ApiServiceDataClient {
         GetObjectsRequest request = new GetObjectsRequest();
         request.setParentId(null);
         request.setAll(true);
-        request.setUserUid("d2b5cf44-19da-11eb-9e91-1f146a486534");
+        //request.setUserUid("c648178a-57e3-11ea-91c1-cffe9e8ac272");
+        UserInfo userInfo = getUserInfo();
+        request.setUserUid(userInfo.getUid());
         request.setReplyToSuffix(replyToSuffix);
 
-        Subscription sub = connection.subscribe(config.OBJECTS + ".*" + replyToSuffix);
+        Subscription sub = connection.subscribe(config.OBJECTS + '.' + replyToSuffix);
         try {
             log.debug("Requesting {}", request);
 
@@ -112,32 +115,22 @@ public class ApiServiceDataClient {
  
             ObjectInfoResponse statusResponse = StaticMapper.parseObject(
                     new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
-            log.trace("Reply: {}", statusResponse);
+            log.debug("Reply: {}", statusResponse);
             if (!EResult.OK.equals(statusResponse.getStatus())) {
                 throw new RuntimeException("Error response from NATS service: " + statusResponse);
             }
 
             List<JSTreeResponse> result = new ArrayList<>();
-
             for (; ; ) {
                 Message nextMsg = sub.nextMessage(RESPONSE_TIMEOUT);
-                if (nextMsg == null) {
-                    throw new RuntimeException("No data response from NATS service");
-                }
-                String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
-
-                JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
-                log.trace("Response {}", jsTreeResponse);
-                result.add(jsTreeResponse);
-
-                if (messageString.contains("\"type\":\"end\"")) {
-                    DataEndMessage msg = StaticMapper.parseObject(messageString, DataEndMessage.class);
-                    if (result.size() != msg.getSentCount()) {
-                        throw new RuntimeException("Received " + result.size() + " objects expected " + msg.getSentCount());
-                    }
+                if(nextMsg == null){
                     log.info("Objects received: {}", result.size());
                     return result;
                 }
+                String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
+                JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
+                log.debug("Response {}", jsTreeResponse);
+                result.add(jsTreeResponse);
             }
         } finally {
             sub.unsubscribe();
@@ -178,6 +171,9 @@ public class ApiServiceDataClient {
             throw new NullResponseException();
         }
         log.info("UserInfo Response: {}", new String(message.getData()));
-        return StaticMapper.parseObject(new String(message.getData()), UserInfo.class);
+        ApiResult apiResult = StaticMapper.parseObject(new String(message.getData()), ApiResult.class);
+        UserInfo userInfo = StaticMapper.parseObject(StaticMapper.toJson(apiResult.getResult()), UserInfo.class);
+        log.debug("UserInfo: {}", userInfo);
+        return userInfo;
     }
 }

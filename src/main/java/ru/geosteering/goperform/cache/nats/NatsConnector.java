@@ -112,10 +112,6 @@ public class NatsConnector {
         return response;
     }
 
-    public static Subscription subscribe(String subject){
-        return connection.subscribe(subject);
-    }
-
     @PreDestroy
     private void closeConnection() {
         try {
