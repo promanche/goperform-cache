@@ -32,10 +32,31 @@ public class Config {
     public final String OBJECTS;
 
     /**
+     * Очередь NATS для аутентификации
+     */
+    @NotBlank
+    public final String AUTH;
+
+    /**
      * Хост для подключения NATS
      */
     @NotBlank
     public final String HOST;
+
+    /**
+     * Логин пользователя NATS
+     */
+    @NotBlank
+    public final String NATS_USERNAME;
+
+    /**
+     * Пароль пользователя NATS
+     */
+    @NotBlank
+    public final String NATS_PASSWORD;
+
+
+
 
     /**
      * Количество потоков для обработки данных в реальном времени
@@ -146,10 +167,12 @@ public class Config {
     public final int DAYS_BEFORE_CURVES_ARE_REMOVED;
 
 
-
     public Config(@Value("${goperform" + '.' + "subject}") String subject,
                   @Value("${goperform" + '.' + "objects}") String objects,
+                  @Value("${goperform" + '.' + "auth") String auth,
                   @Value("${goperform.host}") String host,
+                  @Value("${goperform.nats.username}") String username,
+                  @Value("${goperform.nats.password}") String password,
                   @Value("${goperform.realtime-threads}") int realtimeThreads,
                   @Value("${goperform.history-threads}") int historyThreads,
                   @Value("${goperform.history-request-limit}") int historyRequestLimit,
@@ -165,7 +188,10 @@ public class Config {
                   @Value("${goperform.cleaning-data.days}") int daysBeforeCurvesAreRemoved) {
         this.SUBJECT = subject;
         this.OBJECTS = objects;
+        this.AUTH = auth;
         this.HOST = host;
+        this.NATS_USERNAME = username;
+        this.NATS_PASSWORD = password;
         this.REALTIME_THREADS = realtimeThreads;
         this.HISTORY_THREADS = historyThreads;
         this.HISTORY_REQUEST_LIMIT = historyRequestLimit;
