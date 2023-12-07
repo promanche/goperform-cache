@@ -97,14 +97,13 @@ public class ApiServiceDataClient {
         GetObjectsRequest request = new GetObjectsRequest();
         request.setParentId(null);
         request.setAll(true);
-        //request.setUserUid("c648178a-57e3-11ea-91c1-cffe9e8ac272");
         UserInfo userInfo = getUserInfo();
         request.setUserUid(userInfo.getUid());
         request.setReplyToSuffix(replyToSuffix);
 
         Subscription sub = connection.subscribe(config.OBJECTS + '.' + replyToSuffix);
         try {
-            log.debug("Requesting {}", request);
+            log.info("Requesting {}", request);
 
 
             byte[] requestBytes = StaticMapper.toBytes(request);
@@ -115,7 +114,7 @@ public class ApiServiceDataClient {
  
             ObjectInfoResponse statusResponse = StaticMapper.parseObject(
                     new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
-            log.debug("Reply: {}", statusResponse);
+            log.info("Reply: {}", statusResponse);
             if (!EResult.OK.equals(statusResponse.getStatus())) {
                 throw new RuntimeException("Error response from NATS service: " + statusResponse);
             }
@@ -129,7 +128,7 @@ public class ApiServiceDataClient {
                 }
                 String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
                 JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
-                log.debug("Response {}", jsTreeResponse);
+                log.trace("Response {}", jsTreeResponse);
                 result.add(jsTreeResponse);
             }
         } finally {
@@ -172,8 +171,6 @@ public class ApiServiceDataClient {
         }
         log.info("UserInfo Response: {}", new String(message.getData()));
         ApiResult apiResult = StaticMapper.parseObject(new String(message.getData()), ApiResult.class);
-        UserInfo userInfo = StaticMapper.parseObject(StaticMapper.toJson(apiResult.getResult()), UserInfo.class);
-        log.debug("UserInfo: {}", userInfo);
-        return userInfo;
+        return StaticMapper.parseObject(StaticMapper.toJson(apiResult.getResult()), UserInfo.class);
     }
 }

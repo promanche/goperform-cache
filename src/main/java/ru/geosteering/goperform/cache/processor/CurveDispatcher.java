@@ -123,8 +123,6 @@ public class CurveDispatcher implements ConnectionEventListener {
                     isConnected = true;
 
                     List<JSTreeResponse> allObjects = apiServiceDataClient.getAllObjects();
-                    log.debug("Objects from NATS: {}", allObjects);
-
 
                     List<Long> infoIds = repository.getInfoIds();
                     log.info("There are {} curves stored in cache", infoIds.size());
