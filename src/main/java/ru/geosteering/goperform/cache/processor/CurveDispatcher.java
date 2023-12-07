@@ -1,12 +1,8 @@
 package ru.geosteering.goperform.cache.processor;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import io.nats.client.Message;
-import io.nats.client.NUID;
-import io.nats.client.Subscription;
 import lombok.AllArgsConstructor;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.event.EventListener;
@@ -18,18 +14,18 @@ import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.commonModels.webService.JSTreeResponse;
 import ru.geosteering.commonModels.webService.requests.GetObjectsRequest;
-import ru.geosteering.commonModels.webService.responses.ObjectInfoResponse;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
+import ru.geosteering.goperform.cache.nats.ApiServiceDataClient;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.ObjWell;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.ObjWellbore;
 
 import javax.annotation.PostConstruct;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.*;
@@ -59,6 +55,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     protected final Config config;
     protected final MainRepository repository;
     protected final WebSocketMessageProcessor webSocketMessageProcessor;
+    private final ApiServiceDataClient apiServiceDataClient;
 
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
@@ -118,25 +115,24 @@ public class CurveDispatcher implements ConnectionEventListener {
     @EventListener(ApplicationStartedEvent.class)
     public void initCurvesLastChange() {
         try {
+
             boolean isConnected = false;
 
             while (!isConnected) {
-
-                if (NatsConnector.isConnected()) {
+                if (ApiServiceDataClient.isConnected()) {
                     isConnected = true;
+
+                    List<JSTreeResponse> allObjects = apiServiceDataClient.getAllObjects();
+                    log.debug("Objects from NATS: {}", allObjects);
+
 
                     List<Long> infoIds = repository.getInfoIds();
                     log.info("There are {} curves stored in cache", infoIds.size());
-
-                    GetObjectsRequest getObjectsRequest = new GetObjectsRequest();
-                    getObjectsRequest.setParentId(null);
-                    getObjectsRequest.setAll(true);
-                    List<JSTreeResponse> allObjects = getAllObjects(getObjectsRequest);
-
                     infoIds.forEach(id -> {
 
                         JSTreeResponse curve = allObjects.stream().filter(jsTreeResponse ->
-                                jsTreeResponse.getType().equals("CURVE") && jsTreeResponse.getId().equals(String.valueOf(id))).findFirst().orElse(null);
+                                jsTreeResponse.getType().equals("CURVE")
+                                        && jsTreeResponse.getId().equals(String.valueOf(id))).findFirst().orElse(null);
 
                         if (curve != null) {
                             JSTreeResponse logTimeDepth = allObjects.stream().filter(jsTreeResponse ->
@@ -145,7 +141,8 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                             if (logTimeDepth != null) {
                                 JSTreeResponse wellbore = allObjects.stream().filter(jsTreeResponse ->
-                                        jsTreeResponse.getType().equals("WELLBORE") && jsTreeResponse.getId().equals(logTimeDepth.getParent())).findFirst().orElse(null);
+                                        jsTreeResponse.getType().equals("WELLBORE")
+                                                && jsTreeResponse.getId().equals(logTimeDepth.getParent())).findFirst().orElse(null);
 
                                 if (wellbore != null) {
                                     JSTreeResponse well = allObjects.stream().filter(jsTreeResponse ->
@@ -165,74 +162,26 @@ public class CurveDispatcher implements ConnectionEventListener {
                                         }
                                         curvesLastChange.put(id, lastChange);
                                         log.info("Curve {} last change was {}", id, lastChange);
-                                    }else {
+                                    } else {
                                         log.error("Could not find well in JSTreeResponse list");
                                     }
-                                }else {
+                                } else {
                                     log.error("Could not find wellbore in JSTreeResponse list");
                                 }
-                            }else {
+                            } else {
                                 log.error("Could not find log (by time or by depth) in JSTreeResponse list");
                             }
-                        }else {
+                        } else {
                             log.error("Could not find curve in JSTreeResponse list");
                         }
                     });
                 }
-                Thread.sleep(1000);
+                Thread.sleep(1_000);
             }
         } catch (InterruptedException e) {
             log.error(e.getMessage(), e);
         }
 
-    }
-
-    @SneakyThrows({InterruptedException.class, JsonProcessingException.class})
-    private List<JSTreeResponse> getAllObjects(GetObjectsRequest request) {
-        String replyToSuffix = NUID.nextGlobal();
-        Subscription sub = NatsConnector.subscribe(config.OBJECTS + "." + replyToSuffix);
-        try {
-            request.setReplyToSuffix(replyToSuffix);
-            log.debug("Requesting {}", request);
-
-
-            byte[] requestBytes = StaticMapper.toJson(request).getBytes(StandardCharsets.UTF_8);
-            Message replyMsg = NatsConnector.sendRequest(config.OBJECTS, requestBytes);
-            if (replyMsg == null) {
-                throw new RuntimeException("No status response from NATS service");
-            }
-
-            ObjectInfoResponse statusResponse = StaticMapper.parseObject(new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
-            log.trace("Reply: {}", statusResponse);
-            if (!EResult.OK.equals(statusResponse.getStatus())) {
-                throw new RuntimeException("Error response from NATS service: " + statusResponse);
-            }
-
-            List<JSTreeResponse> result = new ArrayList<>();
-
-            for (; ; ) {
-                Message nextMsg = sub.nextMessage(Duration.ofSeconds(10));
-                if (nextMsg == null) {
-                    throw new RuntimeException("No data response from NATS service");
-                }
-                String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
-
-                JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
-                log.trace("Response {}", jsTreeResponse);
-                result.add(jsTreeResponse);
-
-                if (messageString.contains("\"type\":\"end\"")) {
-                    DataEndMessage msg = StaticMapper.parseObject(messageString, DataEndMessage.class);
-                    if (result.size() != msg.getSentCount()) {
-                        throw new RuntimeException("Received " + result.size() + " wells expected " + msg.getSentCount());
-                    }
-                    log.info("Wells received: {}", result.size());
-                    return result;
-                }
-            }
-        } finally {
-            sub.unsubscribe();
-        }
     }
 
     @Override
