@@ -1,12 +1,8 @@
 package ru.geosteering.goperform.cache.nats;
 
 import io.nats.client.*;
-import lombok.Getter;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
-import lombok.Value;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.catalina.User;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -14,39 +10,30 @@ import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.authService.requests.JwtRequest;
 import ru.geosteering.commonModels.authService.requests.UserInfoRequest;
 import ru.geosteering.commonModels.authService.responses.UserInfo;
-import ru.geosteering.commonModels.dataService.requests.WellGetRequest;
-import ru.geosteering.commonModels.dataService.responses.DataEndMessage;
-import ru.geosteering.commonModels.dataService.responses.StatusMessage;
-import ru.geosteering.commonModels.dataService.responses.WellInfoMessage;
 import ru.geosteering.commonModels.webService.JSTreeResponse;
 import ru.geosteering.commonModels.webService.requests.GetObjectsRequest;
-import ru.geosteering.commonModels.webService.requests.GetTabletObjectsRequest;
-import ru.geosteering.commonModels.webService.requests.ObjectInfoRequest;
 import ru.geosteering.commonModels.webService.responses.ApiResult;
 import ru.geosteering.commonModels.webService.responses.ObjectInfoResponse;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
+import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
-import ru.geosteering.witsmlLibrary.witsml.dataObjs.ObjWell;
-import ru.geosteering.witsmlLibrary.witsml.dataObjs.ObjWellbore;
 
 import javax.annotation.PreDestroy;
-import javax.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 
 @Component
 @Slf4j
 @RequiredArgsConstructor
-public class ApiServiceDataClient {
+public class GoStreamClient {
 
     private final Config config;
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(10);
-
+    private MainRepository repository;
     private static Connection connection;
 
     @EventListener(ApplicationStartedEvent.class)
@@ -140,8 +127,8 @@ public class ApiServiceDataClient {
     public String getToken() throws InterruptedException {
         JwtRequest request = new JwtRequest();
         request.setAction("getToken");
-        request.setUsername(config.NATS_USERNAME);
-        request.setPassword(config.NATS_PASSWORD);
+        request.setUsername(config.GOSTREAM_USERNAME);
+        request.setPassword(config.GOSTREAM_PASSWORD);
         log.info("JWT Token Request: {}", request);
 
         byte[] bytes = StaticMapper.toBytes(request);

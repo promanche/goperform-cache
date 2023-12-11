@@ -169,7 +169,7 @@
             <column name="curve_id" type="bigint">
                 <constraints primaryKey="true"/>
             </column>
-            <column name="state" type="timestamp">
+            <column name="updated_at" type="timestamp">
                 <constraints nullable="false"/>
             </column>
             <column name="well_id" type="varchar(255)">

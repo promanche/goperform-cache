@@ -4,7 +4,6 @@ import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
-import ru.geosteering.commonModels.webService.JSTreeResponse;
 
 import java.time.OffsetDateTime;
 
@@ -15,17 +14,17 @@ import java.time.OffsetDateTime;
 public class PerformCacheState {
 
     private long curveId;
-    private OffsetDateTime state;
+    private OffsetDateTime updatedAt;
     private String wellId;
 
-    public PerformCacheState(long curveId, OffsetDateTime state) {
+    public PerformCacheState(long curveId, OffsetDateTime updatedAt) {
         this.curveId = curveId;
-        this.state = state;
+        this.updatedAt = updatedAt;
     }
 
-    public PerformCacheState(long curveId, OffsetDateTime state, JSTreeResponse well) {
+    public PerformCacheState(long curveId, OffsetDateTime updatedAt, String wellId) {
         this.curveId = curveId;
-        this.state = state;
-        this.wellId = well.getId();
+        this.updatedAt = updatedAt;
+        this.wellId = wellId;
     }
 }

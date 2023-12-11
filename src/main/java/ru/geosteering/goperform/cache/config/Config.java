@@ -47,13 +47,13 @@ public class Config {
      * Логин пользователя NATS
      */
     @NotBlank
-    public final String NATS_USERNAME;
+    public final String GOSTREAM_USERNAME;
 
     /**
      * Пароль пользователя NATS
      */
     @NotBlank
-    public final String NATS_PASSWORD;
+    public final String GOSTREAM_PASSWORD;
 
 
 
@@ -190,8 +190,8 @@ public class Config {
         this.OBJECTS = objects;
         this.AUTH = auth;
         this.HOST = host;
-        this.NATS_USERNAME = username;
-        this.NATS_PASSWORD = password;
+        this.GOSTREAM_USERNAME = username;
+        this.GOSTREAM_PASSWORD = password;
         this.REALTIME_THREADS = realtimeThreads;
         this.HISTORY_THREADS = historyThreads;
         this.HISTORY_REQUEST_LIMIT = historyRequestLimit;

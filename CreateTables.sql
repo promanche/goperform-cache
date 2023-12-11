@@ -30,7 +30,7 @@ create table segments
 create table perform_cache_state
 (
   curve_id bigint primary key,
-  state timestamp(3),
+  updated_at timestamp(3),
   well_id varchar(256)
 );
 
