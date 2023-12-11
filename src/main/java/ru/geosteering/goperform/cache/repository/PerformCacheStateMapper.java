@@ -15,7 +15,7 @@ public interface PerformCacheStateMapper {
     @Insert("insert into perform_cache_state (curve_id, state, well_id) values (#{id}, #{state}, #{well_id})")
     void save(PerformCacheState performCacheState);
 
-    @Update("update perform_cache_state set state=#{state} where curve_id=#{id}")
+    @Update("update perform_cache_state set state=#{state}::timestamp where curve_id=#{id}")
     void update(@Param("id") Long id, @Param("state") OffsetDateTime state);
 
     @Select("select * from perform_cache_state")
