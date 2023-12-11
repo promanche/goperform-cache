@@ -1,4 +1,5 @@
 package ru.geosteering.goperform.cache.repository;
+
 import org.apache.ibatis.annotations.*;
 import ru.geosteering.goperform.cache.repository.dto.PerformCacheState;
 
@@ -15,7 +16,7 @@ public interface PerformCacheStateMapper {
     void save(PerformCacheState performCacheState);
 
     @Update("update perform_cache_state set state=#{state} where curve_id=#{id}")
-    void update(@Param("state") OffsetDateTime state, @Param("id") Long id);
+    void update(@Param("id") Long id, @Param("state") OffsetDateTime state);
 
     @Select("select * from perform_cache_state")
     List<PerformCacheState> getAll();

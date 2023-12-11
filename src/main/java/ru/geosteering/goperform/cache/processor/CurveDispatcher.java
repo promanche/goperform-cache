@@ -122,7 +122,8 @@ public class CurveDispatcher implements ConnectionEventListener {
                 if (ApiServiceDataClient.isConnected()) {
                     isConnected = true;
 
-                    //repository.getAllStates().forEach(state -> curvesLastChange.put(state.getCurveId(), state.getState().toLocalDateTime()));
+                    repository.getAllStates().forEach(state -> curvesLastChange.put(state.getCurveId(), state.getState().toLocalDateTime()));
+
                     List<JSTreeResponse> allObjects = apiServiceDataClient.getAllObjects();
 
                     List<Long> infoIds = repository.getInfoIds();
@@ -158,7 +159,8 @@ public class CurveDispatcher implements ConnectionEventListener {
                                                 case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
                                                 case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
                                                 case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
-                                            }repository.saveOrUpdateState(new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), well));
+                                            }
+                                            repository.saveOrUpdateState(new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), well));
                                             curvesLastChange.put(id, lastChange);
                                             log.info("Curve {} last change was {}", id, lastChange);
                                         } else {

@@ -159,7 +159,7 @@
     </changeSet>
 
 
-  <!--  <changeSet id="10" author="merenkov">
+    <changeSet id="10" author="merenkov">
         <preConditions>
             <not>
                 <tableExists tableName="perform_cache_state"/>
@@ -172,12 +172,22 @@
             <column name="state" type="timestamp">
                 <constraints nullable="false"/>
             </column>
-            <column name="well_id" type="varchar(256)">
+            <column name="well_id" type="varchar(255)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
     </changeSet>
--->
+
+    <changeSet id="11" author="merenkov">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="perform_cache_state" indexName="perform_cache_state_curve_id_idx"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="perform_cache_state" indexName="perform_cache_state_curve_id_idx">
+            <column name="curve_id"/>
+        </createIndex>
+    </changeSet>
 
 
 </databaseChangeLog>

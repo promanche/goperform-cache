@@ -233,7 +233,7 @@ public class MainRepository {
         log.trace("saveOrUpdateState started");
         long started = System.currentTimeMillis();
         if (stateMapper.exists(state.getCurveId())){
-            stateMapper.update(state.getState(), state.getCurveId());
+            stateMapper.update(state.getCurveId(), state.getState());
         }else {
             stateMapper.save(state);
         }

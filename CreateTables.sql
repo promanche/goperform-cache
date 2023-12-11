@@ -42,3 +42,5 @@ create index on info(curve_id);
 create index on segments(curve_id);
 create index on segments(curve_id, scale);
 create index on segments(curve_id, scale, first, last);
+
+create index on perform_cache_state(curve_id);
