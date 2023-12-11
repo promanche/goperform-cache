@@ -20,6 +20,9 @@ public class MainRepository {
     private final CurveInfoMapper curveInfoMapper;
     private final SegmentsMapper segmentsMapper;
     private final SqlSessionFactory sessionFactory;
+    private final PerformCacheStateMapper stateMapper;
+
+    //Items
 
     public void saveItems(List<ItemDto> list) {
         log.trace("saveItems started");
@@ -113,6 +116,8 @@ public class MainRepository {
         return itemsMapper.getMaxValue(id);
     }
 
+    //Info
+
     public void saveOrUpdateInfo(ExtraCurveInfo info) {
         log.trace("saveOrUpdateInfo started");
         long started = System.currentTimeMillis();
@@ -147,6 +152,8 @@ public class MainRepository {
     public void deleteInfo(Long id) {
         curveInfoMapper.delete(id);
     }
+
+    //Segments
 
     public void saveSegments(List<SegmentDto> list) {
         log.trace("saveSegments started");
@@ -218,5 +225,29 @@ public class MainRepository {
             segmentsMapper.deleteAfter(id, from);
         }
         log.trace("deleteSegments completed in {} ms", System.currentTimeMillis() - started);
+    }
+
+    // State
+
+    public void saveOrUpdateState(PerformCacheState state){
+        log.trace("saveOrUpdateState started");
+        long started = System.currentTimeMillis();
+        if (stateMapper.exists(state.getCurveId())){
+            stateMapper.update(state.getState(), state.getCurveId());
+        }else {
+            stateMapper.save(state);
+        }
+        log.trace("saveOrUpdateState completed in {} ms", System.currentTimeMillis() - started);
+    }
+
+    public List<PerformCacheState> getAllStates(){
+        return stateMapper.getAll();
+    }
+
+    public void deleteState(Long id){
+        log.trace("deleteState started");
+        long started = System.currentTimeMillis();
+        stateMapper.delete(id);
+        log.trace("deleteState completed in {} ms", System.currentTimeMillis() - started);
     }
 }

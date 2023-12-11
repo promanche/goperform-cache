@@ -158,4 +158,26 @@
         </addColumn>
     </changeSet>
 
+
+  <!--  <changeSet id="10" author="merenkov">
+        <preConditions>
+            <not>
+                <tableExists tableName="perform_cache_state"/>
+            </not>
+        </preConditions>
+        <createTable tableName="perform_cache_state">
+            <column name="curve_id" type="bigint">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="state" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="well_id" type="varchar(256)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+-->
+
+
 </databaseChangeLog>

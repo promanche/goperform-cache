@@ -11,23 +11,23 @@ import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
+
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.commonModels.webService.JSTreeResponse;
-import ru.geosteering.commonModels.webService.requests.GetObjectsRequest;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
-import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.ApiServiceDataClient;
+import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
+import ru.geosteering.goperform.cache.repository.dto.PerformCacheState;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
-import ru.geosteering.witsmlLibrary.witsml.dataObjs.ObjWell;
-import ru.geosteering.witsmlLibrary.witsml.dataObjs.ObjWellbore;
 
 import javax.annotation.PostConstruct;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -122,55 +122,57 @@ public class CurveDispatcher implements ConnectionEventListener {
                 if (ApiServiceDataClient.isConnected()) {
                     isConnected = true;
 
+                    //repository.getAllStates().forEach(state -> curvesLastChange.put(state.getCurveId(), state.getState().toLocalDateTime()));
                     List<JSTreeResponse> allObjects = apiServiceDataClient.getAllObjects();
 
                     List<Long> infoIds = repository.getInfoIds();
                     log.info("There are {} curves stored in cache", infoIds.size());
                     infoIds.forEach(id -> {
+                        //проверка было ли добавлено время обновления из бд
+                        LocalDateTime lastChange = curvesLastChange.get(id);
+                        if (lastChange == null){
+                            JSTreeResponse curve = allObjects.stream().filter(jsTreeResponse ->
+                                    jsTreeResponse.getType().equals("CURVE")
+                                            && jsTreeResponse.getId().equals(String.valueOf(id))).findFirst().orElse(null);
+                            if (curve != null) {
+                                JSTreeResponse logTimeDepth = allObjects.stream().filter(jsTreeResponse ->
+                                        (jsTreeResponse.getType().equals("LOG_TIME") || jsTreeResponse.getType().equals("LOG_DEPTH"))
+                                                && jsTreeResponse.getId().equals(curve.getParent())).findFirst().orElse(null);
 
-                        JSTreeResponse curve = allObjects.stream().filter(jsTreeResponse ->
-                                jsTreeResponse.getType().equals("CURVE")
-                                        && jsTreeResponse.getId().equals(String.valueOf(id))).findFirst().orElse(null);
+                                if (logTimeDepth != null) {
+                                    JSTreeResponse wellbore = allObjects.stream().filter(jsTreeResponse ->
+                                            jsTreeResponse.getType().equals("WELLBORE")
+                                                    && jsTreeResponse.getId().equals(logTimeDepth.getParent())).findFirst().orElse(null);
 
-                        if (curve != null) {
-                            JSTreeResponse logTimeDepth = allObjects.stream().filter(jsTreeResponse ->
-                                    (jsTreeResponse.getType().equals("LOG_TIME") || jsTreeResponse.getType().equals("LOG_DEPTH"))
-                                            && jsTreeResponse.getId().equals(curve.getParent())).findFirst().orElse(null);
+                                    if (wellbore != null) {
+                                        JSTreeResponse well = allObjects.stream().filter(jsTreeResponse ->
+                                                (jsTreeResponse.getType().equals("WELL")
+                                                        || jsTreeResponse.getType().equals("WELL_RED")
+                                                        || jsTreeResponse.getType().equals("WELL_YELLOW")
+                                                        || jsTreeResponse.getType().equals("WELL_GREEN"))
+                                                        && jsTreeResponse.getId().equals(wellbore.getParent())).findFirst().orElse(null);
 
-                            if (logTimeDepth != null) {
-                                JSTreeResponse wellbore = allObjects.stream().filter(jsTreeResponse ->
-                                        jsTreeResponse.getType().equals("WELLBORE")
-                                                && jsTreeResponse.getId().equals(logTimeDepth.getParent())).findFirst().orElse(null);
-
-                                if (wellbore != null) {
-                                    JSTreeResponse well = allObjects.stream().filter(jsTreeResponse ->
-                                            (jsTreeResponse.getType().equals("WELL")
-                                                    || jsTreeResponse.getType().equals("WELL_RED")
-                                                    || jsTreeResponse.getType().equals("WELL_YELLOW")
-                                                    || jsTreeResponse.getType().equals("WELL_GREEN"))
-                                                    && jsTreeResponse.getId().equals(wellbore.getParent())).findFirst().orElse(null);
-
-                                    if (well != null) {
-                                        LocalDateTime lastChange = null;
-                                        switch (well.getType()) {
-                                            case "WELL_GREEN" -> lastChange = LocalDateTime.now();
-                                            case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
-                                            case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
-                                            case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
+                                        if (well != null) {
+                                            switch (well.getType()) {
+                                                case "WELL_GREEN" -> lastChange = LocalDateTime.now();
+                                                case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
+                                                case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
+                                                case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
+                                            }repository.saveOrUpdateState(new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), well));
+                                            curvesLastChange.put(id, lastChange);
+                                            log.info("Curve {} last change was {}", id, lastChange);
+                                        } else {
+                                            log.error("Could not find well in JSTreeResponse list");
                                         }
-                                        curvesLastChange.put(id, lastChange);
-                                        log.info("Curve {} last change was {}", id, lastChange);
                                     } else {
-                                        log.error("Could not find well in JSTreeResponse list");
+                                        log.error("Could not find wellbore in JSTreeResponse list");
                                     }
                                 } else {
-                                    log.error("Could not find wellbore in JSTreeResponse list");
+                                    log.error("Could not find log (by time or by depth) in JSTreeResponse list");
                                 }
                             } else {
-                                log.error("Could not find log (by time or by depth) in JSTreeResponse list");
+                                log.error("Could not find curve in JSTreeResponse list");
                             }
-                        } else {
-                            log.error("Could not find curve in JSTreeResponse list");
                         }
                     });
                 }
@@ -413,7 +415,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     /**
      * Удаление кривых если они неактивны больше 1 дня
      */
-    @Scheduled(fixedDelayString = "PT12H", initialDelayString = "PT5H")
+    @Scheduled(fixedDelay = 12, initialDelay = 1, timeUnit = TimeUnit.HOURS)
     private void deleteInactiveCurves() {
         curvesLastChange.forEach((id, lastChange) -> {
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_BEFORE_CURVES_ARE_REMOVED))) {
@@ -426,6 +428,13 @@ public class CurveDispatcher implements ConnectionEventListener {
                 log.debug("Curve {} was removed because it was inactive", id);
             }
         });
+    }
+
+    @Scheduled(fixedDelay = 5, initialDelay = 5, timeUnit = TimeUnit.MINUTES)
+    private void updateState(){
+        curvesLastChange.forEach((id, lastChange) ->
+                repository.saveOrUpdateState(new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC)))
+        );
     }
 
     protected interface RequestJob {

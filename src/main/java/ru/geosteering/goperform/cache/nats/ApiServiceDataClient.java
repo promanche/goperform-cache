@@ -160,7 +160,6 @@ public class ApiServiceDataClient {
         request.setAction("userInfo");
         request.setToken(getToken());
 
-        //request.setId();
         log.info("UserInfo Request: {}", request);
 
         byte[] bytes = StaticMapper.toBytes(request);
