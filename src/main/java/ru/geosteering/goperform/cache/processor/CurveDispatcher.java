@@ -134,19 +134,24 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    private void setCurvesStoredState(){
+    private void setCurvesStoredState() {
         List<PerformCacheState> performCacheStates = repository.getAllStates();
-        performCacheStates.forEach(state -> curvesLastChange.put(state.getCurveId(), state.getUpdatedAt().toLocalDateTime()));
+        log.debug("States from cache: {}", performCacheStates);
+        performCacheStates.forEach(state -> {
+            if (state != null) {
+                curvesLastChange.put(state.getId(), state.getUpdatedAt().toLocalDateTime());
+            }
+        });
     }
 
-    private void setCurvesActualState(List<Long> infoIds, List<JSTreeResponse> jsTreeResponses){
+    private void setCurvesActualState(List<Long> infoIds, List<JSTreeResponse> jsTreeResponses) {
         setCurvesStoredState();
 
         infoIds.forEach(id -> {
 
             LocalDateTime lastChange = curvesLastChange.get(id);
 
-            if (lastChange == null){
+            if (lastChange == null) {
                 JSTreeResponse curve = jsTreeResponses.stream().filter(jsTreeResponse ->
                         jsTreeResponse.getType().equals("CURVE")
                                 && jsTreeResponse.getId().equals(String.valueOf(id))).findFirst().orElse(null);
@@ -174,12 +179,16 @@ public class CurveDispatcher implements ConnectionEventListener {
                                     case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
                                     case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
                                 }
+                                if (lastChange != null){
+                                    PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC) , well.getId());
+                                    log.debug("State saved to db: {}", StaticMapper.toJson(state));
+                                    repository.saveOrUpdateState(state);
 
-                                repository.saveOrUpdateState(new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), well.getId()));
-
-                                curvesLastChange.put(id, lastChange);
-                                log.info("Curve {} last change was {}", id, lastChange);
-
+                                    curvesLastChange.put(id, lastChange);
+                                    log.info("Curve {} last change was {}", id, lastChange);
+                                }else {
+                                    log.error("Could not find well for curve {}", id);
+                                }
                             } else {
                                 log.error("Could not find well in JSTreeResponse list");
                             }
@@ -443,9 +452,12 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     @Scheduled(fixedDelay = 5, initialDelay = 5, timeUnit = TimeUnit.MINUTES)
-    private void updateState(){
-        curvesLastChange.forEach((id, lastChange) ->
-                repository.saveOrUpdateState(new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC)))
+    private void updateState() {
+        curvesLastChange.forEach((id, lastChange) -> {
+                    PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC));
+                    log.debug("State saved to db: {}", StaticMapper.toJson(state));
+                    repository.saveOrUpdateState(state);
+                }
         );
     }
 

@@ -78,7 +78,7 @@ public class CurveService {
                 checkCurve(id, scale);
                 checked.add(id);
             } catch (Exception e) {
-                log.info(id + " " + e.getMessage());
+                log.error(id + " " + e.getMessage(), e);
             }
         }
         ids = checked.stream().mapToLong(Long::longValue).toArray();
