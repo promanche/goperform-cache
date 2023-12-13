@@ -12,11 +12,11 @@ public interface PerformCacheStateMapper {
     @Select("select exists (select 1 from perform_cache_state where curve_id=#{id})")
     boolean exists(@Param("id") Long id);
 
-    @Insert("insert into perform_cache_state (curve_id, updated_at, well_id) values (#{id}, #{updated_at}, #{well_id})")
+    @Insert("insert into perform_cache_state (curve_id, updated_at, well_id) values (#{id}, #{updatedAt}, #{wellId})")
     void save(PerformCacheState performCacheState);
 
-    @Update("update perform_cache_state set updated_at=#{updated_at}::timestamp where curve_id=#{id}")
-    void update(@Param("id") Long id, @Param("updated_at") OffsetDateTime updated_at);
+    @Update("update perform_cache_state set updated_at=#{updatedAt} where curve_id=#{id}")
+    void update(@Param("id") Long id, @Param("updated_at") OffsetDateTime updatedAt);
 
     @Select("select * from perform_cache_state")
     List<PerformCacheState> getAll();

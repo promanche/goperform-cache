@@ -232,8 +232,8 @@ public class MainRepository {
     public void saveOrUpdateState(PerformCacheState state){
         log.trace("saveOrUpdateState started");
         long started = System.currentTimeMillis();
-        if (stateMapper.exists(state.getCurveId())){
-            stateMapper.update(state.getCurveId(), state.getUpdatedAt());
+        if (stateMapper.exists(state.getId())){
+            stateMapper.update(state.getId(), state.getUpdatedAt());
         }else {
             stateMapper.save(state);
         }

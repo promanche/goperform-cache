@@ -1,9 +1,6 @@
 package ru.geosteering.goperform.cache.repository.dto;
 
-import lombok.EqualsAndHashCode;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
 import java.time.OffsetDateTime;
 
@@ -13,17 +10,17 @@ import java.time.OffsetDateTime;
 @EqualsAndHashCode
 public class PerformCacheState {
 
-    private long curveId;
+    private long id;
     private OffsetDateTime updatedAt;
     private String wellId;
 
     public PerformCacheState(long curveId, OffsetDateTime updatedAt) {
-        this.curveId = curveId;
+        this.id = curveId;
         this.updatedAt = updatedAt;
     }
 
     public PerformCacheState(long curveId, OffsetDateTime updatedAt, String wellId) {
-        this.curveId = curveId;
+        this.id = curveId;
         this.updatedAt = updatedAt;
         this.wellId = wellId;
     }
