@@ -141,7 +141,7 @@ public class MainRepository {
         return optional;
     }
 
-    public List<Long> getInfoIds(){
+    public List<Long> getInfoIds() {
         log.trace("getInfoIds started");
         long started = System.currentTimeMillis();
         List<Long> all = curveInfoMapper.getAllIds();
@@ -229,25 +229,22 @@ public class MainRepository {
 
     // State
 
-    public void saveOrUpdateState(PerformCacheState state){
+    public void saveOrUpdateState(PerformCacheState state) {
         log.trace("saveOrUpdateState started");
         long started = System.currentTimeMillis();
-        if (stateMapper.exists(state.getId())){
-            stateMapper.update(state.getId(), state.getUpdatedAt());
-        }else {
+        if (stateMapper.exists(state.getId())) {
+            if (state.getWellId() == null) {
+                stateMapper.updateTime(state.getId(), state.getUpdatedAt());
+            } else {
+                stateMapper.updateWellId(state.getId(), state.getWellId());
+            }
+        } else {
             stateMapper.save(state);
         }
         log.trace("saveOrUpdateState completed in {} ms", System.currentTimeMillis() - started);
     }
 
-    public List<PerformCacheState> getAllStates(){
+    public List<PerformCacheState> getAllStates() {
         return stateMapper.getAll();
-    }
-
-    public void deleteState(Long id){
-        log.trace("deleteState started");
-        long started = System.currentTimeMillis();
-        stateMapper.delete(id);
-        log.trace("deleteState completed in {} ms", System.currentTimeMillis() - started);
     }
 }

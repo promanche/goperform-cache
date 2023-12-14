@@ -134,24 +134,22 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
     }
 
-    private void setCurvesStoredState() {
+    private void setCurvesStoredState(List<Long> infoIds) {
         List<PerformCacheState> performCacheStates = repository.getAllStates();
-        log.debug("States from cache: {}", performCacheStates);
         performCacheStates.forEach(state -> {
-            if (state != null) {
+            if (infoIds.contains(state.getId())){
                 curvesLastChange.put(state.getId(), state.getUpdatedAt().toLocalDateTime());
             }
         });
     }
 
     private void setCurvesActualState(List<Long> infoIds, List<JSTreeResponse> jsTreeResponses) {
-        setCurvesStoredState();
+        setCurvesStoredState(infoIds);
 
         infoIds.forEach(id -> {
 
             LocalDateTime lastChange = curvesLastChange.get(id);
 
-            if (lastChange == null) {
                 JSTreeResponse curve = jsTreeResponses.stream().filter(jsTreeResponse ->
                         jsTreeResponse.getType().equals("CURVE")
                                 && jsTreeResponse.getId().equals(String.valueOf(id))).findFirst().orElse(null);
@@ -173,22 +171,20 @@ public class CurveDispatcher implements ConnectionEventListener {
                                             && jsTreeResponse.getId().equals(wellbore.getParent())).findFirst().orElse(null);
 
                             if (well != null) {
-                                switch (well.getType()) {
-                                    case "WELL_GREEN" -> lastChange = LocalDateTime.now();
-                                    case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
-                                    case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
-                                    case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
-                                }
-                                if (lastChange != null){
-                                    PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC) , well.getId());
-                                    log.debug("State saved to db: {}", StaticMapper.toJson(state));
-                                    repository.saveOrUpdateState(state);
-
+                                if (lastChange == null){
+                                    switch (well.getType()) {
+                                        case "WELL_GREEN" -> lastChange = LocalDateTime.now();
+                                        case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
+                                        case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
+                                        case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
+                                    }
                                     curvesLastChange.put(id, lastChange);
-                                    log.info("Curve {} last change was {}", id, lastChange);
-                                }else {
-                                    log.error("Could not find well for curve {}", id);
                                 }
+                                log.info("Curve {} last change was {}", id, lastChange);
+
+                                PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), well.getId());
+                                repository.saveOrUpdateState(state);
+
                             } else {
                                 log.error("Could not find well in JSTreeResponse list");
                             }
@@ -201,7 +197,6 @@ public class CurveDispatcher implements ConnectionEventListener {
                 } else {
                     log.error("Could not find curve in JSTreeResponse list");
                 }
-            }
         });
     }
 
@@ -454,9 +449,9 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Scheduled(fixedDelay = 5, initialDelay = 5, timeUnit = TimeUnit.MINUTES)
     private void updateState() {
         curvesLastChange.forEach((id, lastChange) -> {
-                    PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC));
-                    log.debug("State saved to db: {}", StaticMapper.toJson(state));
+                    PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), null);
                     repository.saveOrUpdateState(state);
+                    log.debug("State was updated: {}", StaticMapper.toJson(state));
                 }
         );
     }

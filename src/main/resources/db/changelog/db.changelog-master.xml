@@ -160,7 +160,7 @@
 
 
     <changeSet id="10" author="merenkov">
-        <preConditions>
+        <preConditions onFail="MARK_RAN">
             <not>
                 <tableExists tableName="perform_cache_state"/>
             </not>
@@ -172,9 +172,7 @@
             <column name="updated_at" type="timestamp">
                 <constraints nullable="false"/>
             </column>
-            <column name="well_id" type="varchar(255)">
-                <constraints nullable="false"/>
-            </column>
+            <column name="well_id" type="varchar(255)"/>
         </createTable>
     </changeSet>
 
@@ -188,6 +186,5 @@
             <column name="curve_id"/>
         </createIndex>
     </changeSet>
-
 
 </databaseChangeLog>

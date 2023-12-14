@@ -14,11 +14,6 @@ public class PerformCacheState {
     private OffsetDateTime updatedAt;
     private String wellId;
 
-    public PerformCacheState(long curveId, OffsetDateTime updatedAt) {
-        this.id = curveId;
-        this.updatedAt = updatedAt;
-    }
-
     public PerformCacheState(long curveId, OffsetDateTime updatedAt, String wellId) {
         this.id = curveId;
         this.updatedAt = updatedAt;
