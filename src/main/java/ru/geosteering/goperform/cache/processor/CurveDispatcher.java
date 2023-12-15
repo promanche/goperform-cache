@@ -434,10 +434,12 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Scheduled(fixedDelay = 12, initialDelay = 1, timeUnit = TimeUnit.HOURS)
     private void deleteInactiveCurves() {
         curvesLastChange.forEach((id, lastChange) -> {
-            if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_BEFORE_CURVES_ARE_REMOVED))) {
-                processors.remove(id);
-
+            if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED))) {
                 removeLoadTask(id);
+                processors.remove(id);
+                log.info("SingleCurveProcessor was removed for curve {}", id);
+            }
+            if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_IS_REMOVED))) {
                 repository.deleteInfo(id);
                 repository.deleteSegments(id, null);
                 repository.deleteItems(id, null);

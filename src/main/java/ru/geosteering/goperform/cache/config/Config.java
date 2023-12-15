@@ -164,7 +164,13 @@ public class Config {
     /**
      * Число дней после которого кривые должны быть удалены
      */
-    public final int DAYS_BEFORE_CURVES_ARE_REMOVED;
+    public final int DAYS_UNTIL_CURVE_IS_REMOVED;
+
+    @NotBlank
+    @Positive
+    public final int DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED;
+
+
 
 
     public Config(@Value("${goperform" + '.' + "subject}") String subject,
@@ -185,7 +191,8 @@ public class Config {
                   @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds,
                   @Value("${goperform.dataservice-baseurl}") String dataServiceBaseUrl,
                   @Value("${goperform.cacheable-duration-min:10}") int cacheableDurationMin,
-                  @Value("${goperform.cleaning-data.days}") int daysBeforeCurvesAreRemoved) {
+                  @Value("${goperform.cleaning.curve.days}") int daysUntilCurveIsRemoved,
+                  @Value("${goperform.cleaning.processor.days}") int daysUntilCurveProcessorIsRemoved) {
         this.SUBJECT = subject;
         this.OBJECTS = objects;
         this.AUTH = auth;
@@ -211,6 +218,7 @@ public class Config {
         this.DATA_SERVICE_BASEURL = dataServiceBaseUrl;
         this.CACHEABLE_DURATION_MINUTES = cacheableDurationMin;
 
-        this.DAYS_BEFORE_CURVES_ARE_REMOVED = daysBeforeCurvesAreRemoved;
+        this.DAYS_UNTIL_CURVE_IS_REMOVED = daysUntilCurveIsRemoved;
+        this.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED = daysUntilCurveProcessorIsRemoved;
     }
 }
