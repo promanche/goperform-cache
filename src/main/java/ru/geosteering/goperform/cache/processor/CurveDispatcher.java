@@ -429,7 +429,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Удаление кривых если они неактивны больше 1 дня
+     * Удаление кривых и их обработчиков
      */
     @Scheduled(fixedDelay = 12, initialDelay = 1, timeUnit = TimeUnit.HOURS)
     private void deleteInactiveCurves() {
@@ -448,6 +448,9 @@ public class CurveDispatcher implements ConnectionEventListener {
         });
     }
 
+    /**
+     * Обновление времени последнего обновления кривых
+     */
     @Scheduled(fixedDelay = 5, initialDelay = 5, timeUnit = TimeUnit.MINUTES)
     private void updateState() {
         curvesLastChange.forEach((id, lastChange) -> {

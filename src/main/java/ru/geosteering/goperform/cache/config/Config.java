@@ -166,6 +166,9 @@ public class Config {
      */
     public final int DAYS_UNTIL_CURVE_IS_REMOVED;
 
+    /**
+     * Число дней после которого обработчики кривых должны быть удалены
+     */
     @NotBlank
     @Positive
     public final int DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED;
