@@ -23,8 +23,8 @@ import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.List;
+import java.time.LocalDateTime;
+import java.util.*;
 
 @Component
 @Slf4j
@@ -78,20 +78,38 @@ public class GoStreamClient {
         }
     }
 
-    public List<JSTreeResponse> getAllObjects() throws InterruptedException {
+    public Map<JSTreeResponse, List<Long>> getAllWellsCurves() throws InterruptedException {
         String replyToSuffix = NUID.nextGlobal();
+        String uid = getUserInfo().getUid();
+        Map<JSTreeResponse, List<Long>> wellCurves = new HashMap<>();
 
         GetObjectsRequest request = new GetObjectsRequest();
-        request.setParentId(null);
-        request.setAll(true);
-        UserInfo userInfo = getUserInfo();
-        request.setUserUid(userInfo.getUid());
+        request.setAll(false);
+        request.setUserUid(uid);
         request.setReplyToSuffix(replyToSuffix);
 
-        Subscription sub = connection.subscribe(config.OBJECTS + '.' + replyToSuffix);
+        List<JSTreeResponse> wells = getObjects(request);
+        for (JSTreeResponse well : wells) {
+            GetObjectsRequest wellObjectsRequest = new GetObjectsRequest();
+            wellObjectsRequest.setAll(true);
+            wellObjectsRequest.setUserUid(uid);
+            wellObjectsRequest.setReplyToSuffix(replyToSuffix);
+            wellObjectsRequest.setParentId(Long.valueOf(well.getId()));
+
+            List<JSTreeResponse> wellObjects = getObjects(wellObjectsRequest);
+            List<Long> curves = wellObjects.stream().filter(jsTreeResponse -> jsTreeResponse.getType().equals("CURVE"))
+                    .map(jsTreeResponse -> Long.parseLong(jsTreeResponse.getId())).toList();
+
+            wellCurves.put(well, curves);
+        }
+
+        return wellCurves;
+    }
+
+    private List<JSTreeResponse> getObjects(GetObjectsRequest request) throws InterruptedException {
+        Subscription sub = connection.subscribe(config.OBJECTS + '.' + request.getReplyToSuffix());
         try {
             log.info("Requesting {}", request);
-
 
             byte[] requestBytes = StaticMapper.toBytes(request);
             Message replyMsg = connection.request(config.OBJECTS, requestBytes, RESPONSE_TIMEOUT);
@@ -113,16 +131,18 @@ public class GoStreamClient {
                     log.info("Objects received: {}", result.size());
                     return result;
                 }
-                String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
-                JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
-                log.trace("Response {}", jsTreeResponse);
-                result.add(jsTreeResponse);
+                if (nextMsg.getData() != null){
+                    String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
+                    JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
+                    log.trace("Response {}", jsTreeResponse);
+                    result.add(jsTreeResponse);
+                }
             }
         } finally {
             sub.unsubscribe();
         }
-
     }
+
 
     public String getToken() throws InterruptedException {
         JwtRequest request = new JwtRequest();
