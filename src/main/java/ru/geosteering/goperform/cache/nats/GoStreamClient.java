@@ -23,7 +23,6 @@ import javax.annotation.PreDestroy;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.*;
 
 @Component
@@ -33,7 +32,6 @@ public class GoStreamClient {
 
     private final Config config;
     private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(10);
-    private MainRepository repository;
     private static Connection connection;
 
     @EventListener(ApplicationStartedEvent.class)
