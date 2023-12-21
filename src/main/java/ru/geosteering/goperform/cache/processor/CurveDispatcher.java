@@ -400,7 +400,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     /**
      * Удаление кривых и их обработчиков
      */
-    @Scheduled(fixedDelay = 12, initialDelay = 1, timeUnit = TimeUnit.HOURS)
+    @Scheduled(fixedDelay = 12, initialDelay = 3, timeUnit = TimeUnit.HOURS)
     private void deleteInactiveCurves() {
         curvesLastChange.forEach((id, lastChange) -> {
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED))) {
@@ -420,7 +420,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     /**
      * Обновление времени последнего обновления кривых
      */
-    @Scheduled(fixedDelay = 5, initialDelay = 5, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedDelay = 5, initialDelay = 30, timeUnit = TimeUnit.MINUTES)
     private void updateState() {
         curvesLastChange.forEach((id, lastChange) -> {
                     PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), null);

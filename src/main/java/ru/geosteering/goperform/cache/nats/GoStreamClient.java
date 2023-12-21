@@ -86,6 +86,7 @@ public class GoStreamClient {
         request.setReplyToSuffix(replyToSuffix);
 
         List<JSTreeResponse> wells = getObjects(request);
+        int curvesCount = 0;
         for (JSTreeResponse well : wells) {
             GetObjectsRequest wellObjectsRequest = new GetObjectsRequest();
             wellObjectsRequest.setAll(true);
@@ -93,20 +94,22 @@ public class GoStreamClient {
             wellObjectsRequest.setReplyToSuffix(replyToSuffix);
             wellObjectsRequest.setParentId(Long.valueOf(well.getId()));
 
+            long started = System.currentTimeMillis();
             List<JSTreeResponse> wellObjects = getObjects(wellObjectsRequest);
+            log.debug("Well {} objects received {} ms", well.getId(), System.currentTimeMillis() - started);
             List<Long> curves = wellObjects.stream().filter(jsTreeResponse -> jsTreeResponse.getType().equals("CURVE"))
                     .map(jsTreeResponse -> Long.parseLong(jsTreeResponse.getId())).toList();
-
+            curvesCount += curves.size();
             wellCurves.put(well, curves);
         }
-
+        log.info("{} curves received for {} wells", curvesCount, wells.size());
         return wellCurves;
     }
 
     private List<JSTreeResponse> getObjects(GetObjectsRequest request) throws InterruptedException {
         Subscription sub = connection.subscribe(config.OBJECTS + '.' + request.getReplyToSuffix());
         try {
-            log.info("Requesting {}", request);
+            log.info("Requesting: {}", request);
 
             byte[] requestBytes = StaticMapper.toBytes(request);
             Message replyMsg = connection.request(config.OBJECTS, requestBytes, RESPONSE_TIMEOUT);
@@ -122,17 +125,21 @@ public class GoStreamClient {
             }
 
             List<JSTreeResponse> result = new ArrayList<>();
+            if (statusResponse.getObjectCount() == 0){
+                return result;
+            }
             for (; ; ) {
                 Message nextMsg = sub.nextMessage(RESPONSE_TIMEOUT);
-                if(nextMsg == null){
-                    log.info("Objects received: {}", result.size());
-                    return result;
-                }
-                if (nextMsg.getData() != null){
+                if(nextMsg != null){
                     String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
                     JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
-                    log.trace("Response {}", jsTreeResponse);
-                    result.add(jsTreeResponse);
+                    if (jsTreeResponse != null){
+                        log.trace("Response: {}", jsTreeResponse);
+                        result.add(jsTreeResponse);
+                    }else {
+                        log.info("Objects received: {}", result.size());
+                        return result;
+                    }
                 }
             }
         } finally {
