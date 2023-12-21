@@ -16,7 +16,6 @@ import ru.geosteering.commonModels.webService.responses.ApiResult;
 import ru.geosteering.commonModels.webService.responses.ObjectInfoResponse;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
-import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PreDestroy;
