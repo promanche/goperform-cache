@@ -161,6 +161,11 @@ public class CurveService {
         curveDispatcher.fullCurveReload(id);
     }
 
+    public void deleteCurve(Long id){
+        checkCurve(id, null);
+        curveDispatcher.deleteCurve(id);
+    }
+
     public CurveInfoResponse getCurveInfoResponse(Long id) {
 
         checkCurve(id, null);
