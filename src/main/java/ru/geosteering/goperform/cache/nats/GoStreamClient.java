@@ -1,7 +1,7 @@
 package ru.geosteering.goperform.cache.nats;
 
 import io.nats.client.*;
-import lombok.RequiredArgsConstructor;
+import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.event.ApplicationStartedEvent;
 import org.springframework.context.event.EventListener;
@@ -11,6 +11,7 @@ import ru.geosteering.commonModels.authService.requests.JwtRequest;
 import ru.geosteering.commonModels.authService.requests.UserInfoRequest;
 import ru.geosteering.commonModels.authService.responses.UserInfo;
 import ru.geosteering.commonModels.webService.JSTreeResponse;
+import ru.geosteering.commonModels.webService.requests.GetObjectRequest;
 import ru.geosteering.commonModels.webService.requests.GetObjectsRequest;
 import ru.geosteering.commonModels.webService.responses.ApiResult;
 import ru.geosteering.commonModels.webService.responses.ObjectInfoResponse;
@@ -30,7 +31,7 @@ import java.util.*;
 public class GoStreamClient {
 
     private final Config config;
-    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration RESPONSE_TIMEOUT = Duration.ofSeconds(30);
     private static Connection connection;
 
     @EventListener(ApplicationStartedEvent.class)
@@ -75,75 +76,139 @@ public class GoStreamClient {
         }
     }
 
-    public Map<JSTreeResponse, List<Long>> getAllWellsCurves() throws InterruptedException {
+    public Map<WellState, List<Long>> getAllWellsCurves(List<Long> ids) throws InterruptedException {
+        long started = System.currentTimeMillis();
         String replyToSuffix = NUID.nextGlobal();
         String uid = getUserInfo().getUid();
-        Map<JSTreeResponse, List<Long>> wellCurves = new HashMap<>();
 
-        GetObjectsRequest request = new GetObjectsRequest();
-        request.setAll(false);
-        request.setUserUid(uid);
-        request.setReplyToSuffix(replyToSuffix);
+        Map<WellState, List<Long>> wellCurves = new HashMap<>();
 
-        List<JSTreeResponse> wells = getObjects(request);
-        int curvesCount = 0;
-        for (JSTreeResponse well : wells) {
-            GetObjectsRequest wellObjectsRequest = new GetObjectsRequest();
-            wellObjectsRequest.setAll(true);
-            wellObjectsRequest.setUserUid(uid);
-            wellObjectsRequest.setReplyToSuffix(replyToSuffix);
-            wellObjectsRequest.setParentId(Long.valueOf(well.getId()));
-
-            long started = System.currentTimeMillis();
-            List<JSTreeResponse> wellObjects = getObjects(wellObjectsRequest);
-            log.debug("Well {} objects received {} ms", well.getId(), System.currentTimeMillis() - started);
-            List<Long> curves = wellObjects.stream().filter(jsTreeResponse -> jsTreeResponse.getType().equals("CURVE"))
-                    .map(jsTreeResponse -> Long.parseLong(jsTreeResponse.getId())).toList();
-            curvesCount += curves.size();
-            wellCurves.put(well, curves);
-        }
-        log.info("{} curves received for {} wells", curvesCount, wells.size());
-        return wellCurves;
-    }
-
-    private List<JSTreeResponse> getObjects(GetObjectsRequest request) throws InterruptedException {
-        Subscription sub = connection.subscribe(config.OBJECTS + '.' + request.getReplyToSuffix());
+        Subscription sub = connection.subscribe(config.OBJECTS + '.' + replyToSuffix);
         try {
-            log.info("Requesting: {}", request);
+            ids.forEach(id -> {
 
-            byte[] requestBytes = StaticMapper.toBytes(request);
-            Message replyMsg = connection.request(config.OBJECTS, requestBytes, RESPONSE_TIMEOUT);
-            if (replyMsg == null) {
-                throw new RuntimeException("No status response from NATS service");
-            }
- 
-            ObjectInfoResponse statusResponse = StaticMapper.parseObject(
-                    new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
-            log.info("Reply: {}", statusResponse);
-            if (!EResult.OK.equals(statusResponse.getStatus())) {
-                throw new RuntimeException("Error response from NATS service: " + statusResponse);
-            }
+                List<Long> list = wellCurves.values().stream().flatMap(List::stream).toList();
+                if (!list.contains(id)) {
+                    List<Long> curves = new ArrayList<>();
+                    try {
+                        JSTreeResponse jsTreeResponse = getObject(sub, id, uid, replyToSuffix);
+                        while (!jsTreeResponse.getType().equals("WELL")
+                                || jsTreeResponse.getType().equals("WELL_RED")
+                                || jsTreeResponse.getType().equals("WELL_YELLOW")
+                                || jsTreeResponse.getType().equals("WELL_GREEN")) {
 
-            List<JSTreeResponse> result = new ArrayList<>();
-            if (statusResponse.getObjectCount() == 0){
-                return result;
-            }
-            for (; ; ) {
-                Message nextMsg = sub.nextMessage(RESPONSE_TIMEOUT);
-                if(nextMsg != null){
-                    String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
-                    JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
-                    if (jsTreeResponse != null){
-                        log.trace("Response: {}", jsTreeResponse);
-                        result.add(jsTreeResponse);
-                    }else {
-                        log.info("Objects received: {}", result.size());
-                        return result;
+                            jsTreeResponse = getObject(sub, Long.parseLong(jsTreeResponse.getParent()), uid, replyToSuffix);
+
+                            if (jsTreeResponse.getType().equals("WELLBORE")) {
+                                List<JSTreeResponse> objectsCurves = getObjects(sub, Long.parseLong(jsTreeResponse.getId()), uid, replyToSuffix, true);
+                                List<Long> logCurves = objectsCurves
+                                        .stream().filter(object -> object.getType().equals("CURVE"))
+                                        .map(object -> Long.parseLong(object.getId())).toList();
+
+                                curves.addAll(logCurves);
+                            }
+                        }
+
+                        WellState wellState = new WellState(Long.parseLong(jsTreeResponse.getId()), jsTreeResponse.getType());
+                        List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
+                        curves.retainAll(ids);
+                        listCurves.addAll(curves);
+                        wellCurves.put(wellState, listCurves);
+
+                    } catch (InterruptedException e) {
+                        log.error(e.getMessage(), e);
                     }
                 }
-            }
+            });
+            log.info("{} curves received for {} wells in {} ms", wellCurves.values().stream().flatMap(List::stream).toList().size(), wellCurves.size(), System.currentTimeMillis() - started);
+            return wellCurves;
         } finally {
             sub.unsubscribe();
+        }
+    }
+
+    private JSTreeResponse getObject(Subscription sub, Long id, String userUid, String replyToSuffix) throws InterruptedException {
+        GetObjectRequest objectLogRequest = new GetObjectRequest();
+        objectLogRequest.setUserUid(userUid);
+        objectLogRequest.setReplyToSuffix(replyToSuffix);
+        objectLogRequest.setId(id);
+        return getObject(sub, objectLogRequest);
+    }
+
+    private List<JSTreeResponse> getObjects(Subscription sub, Long parentId, String userUid, String replyToSuffix, boolean all) throws InterruptedException {
+        GetObjectsRequest objectsRequest = new GetObjectsRequest();
+        objectsRequest.setAll(all);
+        objectsRequest.setUserUid(userUid);
+        objectsRequest.setReplyToSuffix(replyToSuffix);
+        objectsRequest.setParentId(parentId);
+        return getObjects(sub, objectsRequest);
+    }
+
+    private JSTreeResponse getObject(Subscription sub, GetObjectRequest request) throws InterruptedException {
+
+        log.trace("Requesting: {}", request);
+        byte[] requestBytes = StaticMapper.toBytes(request);
+        Message replyMsg = connection.request(config.OBJECTS, requestBytes, RESPONSE_TIMEOUT);
+        if (replyMsg == null) {
+            throw new RuntimeException("No status response from NATS service");
+        }
+
+        ObjectInfoResponse statusResponse = StaticMapper.parseObject(
+                new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
+        log.trace("Reply: {}", statusResponse);
+        if (!EResult.OK.equals(statusResponse.getStatus())) {
+            throw new RuntimeException("Error response from NATS service: " + statusResponse);
+        }
+
+
+        if (statusResponse.getObjectCount() == 0) {
+            return null;
+        }
+        for (; ; ) {
+            Message nextMsg = sub.nextMessage(RESPONSE_TIMEOUT);
+            if (nextMsg != null) {
+                String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
+                JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
+                if (jsTreeResponse != null) {
+                    log.trace("Response: {}", jsTreeResponse);
+                    return jsTreeResponse;
+                }
+            }
+        }
+    }
+
+    private List<JSTreeResponse> getObjects(Subscription sub, GetObjectsRequest request) throws InterruptedException {
+
+        log.trace("Requesting objects: {}", request);
+        byte[] requestBytes = StaticMapper.toBytes(request);
+        Message replyMsg = connection.request(config.OBJECTS, requestBytes, RESPONSE_TIMEOUT);
+        if (replyMsg == null) {
+            throw new RuntimeException("No status response from NATS service");
+        }
+
+        ObjectInfoResponse statusResponse = StaticMapper.parseObject(
+                new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
+        log.trace("Reply: {}", statusResponse);
+        if (!EResult.OK.equals(statusResponse.getStatus())) {
+            throw new RuntimeException("Error response from NATS service: " + statusResponse);
+        }
+
+        List<JSTreeResponse> result = new ArrayList<>();
+        if (statusResponse.getObjectCount() == 0) {
+            return result;
+        }
+        for (; ; ) {
+            Message nextMsg = sub.nextMessage(RESPONSE_TIMEOUT);
+            if (result.size() == statusResponse.getObjectCount()){
+                List<JSTreeResponse> list = result.stream().filter(Objects::nonNull).toList();
+                log.trace("Objects received: {}", list.size());
+                return list;
+            }
+            if (nextMsg != null) {
+                String messageString = new String(nextMsg.getData(), StandardCharsets.UTF_8);
+                JSTreeResponse jsTreeResponse = StaticMapper.parseObject(messageString, JSTreeResponse.class);
+                result.add(jsTreeResponse);
+            }
         }
     }
 
@@ -182,5 +247,15 @@ public class GoStreamClient {
         log.info("UserInfo Response: {}", new String(message.getData()));
         ApiResult apiResult = StaticMapper.parseObject(new String(message.getData()), ApiResult.class);
         return StaticMapper.parseObject(StaticMapper.toJson(apiResult.getResult()), UserInfo.class);
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @EqualsAndHashCode
+    public static class WellState {
+        private Long wellId;
+        private String state;
     }
 }

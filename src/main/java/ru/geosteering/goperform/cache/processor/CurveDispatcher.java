@@ -13,7 +13,6 @@ import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 
 import ru.geosteering.commonModels.dataService.responses.*;
-import ru.geosteering.commonModels.webService.JSTreeResponse;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
@@ -146,14 +145,14 @@ public class CurveDispatcher implements ConnectionEventListener {
     private void setCurvesActualState(List<Long> infoIds) throws InterruptedException {
         setCurvesStoredState(infoIds);
 
-        Map<JSTreeResponse, List<Long>> allWellsCurves = goStreamClient.getAllWellsCurves();
+        Map<GoStreamClient.WellState, List<Long>> allWellsCurves = goStreamClient.getAllWellsCurves(infoIds);
         infoIds.forEach(id -> {
 
             LocalDateTime lastChange = curvesLastChange.get(id);
-            for (Map.Entry<JSTreeResponse, List<Long>> entry : allWellsCurves.entrySet()) {
+            for (Map.Entry<GoStreamClient.WellState, List<Long>> entry : allWellsCurves.entrySet()) {
                 if (entry.getValue().contains(id)){
                     if (lastChange == null){
-                        switch (entry.getKey().getType()) {
+                        switch (entry.getKey().getState()) {
                             case "WELL_GREEN" -> lastChange = LocalDateTime.now();
                             case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
                             case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
@@ -163,7 +162,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                     }
                     log.info("Curve {} last change was {}", id, lastChange);
                     repository.saveOrUpdateState(
-                            new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getId()));
+                            new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getWellId().toString()));
                 }
             }
         });
@@ -397,24 +396,37 @@ public class CurveDispatcher implements ConnectionEventListener {
         });
     }
 
+    public void deleteCurve(Long id) {
+        processors.compute(id, (k, v) -> {
+            removeLoadTask(id);
+            repository.deleteInfo(id);
+            repository.deleteSegments(id, null);
+            repository.deleteItems(id, null);
+            return null;
+        });
+        log.debug("Curve {} was removed", id);
+    }
+
     /**
      * Удаление кривых и их обработчиков
      */
     @Scheduled(fixedDelay = 12, initialDelay = 3, timeUnit = TimeUnit.HOURS)
     private void deleteInactiveCurves() {
+        AtomicInteger deleteCurvesCount = new AtomicInteger();
         curvesLastChange.forEach((id, lastChange) -> {
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED))) {
                 removeLoadTask(id);
                 processors.remove(id);
-                log.info("SingleCurveProcessor was removed for curve {}", id);
+                log.debug("SingleCurveProcessor was removed for curve {}", id);
             }
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_IS_REMOVED))) {
                 repository.deleteInfo(id);
                 repository.deleteSegments(id, null);
                 repository.deleteItems(id, null);
-                log.debug("Curve {} was removed because it was inactive", id);
+                deleteCurvesCount.getAndIncrement();
             }
         });
+        log.debug("{} curves were removed because they were inactive", deleteCurvesCount);
     }
 
     /**
@@ -425,9 +437,9 @@ public class CurveDispatcher implements ConnectionEventListener {
         curvesLastChange.forEach((id, lastChange) -> {
                     PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), null);
                     repository.saveOrUpdateState(state);
-                    log.debug("State was updated: {}", StaticMapper.toJson(state));
                 }
         );
+        log.debug("State values were updated");
     }
 
     protected interface RequestJob {
