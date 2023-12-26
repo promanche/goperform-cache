@@ -92,29 +92,50 @@ public class GoStreamClient {
                     List<Long> curves = new ArrayList<>();
                     try {
                         JSTreeResponse jsTreeResponse = getObject(sub, id, uid, replyToSuffix);
-                        while (!jsTreeResponse.getType().equals("WELL")
-                                || jsTreeResponse.getType().equals("WELL_RED")
-                                || jsTreeResponse.getType().equals("WELL_YELLOW")
-                                || jsTreeResponse.getType().equals("WELL_GREEN")) {
+                        if (jsTreeResponse != null) {
+                            while (!jsTreeResponse.getType().equals("WELL")
+                                    || !jsTreeResponse.getType().equals("WELL_RED")
+                                    || !jsTreeResponse.getType().equals("WELL_YELLOW")
+                                    || !jsTreeResponse.getType().equals("WELL_GREEN")) {
+                                String parent = jsTreeResponse.getParent();
 
-                            jsTreeResponse = getObject(sub, Long.parseLong(jsTreeResponse.getParent()), uid, replyToSuffix);
+                                if (jsTreeResponse.getType().equals("CURVE")) {
+                                    log.debug("ParentId equals {} for curve {}", jsTreeResponse.getParent(), jsTreeResponse.getId());
 
-                            if (jsTreeResponse.getType().equals("WELLBORE")) {
-                                List<JSTreeResponse> objectsCurves = getObjects(sub, Long.parseLong(jsTreeResponse.getId()), uid, replyToSuffix, true);
-                                List<Long> logCurves = objectsCurves
-                                        .stream().filter(object -> object.getType().equals("CURVE"))
-                                        .map(object -> Long.parseLong(object.getId())).toList();
+                                    if (Long.parseLong(parent) == 0) {
+                                        WellState wellState = new WellState(0L, "WELL");
+                                        List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
+                                        listCurves.add(id);
+                                        wellCurves.put(wellState, listCurves);
+                                        log.error("Curve {} must be removed cause it does not have log", id);
+                                        return;
+                                    }
+                                }
 
-                                curves.addAll(logCurves);
+                                jsTreeResponse = getObject(sub, Long.parseLong(parent), uid, replyToSuffix);
+
+                                if (jsTreeResponse.getType().equals("WELLBORE")) {
+                                    List<JSTreeResponse> objectsCurves =
+                                            getObjects(sub, Long.parseLong(jsTreeResponse.getId()), uid, replyToSuffix, true);
+                                    List<Long> logCurves = objectsCurves
+                                            .stream().filter(object -> object.getType().equals("CURVE"))
+                                            .map(object -> Long.parseLong(object.getId())).toList();
+                                    curves.addAll(logCurves);
+                                }
                             }
+
+                            WellState wellState = new WellState(Long.parseLong(jsTreeResponse.getId()), jsTreeResponse.getType());
+                            List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
+                            curves.retainAll(ids);
+                            listCurves.addAll(curves);
+                            wellCurves.put(wellState, listCurves);
+                        } else {
+                            log.error("Curve {} must be removed cause it does not exist in GoStream", id);
+                            WellState wellState = new WellState(0L, "WELL");
+                            List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
+                            listCurves.add(id);
+                            wellCurves.put(wellState, listCurves);
                         }
-
-                        WellState wellState = new WellState(Long.parseLong(jsTreeResponse.getId()), jsTreeResponse.getType());
-                        List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
-                        curves.retainAll(ids);
-                        listCurves.addAll(curves);
-                        wellCurves.put(wellState, listCurves);
-
                     } catch (InterruptedException e) {
                         log.error(e.getMessage(), e);
                     }
@@ -157,7 +178,8 @@ public class GoStreamClient {
                 new String(replyMsg.getData(), StandardCharsets.UTF_8), ObjectInfoResponse.class);
         log.trace("Reply: {}", statusResponse);
         if (!EResult.OK.equals(statusResponse.getStatus())) {
-            throw new RuntimeException("Error response from NATS service: " + statusResponse);
+            log.error("ObjectInfoResponse for object {} with status: {}", request.getId(), statusResponse.getStatus());
+            return null;
         }
 
 
@@ -199,7 +221,7 @@ public class GoStreamClient {
         }
         for (; ; ) {
             Message nextMsg = sub.nextMessage(RESPONSE_TIMEOUT);
-            if (result.size() == statusResponse.getObjectCount()){
+            if (result.size() == statusResponse.getObjectCount()) {
                 List<JSTreeResponse> list = result.stream().filter(Objects::nonNull).toList();
                 log.trace("Objects received: {}", list.size());
                 return list;
@@ -218,7 +240,7 @@ public class GoStreamClient {
         request.setAction("getToken");
         request.setUsername(config.GOSTREAM_USERNAME);
         request.setPassword(config.GOSTREAM_PASSWORD);
-        log.info("JWT Token Request: {}", request);
+        log.debug("JWT Token Request: {}", request);
 
         byte[] bytes = StaticMapper.toBytes(request);
         Message message = connection.request(config.AUTH, bytes, RESPONSE_TIMEOUT);
@@ -226,7 +248,7 @@ public class GoStreamClient {
             log.error("JWT Token is null");
             throw new NullResponseException();
         }
-        log.info("JWT Token Response: {}", new String(message.getData()));
+        log.debug("JWT Token Response: {}", new String(message.getData()));
         ApiResult apiResult = StaticMapper.parseObject(new String(message.getData()), ApiResult.class);
         return (String) apiResult.getResult();
     }
@@ -236,7 +258,7 @@ public class GoStreamClient {
         request.setAction("userInfo");
         request.setToken(getToken());
 
-        log.info("UserInfo Request: {}", request);
+        log.debug("UserInfo Request: {}", request);
 
         byte[] bytes = StaticMapper.toBytes(request);
         Message message = connection.request(config.AUTH, bytes, RESPONSE_TIMEOUT);
@@ -244,7 +266,7 @@ public class GoStreamClient {
             log.error("UserInfo is null");
             throw new NullResponseException();
         }
-        log.info("UserInfo Response: {}", new String(message.getData()));
+        log.debug("UserInfo Response: {}", new String(message.getData()));
         ApiResult apiResult = StaticMapper.parseObject(new String(message.getData()), ApiResult.class);
         return StaticMapper.parseObject(StaticMapper.toJson(apiResult.getResult()), UserInfo.class);
     }

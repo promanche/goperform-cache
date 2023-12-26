@@ -136,7 +136,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private void setCurvesStoredState(List<Long> infoIds) {
         List<PerformCacheState> performCacheStates = repository.getAllStates();
         performCacheStates.forEach(state -> {
-            if (infoIds.contains(state.getId())){
+            if (infoIds.contains(state.getId())) {
                 curvesLastChange.put(state.getId(), state.getUpdatedAt().toLocalDateTime());
             }
         });
@@ -150,8 +150,8 @@ public class CurveDispatcher implements ConnectionEventListener {
 
             LocalDateTime lastChange = curvesLastChange.get(id);
             for (Map.Entry<GoStreamClient.WellState, List<Long>> entry : allWellsCurves.entrySet()) {
-                if (entry.getValue().contains(id)){
-                    if (lastChange == null){
+                if (entry.getValue().contains(id)) {
+                    if (lastChange == null) {
                         switch (entry.getKey().getState()) {
                             case "WELL_GREEN" -> lastChange = LocalDateTime.now();
                             case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
