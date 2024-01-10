@@ -11,16 +11,15 @@ import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.CurveInfo;
 import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
-
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
-import ru.geosteering.goperform.cache.nats.GoStreamClient;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.repository.dto.PerformCacheState;
+import ru.geosteering.goperform.cache.service.ApiServiceRestClientService;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import javax.annotation.PostConstruct;
@@ -54,7 +53,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     protected final Config config;
     protected final MainRepository repository;
     protected final WebSocketMessageProcessor webSocketMessageProcessor;
-    private final GoStreamClient goStreamClient;
+    private final ApiServiceRestClientService apiServiceRestClientService;
 
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
@@ -113,59 +112,50 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     @EventListener(ApplicationStartedEvent.class)
     public void initCurvesLastChange() {
-        try {
+        List<Long> infoIds = repository.getInfoIds();
+        log.info("There are {} curves stored in cache", infoIds.size());
 
-            boolean isConnected = false;
-
-            while (!isConnected) {
-                if (GoStreamClient.isConnected()) {
-                    isConnected = true;
-
-                    List<Long> infoIds = repository.getInfoIds();
-                    log.info("There are {} curves stored in cache", infoIds.size());
-
-                    setCurvesActualState(infoIds);
-                }
-                Thread.sleep(1_000);
-            }
-        } catch (InterruptedException e) {
-            log.error(e.getMessage(), e);
-        }
+        setCurvesActualState(infoIds);
     }
 
     private void setCurvesStoredState(List<Long> infoIds) {
         List<PerformCacheState> performCacheStates = repository.getAllStates();
         performCacheStates.forEach(state -> {
-            if (infoIds.contains(state.getId())) {
+            if (infoIds.contains(state.getId()) || state.getWellId() == null) {
                 curvesLastChange.put(state.getId(), state.getUpdatedAt().toLocalDateTime());
             }
         });
     }
 
-    private void setCurvesActualState(List<Long> infoIds) throws InterruptedException {
+    private void setCurvesActualState(List<Long> infoIds) {
         setCurvesStoredState(infoIds);
 
-        Map<GoStreamClient.WellState, List<Long>> allWellsCurves = goStreamClient.getAllWellsCurves(infoIds);
-        infoIds.forEach(id -> {
+        Set<Long> savedCurvesWithState = curvesLastChange.keySet();
+        infoIds.removeAll(savedCurvesWithState);
 
-            LocalDateTime lastChange = curvesLastChange.get(id);
-            for (Map.Entry<GoStreamClient.WellState, List<Long>> entry : allWellsCurves.entrySet()) {
-                if (entry.getValue().contains(id)) {
-                    if (lastChange == null) {
-                        switch (entry.getKey().getState()) {
-                            case "WELL_GREEN" -> lastChange = LocalDateTime.now();
-                            case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
-                            case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
-                            case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
+        if (!infoIds.isEmpty()) {
+            Map<ApiServiceRestClientService.WellState, List<Long>> allWellsCurves = apiServiceRestClientService.getAllWellsCurves(infoIds);
+            infoIds.forEach(id -> {
+
+                LocalDateTime lastChange = curvesLastChange.get(id);
+                for (Map.Entry<ApiServiceRestClientService.WellState, List<Long>> entry : allWellsCurves.entrySet()) {
+                    if (entry.getValue().contains(id)) {
+                        if (lastChange == null) {
+                            switch (entry.getKey().getState()) {
+                                case "WELL_GREEN" -> lastChange = LocalDateTime.now();
+                                case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
+                                case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
+                                case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
+                            }
+                            curvesLastChange.put(id, lastChange);
                         }
-                        curvesLastChange.put(id, lastChange);
+                        log.info("Curve {} last change was {}", id, lastChange);
+                        repository.saveOrUpdateState(
+                                new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getWellId().toString()));
                     }
-                    log.info("Curve {} last change was {}", id, lastChange);
-                    repository.saveOrUpdateState(
-                            new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getWellId().toString()));
                 }
-            }
-        });
+            });
+        }
     }
 
     @Override
@@ -244,7 +234,6 @@ public class CurveDispatcher implements ConnectionEventListener {
             return null;
         });
         if (curveProcessor != null) {
-            curvesLastChange.put(id, LocalDateTime.now());
             curveProcessor.setFromRest(fromRest);
         } else {
             CurveDataRequest request = new CurveDataRequest();
@@ -254,6 +243,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             RequestType type = fromRest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
             addRequestTask(new RequestTask(id, type, () -> doInfoRequest(id, fromRest)));
         }
+        curvesLastChange.put(id, LocalDateTime.now());
 
         return curveProcessor;
     }
@@ -384,6 +374,12 @@ public class CurveDispatcher implements ConnectionEventListener {
         requestAllowed.incrementAndGet();
     }
 
+    /**
+     * Сброс кэша кривой по id
+     *
+     * @param id кривой
+     */
+
     public void fullCurveReload(Long id) {
         curvesLastChange.put(id, LocalDateTime.now());
         processors.compute(id, (k, v) -> {
@@ -395,6 +391,12 @@ public class CurveDispatcher implements ConnectionEventListener {
             return null;
         });
     }
+
+    /**
+     * Удаление кривой по id
+     *
+     * @param id кривой
+     */
 
     public void deleteCurve(Long id) {
         processors.compute(id, (k, v) -> {
@@ -412,7 +414,8 @@ public class CurveDispatcher implements ConnectionEventListener {
      */
     @Scheduled(fixedDelay = 12, initialDelay = 3, timeUnit = TimeUnit.HOURS)
     private void deleteInactiveCurves() {
-        AtomicInteger deleteCurvesCount = new AtomicInteger();
+        List<Long> deletedCurves = new ArrayList<>();
+
         curvesLastChange.forEach((id, lastChange) -> {
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED))) {
                 removeLoadTask(id);
@@ -423,20 +426,25 @@ public class CurveDispatcher implements ConnectionEventListener {
                 repository.deleteInfo(id);
                 repository.deleteSegments(id, null);
                 repository.deleteItems(id, null);
-                deleteCurvesCount.getAndIncrement();
+                deletedCurves.add(id);
             }
         });
-        log.debug("{} curves were removed because they were inactive", deleteCurvesCount);
+        if (!deletedCurves.isEmpty()) {
+            deletedCurves.forEach(curvesLastChange::remove);
+        }
+        log.debug("{} curves were removed because they were inactive", deletedCurves.size());
     }
 
     /**
      * Обновление времени последнего обновления кривых
      */
-    @Scheduled(fixedDelay = 5, initialDelay = 30, timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedDelay = 3, initialDelay = 1, timeUnit = TimeUnit.HOURS)
     private void updateState() {
         curvesLastChange.forEach((id, lastChange) -> {
-                    PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), null);
-                    repository.saveOrUpdateState(state);
+                    if (lastChange.isAfter(LocalDateTime.now().minusDays(1))) {
+                        PerformCacheState state = new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), null);
+                        repository.saveOrUpdateState(state);
+                    }
                 }
         );
         log.debug("State values were updated");

@@ -26,37 +26,22 @@ public class Config {
     public final String SUBJECT;
 
     /**
-     * Очередь NATS для получения древа объектов
-     */
-    @NotBlank
-    public final String OBJECTS;
-
-    /**
-     * Очередь NATS для аутентификации
-     */
-    @NotBlank
-    public final String AUTH;
-
-    /**
      * Хост для подключения NATS
      */
     @NotBlank
     public final String HOST;
 
     /**
-     * Логин пользователя NATS
+     * Логин пользователя GoStream
      */
     @NotBlank
     public final String GOSTREAM_USERNAME;
 
     /**
-     * Пароль пользователя NATS
+     * Пароль пользователя GoStream
      */
     @NotBlank
     public final String GOSTREAM_PASSWORD;
-
-
-
 
     /**
      * Количество потоков для обработки данных в реальном времени
@@ -148,7 +133,7 @@ public class Config {
     public final double MAX_DEPTH_METERS;
 
     /**
-     * URL для доступа к датасервису по АПИ. Сейчас не используется
+     * URL для доступа к ApiService
      */
     @NotBlank
     public final String DATA_SERVICE_BASEURL;
@@ -174,12 +159,10 @@ public class Config {
 
 
 
-    public Config(@Value("${goperform" + '.' + "subject}") String subject,
-                  @Value("${goperform" + '.' + "objects}") String objects,
-                  @Value("${goperform" + '.' + "auth}") String auth,
+    public Config(@Value("${goperform.subject}") String subject,
                   @Value("${goperform.host}") String host,
-                  @Value("${goperform.nats.username}") String username,
-                  @Value("${goperform.nats.password}") String password,
+                  @Value("${goperform.api-service.username}") String username,
+                  @Value("${goperform.api-service.password}") String password,
                   @Value("${goperform.realtime-threads}") int realtimeThreads,
                   @Value("${goperform.history-threads}") int historyThreads,
                   @Value("${goperform.history-request-limit}") int historyRequestLimit,
@@ -195,8 +178,6 @@ public class Config {
                   @Value("${goperform.cleaning.curve.days}") int daysUntilCurveIsRemoved,
                   @Value("${goperform.cleaning.processor.days}") int daysUntilCurveProcessorIsRemoved) {
         this.SUBJECT = subject;
-        this.OBJECTS = objects;
-        this.AUTH = auth;
         this.HOST = host;
         this.GOSTREAM_USERNAME = username;
         this.GOSTREAM_PASSWORD = password;
