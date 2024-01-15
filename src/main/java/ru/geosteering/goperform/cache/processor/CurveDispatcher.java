@@ -121,7 +121,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private void setCurvesStoredState(List<Long> infoIds) {
         List<PerformCacheState> performCacheStates = repository.getAllStates();
         performCacheStates.forEach(state -> {
-            if (infoIds.contains(state.getId()) || state.getWellId() == null) {
+            if (infoIds.contains(state.getId()) && state.getWellId() != null) {
                 curvesLastChange.put(state.getId(), state.getUpdatedAt().toLocalDateTime());
             }
         });
@@ -149,7 +149,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                             }
                             curvesLastChange.put(id, lastChange);
                         }
-                        log.info("Curve {} last change was {}", id, lastChange);
+                        log.debug("Curve {} last change was {}", id, lastChange);
                         repository.saveOrUpdateState(
                                 new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getWellId().toString()));
                     }

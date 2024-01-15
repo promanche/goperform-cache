@@ -103,7 +103,7 @@ public class ApiServiceRestClientService {
 
     @Nullable
     public List<JSTreeResponse> getObjects(String jwtToken,@Nullable Long parentId, boolean all) {
-        log.info("List objects. all = {}", all);
+        log.trace("List objects. all = {}", all);
 
         ObjectsResponse response = apiServiceClient
                 .get()
@@ -120,7 +120,6 @@ public class ApiServiceRestClientService {
                 .retrieve()
                 .bodyToMono(ObjectsResponse.class)
                 .block();
-        log.debug("Response allObjects {}", response);
         if (response == null || response.getResult() == null) {
             log.warn("Empty response from api-service");
             return List.of();
@@ -129,7 +128,7 @@ public class ApiServiceRestClientService {
             log.warn("Error received from api-service: {}", response.getMessage());
             return List.of();
         }
-        log.info("{} items received", response.getResult().size());
+        log.trace("{} items received", response.getResult().size());
         return response.getResult();
     }
 
@@ -141,7 +140,7 @@ public class ApiServiceRestClientService {
      */
     @Nullable
     public JSTreeResponse getObject(String jwtToken,long id) {
-        log.info("Get object. Id: {}", id);
+        log.trace("Get object. Id: {}", id);
 
         JSTreeResponse response = apiServiceClient
                 .get()
@@ -156,7 +155,7 @@ public class ApiServiceRestClientService {
             log.warn("Empty response from api-service");
             return null;
         }
-        log.info("Response received: {}", response);
+        log.trace("Response received: {}", response);
         return response;
     }
 
