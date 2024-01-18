@@ -158,4 +158,33 @@
         </addColumn>
     </changeSet>
 
+
+    <changeSet id="10" author="merenkov">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="perform_cache_state"/>
+            </not>
+        </preConditions>
+        <createTable tableName="perform_cache_state">
+            <column name="curve_id" type="bigint">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="updated_at" type="timestamp">
+                <constraints nullable="false"/>
+            </column>
+            <column name="well_id" type="varchar(255)"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="11" author="merenkov">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <indexExists tableName="perform_cache_state" indexName="perform_cache_state_curve_id_idx"/>
+            </not>
+        </preConditions>
+        <createIndex tableName="perform_cache_state" indexName="perform_cache_state_curve_id_idx">
+            <column name="curve_id"/>
+        </createIndex>
+    </changeSet>
+
 </databaseChangeLog>

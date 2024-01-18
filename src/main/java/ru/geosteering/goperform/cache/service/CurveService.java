@@ -78,7 +78,7 @@ public class CurveService {
                 checkCurve(id, scale);
                 checked.add(id);
             } catch (Exception e) {
-                log.info(id + " " + e.getMessage());
+                log.error(id + " " + e.getMessage(), e);
             }
         }
         ids = checked.stream().mapToLong(Long::longValue).toArray();
@@ -159,6 +159,11 @@ public class CurveService {
     public void reloadCurve(Long id) {
         checkCurve(id, null);
         curveDispatcher.fullCurveReload(id);
+    }
+
+    public void deleteCurve(Long id){
+        checkCurve(id, null);
+        curveDispatcher.deleteCurve(id);
     }
 
     public CurveInfoResponse getCurveInfoResponse(Long id) {

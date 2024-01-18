@@ -111,6 +111,13 @@ public class CurveController {
         service.reloadCurve(id);
     }
 
+    @DeleteMapping("/manually/{id}")
+    @ResponseStatus(HttpStatus.OK)
+    public void deleteCurve(@PathVariable Long id){
+        log.info("Curve {} removed", id);
+        service.deleteCurve(id);
+    }
+
     @PostMapping()
     @PreAuthorize("@authManager.checkObjectWriteAccess(authentication, #request.logId)")
     public ResponseEntity<Long> create(@RequestBody @Validated CreateCurveRequest request,

@@ -3,6 +3,8 @@ package ru.geosteering.goperform.cache.repository;
 import org.apache.ibatis.annotations.*;
 import ru.geosteering.goperform.cache.repository.dto.CurveInfoDto;
 
+import java.util.List;
+
 @Mapper
 public interface CurveInfoMapper {
 
@@ -17,6 +19,9 @@ public interface CurveInfoMapper {
 
     @Select("select data from info where curve_id=#{id}")
     String get(@Param("id") Long id);
+
+    @Select("select curve_id from info")
+    List<Long> getAllIds();
 
     @Delete("delete from info where curve_id=#{id}")
     void delete(@Param("id") Long id);
