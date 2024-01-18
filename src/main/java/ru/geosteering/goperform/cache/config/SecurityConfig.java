@@ -38,7 +38,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         (auth) -> auth
                                 .antMatchers("/ws").permitAll()
-                                .antMatchers("/actuator/info").permitAll()
+                                .antMatchers("/actuator/**").permitAll()
                                 .antMatchers("/v?/permission/homefolder").hasRole("USER")
                                 .antMatchers(HttpMethod.GET, "/v?/curve/writable").authenticated()
                                 .antMatchers("/v?/curve/multi/**").hasRole("USER")
