@@ -66,6 +66,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
     private long timer = System.currentTimeMillis();
     private final ConcurrentMap<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
+    private final List<Long> reloadCurves = new ArrayList<>();
 
     @PostConstruct
     private void runExecutors() {
@@ -449,6 +450,30 @@ public class CurveDispatcher implements ConnectionEventListener {
         );
         log.debug("State values were updated");
     }
+
+    /**
+     * Перезагрузка кривых с зависшим статусом
+     */
+    @Scheduled(fixedDelay = 1, initialDelay = 15, timeUnit = TimeUnit.MINUTES)
+    private void reloadInQueueCurves() {
+        if (!reloadCurves.isEmpty()){
+            this.processors.entrySet().stream().filter(entry -> reloadCurves.contains(entry.getKey())
+                            && entry.getValue().getLoadStatus().equals(SingleCurveProcessor.LoadStatus.LOADED))
+                    .map(Map.Entry::getKey).forEach(reloadCurves::remove);
+        }
+
+        this.processors.entrySet().stream().filter(entry -> entry.getValue().getLoadStatus().equals(SingleCurveProcessor.LoadStatus.IN_QUEUE)
+                && entry.getValue().getInQueueTimer() < System.currentTimeMillis() - 75_000)
+                .forEach(entry -> {
+                    Long id = entry.getKey();
+                    if (!reloadCurves.contains(id)) {
+                        fullCurveReload(id);
+                        reloadCurves.add(id);
+                    }
+                });
+    }
+
+
 
     protected interface RequestJob {
         void doRequest();
