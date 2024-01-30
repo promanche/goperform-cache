@@ -40,4 +40,7 @@ public interface ItemsMapper {
 
     @Select("select max(max_value) from items where curve_id=#{id}")
     Double getMaxValue(@Param("id") Long id);
+
+    @Delete("with batch as (select id from items where curve_id=#{id} limit 1000 for update skip locked) delete from items using batch where items.id=batch.id")
+    void deleteBatch(@Param("id") Long id);
 }

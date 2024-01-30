@@ -424,8 +424,17 @@ public class CurveDispatcher implements ConnectionEventListener {
             }
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_IS_REMOVED))) {
                 repository.deleteInfo(id);
-                repository.deleteSegments(id, null);
-                repository.deleteItems(id, null);
+
+                boolean isSegmentsExist = repository.getSegmentsRecordsCount(id) > 0;
+                boolean isItemsExist = repository.getItemsRecordsCount(id) > 0;
+                while (isSegmentsExist || isItemsExist) {
+                    if (isItemsExist) {
+                        isItemsExist = repository.deleteBatchItems(id);
+                    }
+                    if (isSegmentsExist) {
+                        isSegmentsExist = repository.deleteBatchSegments(id);
+                    }
+                }
                 deletedCurves.add(id);
             }
         });

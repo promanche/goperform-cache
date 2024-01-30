@@ -84,6 +84,19 @@ public class MainRepository {
         log.trace("deleteItems completed in {} ms", System.currentTimeMillis() - started);
     }
 
+    public boolean deleteBatchItems(Long id){
+        boolean result = false;
+        log.trace("deleteBatchItems started");
+        long started = System.currentTimeMillis();
+        int count = itemsMapper.getRecordsCount(id);
+        if (count > 0){
+            itemsMapper.deleteBatch(id);
+            result = true;
+        }
+        log.trace("deleteBatchItems completed in {} ms", System.currentTimeMillis() - started);
+        return result;
+    }
+
     public Optional<CurveItem> getFirstItem(Long id) {
         log.trace("getFirstItem started");
         long started = System.currentTimeMillis();
@@ -225,6 +238,23 @@ public class MainRepository {
             segmentsMapper.deleteAfter(id, from);
         }
         log.trace("deleteSegments completed in {} ms", System.currentTimeMillis() - started);
+    }
+
+    public boolean deleteBatchSegments(Long id){
+        log.trace("deleteBatchSegments started");
+        boolean result = false;
+        long started = System.currentTimeMillis();
+        int count = segmentsMapper.getRecordsCount(id);
+        if (count > 0){
+            segmentsMapper.deleteBatch(id);
+            result = true;
+        }
+        log.trace("deleteBatchSegments completed in {} ms", System.currentTimeMillis() - started);
+        return result;
+    }
+
+    public int getSegmentsRecordsCount(Long id){
+        return segmentsMapper.getRecordsCount(id);
     }
 
     // State
