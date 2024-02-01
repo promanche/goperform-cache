@@ -43,7 +43,7 @@ public class SecurityConfig {
                                 .antMatchers(HttpMethod.GET, "/v?/curve/writable").authenticated()
                                 .antMatchers("/v?/curve/multi/**").hasRole("USER")
                                 .antMatchers(HttpMethod.POST, "/v?/curve").hasRole("USER")
-                                .antMatchers(HttpMethod.DELETE, "/v?/curve/{id}").hasRole("USER")
+                                .antMatchers(HttpMethod.DELETE, "/v?/curve/{id}", "/v?/curve/manually/{id}").hasRole("USER")
                                 .antMatchers("/v?/curve/{id}/**").access(authManager)
                                 .anyRequest().denyAll()
                 )
