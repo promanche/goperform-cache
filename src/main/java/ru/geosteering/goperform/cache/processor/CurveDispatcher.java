@@ -516,7 +516,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         public synchronized void add(RequestTask newTask) {
             boolean contains = false;
             for (RequestTask task : queue) {
-                if (Objects.equals(task.id, newTask.id)) {
+                if (Objects.equals(task.id, newTask.id) && task.type == newTask.type) {
                     contains = true;
                     break;
                 }
