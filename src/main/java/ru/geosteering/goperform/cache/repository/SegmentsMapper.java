@@ -30,4 +30,10 @@ public interface SegmentsMapper {
     @Select("select scale, max(last) as last from segments where curve_id=#{id} group by scale")
     @MapKey("scale")
     Map<Integer, SegmentDto> getScalesLast(@Param("id") Long id);
+
+    @Delete("with batch as (select id from segments where curve_id=#{id} limit 1000 for update skip locked) delete from segments using batch where segments.id=batch.id")
+    void deleteBatch(@Param("id") Long id);
+
+    @Select("select count(*) from segments where curve_id=#{id}")
+    int getRecordsCount(Long id);
 }
