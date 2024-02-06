@@ -95,8 +95,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private long pointTimer;
     private long requestTimer;
-    @Getter
-    private long inQueueTimer;
 
     private void toggleLoadStatus( LoadStatus newStatus ) {
         LoadStatus oldStatus = loadStatus;
@@ -553,7 +551,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
         dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
         toggleLoadStatus(LoadStatus.IN_QUEUE);
-        inQueueTimer = System.currentTimeMillis();
     }
 
     private synchronized void doItemsRequest() {
@@ -584,7 +581,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                         log.warn( "Curve {} status is {} when must be {}", info.getId(), loadStatus, LoadStatus.IN_QUEUE);
                     }
                     toggleLoadStatus(LoadStatus.IN_PROGRESS);
-                    inQueueTimer = 0;
                 }
                 case STATUS -> {
                     StatusMessage statusMessage = (StatusMessage) apiMessage;
