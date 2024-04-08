@@ -236,10 +236,6 @@ public class CurveDispatcher implements ConnectionEventListener {
         if (curveProcessor != null) {
             curveProcessor.setFromRest(fromRest);
         } else {
-            CurveDataRequest request = new CurveDataRequest();
-            request.setCurveId(id);
-            request.setInfoOnly(true);
-            request.setWithRange(true);
             RequestType type = fromRest ? RequestType.INFO_REST : RequestType.INFO_ACTIVE;
             addRequestTask(new RequestTask(id, type, () -> doInfoRequest(id, fromRest)));
         }
