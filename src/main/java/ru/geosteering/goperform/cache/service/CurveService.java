@@ -11,6 +11,7 @@ import ru.geosteering.commonModels.dataService.requests.*;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.StatusMessage;
 import ru.geosteering.commonModels.wits.RecordIndex;
+import ru.geosteering.goperform.cache.auth.AuthManager;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.*;
 import ru.geosteering.goperform.cache.model.*;
@@ -35,6 +36,8 @@ public class CurveService {
     private final CurveDispatcher curveDispatcher;
     private final Config config;
     private final MainRepository repository;
+    private final AuthManager authManager;
+
 
     public void checkCurve(Long id, Integer scale) {
         if (curveDispatcher.getCurveProcessor(id, true) == null) {
@@ -71,9 +74,9 @@ public class CurveService {
     }
 
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
-
+        Long[] checkedAccess = authManager.checkBatchDeniedAccess(Arrays.stream(ids).boxed().toArray(Long[]::new));
         List<Long> checked = new ArrayList<>();
-        for (long id : ids) {
+        for (long id : checkedAccess) {
             try {
                 checkCurve(id, scale);
                 checked.add(id);
@@ -170,6 +173,11 @@ public class CurveService {
 
         checkCurve(id, null);
 
+        Long[] checked = authManager.checkBatchDeniedAccess(new Long[]{id});
+        if (checked[0] == null){
+            return null;
+        }
+
         SingleCurveProcessor curveProcessor = curveDispatcher.getCurveProcessor(id, true);
         ExtraCurveInfo info = curveProcessor.getInfo();
 
@@ -207,11 +215,14 @@ public class CurveService {
             response[i] = cir;
         }
 
-        return response;
+        return Arrays.stream(response).filter(Objects::nonNull).toArray(CurveInfoResponse[]::new);
     }
 
-    public Long createCurve(CreateCurveRequest req, String user) {
-
+    public Long createCurve(CreateCurveRequest req) {
+        Long[] longs = authManager.checkBatchDeniedAccess(new Long[]{req.getLogId()});
+        if (longs[0] == null){
+            return null;
+        }
         CurveInfo info = new CurveInfo();
         info.setMnemonic(req.getCurveName());
         info.setClassWitsml(req.getTypeCurve().name());
@@ -219,7 +230,7 @@ public class CurveService {
         CurveAddRequest request = new CurveAddRequest();
         request.setParentId(req.getLogId());
         request.setCurveInfo(info);
-        request.setUser(user);
+        request.setUser(config.GOSTREAM_USERNAME);
 
         log.info("Request: {}", request);
         Message message = NatsConnector.sendRequest("gostream.curvesAdd", StaticMapper.toBytes(request));
@@ -245,7 +256,7 @@ public class CurveService {
         }
     }
 
-    public void writeComment(Long id, Comment comment, String user, boolean update) {
+    public void writeComment(Long id, Comment comment, boolean update) {
 
         checkCurve(id, null);
 
@@ -263,7 +274,7 @@ public class CurveService {
         CurveDataStoreRequest request = new CurveDataStoreRequest();
         request.setIndex(comment.getRecordIndex());
         request.setData(List.of(data));
-        request.setUser(user);
+        request.setUser(config.GOSTREAM_USERNAME);
         request.setUpdate(update);
 
         log.info("Request: {}", request);
@@ -286,7 +297,7 @@ public class CurveService {
         }
     }
 
-    public void removeComment(Long id, Double key, String user) {
+    public void removeComment(Long id, Double key) {
 
         checkCurve(id, null);
 
@@ -298,7 +309,7 @@ public class CurveService {
         request.setCurveId(id);
         request.setFrom(from);
         request.setTo(from);
-        request.setUser(user);
+        request.setUser(config.GOSTREAM_USERNAME);
         request.setUpdateBaseTimestamp(OffsetDateTime.now(ZoneId.of("Z")));
 
         log.info("Request: {}", request);

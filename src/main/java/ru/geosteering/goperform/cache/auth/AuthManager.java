@@ -1,6 +1,5 @@
 package ru.geosteering.goperform.cache.auth;
 
-import io.nats.client.Message;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -11,15 +10,14 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.stereotype.Component;
-import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.TLUserObjectIn;
-import ru.geosteering.commonModels.authService.requests.TokenRequest;
-import ru.geosteering.commonModels.webService.responses.ApiResult;
-import ru.geosteering.goperform.cache.nats.NatsConnector;
-import ru.geosteering.goperform.cache.utils.StaticMapper;
+import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.nats.NatsAuthenticationService;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.function.Supplier;
 
 @Component
@@ -27,20 +25,22 @@ import java.util.function.Supplier;
 @RequiredArgsConstructor
 public class AuthManager implements AuthorizationManager<RequestAuthorizationContext> {
 
+    private final Config config;
     private final ObjectAccessor objectAccessor;
+    private final NatsAuthenticationService authenticationService;
+
 
     @Override
     public AuthorizationDecision check(Supplier<Authentication> authentication, RequestAuthorizationContext object) {
 
         try {
-            Authentication auth = authentication.get();
             long id = Long.parseLong(object.getVariables().get("id"));
 
             String method = object.getRequest().getMethod().toUpperCase();
 
             return switch (method) {
-                case "GET" -> new AuthorizationDecision(checkObjectReadAccess(auth, id));
-                case "POST", "PUT", "DELETE" -> new AuthorizationDecision(checkObjectWriteAccess(auth, id));
+                case "GET" -> new AuthorizationDecision(checkObjectReadAccess(id));
+                case "POST", "PUT", "DELETE" -> new AuthorizationDecision( checkObjectWriteAccess(id));
                 default -> new AuthorizationDecision(false);
             };
 
@@ -49,33 +49,33 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         }
     }
 
-    public boolean checkObjectAccess(Authentication auth, long id, TLUserObjectIn.Permissions permit) {
+    public boolean checkObjectAccess(long id, TLUserObjectIn.Permissions permit) {
         long startMillis = System.currentTimeMillis();
-        boolean result = objectAccessor.check(auth, id, permit);
+        boolean result = objectAccessor.check(config.GOSTREAM_USERNAME, id, permit);
 
         long endMillis = System.currentTimeMillis();
         if (!result) {
-            log.warn("checkObjectAccess( {}, {}, {} ): access denied in {} ms", auth.getName(), id, permit, endMillis - startMillis);
+            log.warn("checkObjectAccess( {}, {}, {} ): access denied in {} ms", config.GOSTREAM_USERNAME, id, permit, endMillis - startMillis);
         } else if (endMillis - startMillis > ObjectAccessor.LOG_THRESHOLD_MILLIS) {
-            log.info("checkObjectAccess( {}, {}, {} ): took too long, duration {} ms", auth.getName(), id, permit, endMillis - startMillis);
+            log.info("checkObjectAccess( {}, {}, {} ): took too long, duration {} ms", config.GOSTREAM_USERNAME, id, permit, endMillis - startMillis);
         }
 
         return result;
     }
 
-    public boolean checkObjectReadAccess(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, TLUserObjectIn.Permissions.READ);
+    public boolean checkObjectReadAccess(long id) {
+        return checkObjectAccess(id, TLUserObjectIn.Permissions.READ);
     }
 
-    public boolean checkObjectWriteAccess(Authentication auth, long id) {
-        return checkObjectAccess(auth, id, TLUserObjectIn.Permissions.WRITE);
+    public boolean checkObjectWriteAccess(long id) {
+        return checkObjectAccess(id, TLUserObjectIn.Permissions.WRITE);
     }
 
-    public boolean checkBatchReadAccess(Authentication auth, long[] ids) {
+    public boolean checkBatchReadAccess(Authentication auth, Long[] ids) {
         long startMillis = System.currentTimeMillis();
         boolean result = true;
         for (long id : ids) {
-            if (!objectAccessor.check(auth, id, TLUserObjectIn.Permissions.READ)) {
+            if (!objectAccessor.check(auth.getName(), id, TLUserObjectIn.Permissions.READ)) {
                 result = false;
                 break;
             }
@@ -90,6 +90,17 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         return result;
     }
 
+    public Long[] checkBatchDeniedAccess(Long[] ids) {
+        List<Long> result = new ArrayList<>();
+        for (long id : ids) {
+            if (objectAccessor.check(config.GOSTREAM_USERNAME, id, TLUserObjectIn.Permissions.READ)) {
+                result.add(id);
+            }
+        }
+        return result.toArray(Long[]::new);
+    }
+
+
     @Cacheable(value = "authentication", unless = "#result == null")
     public Authentication getAuthentication(String jwt) {
 
@@ -97,26 +108,11 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
             return null;
         }
 
-        UserAuthentication authentication = null;
-
-        TokenRequest request = new TokenRequest();
-        request.setAction("validateToken");
-        request.setToken(jwt);
-
-        log.trace("Request: {}", request);
-        Message response = NatsConnector.sendRequest("gostream.auth", StaticMapper.toBytes(request));
-        log.trace("Response: {}", response);
-
-        ApiResult apiResult = StaticMapper.parseObject(new String(response.getData()), ApiResult.class);
-
-        if (apiResult != null && apiResult.getStatus() == EResult.OK) {
-
-            authentication = new UserAuthentication();
-            authentication.setUserName((String) apiResult.getResult());
-            authentication.setToken(jwt);
-            authentication.setAuthority(new SimpleGrantedAuthority("ROLE_USER"));
-            authentication.setAuthenticated(true);
-        }
+        UserAuthentication authentication = new UserAuthentication();
+        authentication.setUserName( config.GOSTREAM_USERNAME);
+        authentication.setToken(authenticationService.getToken());
+        authentication.setAuthority(new SimpleGrantedAuthority("ROLE_USER"));
+        authentication.setAuthenticated(true);
 
         return authentication;
     }
