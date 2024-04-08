@@ -75,7 +75,7 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         long startMillis = System.currentTimeMillis();
         boolean result = true;
         for (long id : ids) {
-            if (!objectAccessor.check(auth.getName(), id, TLUserObjectIn.Permissions.READ)) {
+            if (!objectAccessor.check(config.GOSTREAM_USERNAME, id, TLUserObjectIn.Permissions.READ)) {
                 result = false;
                 break;
             }
