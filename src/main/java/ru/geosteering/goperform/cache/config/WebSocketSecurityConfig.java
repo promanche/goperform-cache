@@ -13,7 +13,7 @@ public class WebSocketSecurityConfig extends AbstractSecurityWebSocketMessageBro
         messages
                 .nullDestMatcher().permitAll()
                 .simpDestMatchers("/ws").permitAll()
-                .simpSubscribeDestMatchers("/curve/{id}/**").access("@authManager.checkObjectReadAccess(authentication,#id)")
+                .simpSubscribeDestMatchers("/curve/{id}/**").permitAll()
                 .anyMessage().denyAll();
     }
 
