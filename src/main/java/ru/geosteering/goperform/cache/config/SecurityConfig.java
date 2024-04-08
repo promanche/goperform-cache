@@ -37,15 +37,15 @@ public class SecurityConfig {
                 .csrf().disable()
                 .authorizeHttpRequests(
                         (auth) -> auth
-                                .antMatchers("/ws").permitAll()
+                                /*.antMatchers("/ws").permitAll()
                                 .antMatchers("/actuator/**").permitAll()
+                                .antMatchers("/v?/curve/multi/**").hasRole("USER")
                                 .antMatchers("/v?/permission/homefolder").hasRole("USER")
                                 .antMatchers(HttpMethod.GET, "/v?/curve/writable").authenticated()
-                                .antMatchers("/v?/curve/multi/**").hasRole("USER")
                                 .antMatchers(HttpMethod.POST, "/v?/curve").hasRole("USER")
                                 .antMatchers(HttpMethod.DELETE, "/v?/curve/{id}", "/v?/curve/manually/{id}").hasRole("USER")
-                                .antMatchers("/v?/curve/{id}/**").access(authManager)
-                                .anyRequest().denyAll()
+                                .antMatchers("/v?/curve/{id}/**").access(authManager)*/
+                                .anyRequest().permitAll()  //.anyRequest().denyAll()
                 )
                 .addFilterBefore(authFilter, FilterSecurityInterceptor.class)
                 .addFilterBefore(requestLoggingFilter(), DisableEncodeUrlFilter.class);
