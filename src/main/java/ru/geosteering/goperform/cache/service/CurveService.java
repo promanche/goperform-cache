@@ -75,6 +75,9 @@ public class CurveService {
 
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
         Long[] checkedAccess = authManager.checkBatchDeniedAccess(Arrays.stream(ids).boxed().toArray(Long[]::new));
+        if (checkedAccess.length == 0){
+            return null;
+        }
         List<Long> checked = new ArrayList<>();
         for (long id : checkedAccess) {
             try {
@@ -171,12 +174,12 @@ public class CurveService {
 
     public CurveInfoResponse getCurveInfoResponse(Long id) {
 
-        checkCurve(id, null);
-
         Long[] checked = authManager.checkBatchDeniedAccess(new Long[]{id});
-        if (checked[0] == null){
+        if (checked.length == 0){
             return null;
         }
+        checkCurve(id, null);
+
 
         SingleCurveProcessor curveProcessor = curveDispatcher.getCurveProcessor(id, true);
         ExtraCurveInfo info = curveProcessor.getInfo();
@@ -219,8 +222,8 @@ public class CurveService {
     }
 
     public Long createCurve(CreateCurveRequest req) {
-        Long[] longs = authManager.checkBatchDeniedAccess(new Long[]{req.getLogId()});
-        if (longs[0] == null){
+        Long[] checked = authManager.checkBatchDeniedAccess(new Long[]{req.getLogId()});
+        if (checked.length == 0){
             return null;
         }
         CurveInfo info = new CurveInfo();
