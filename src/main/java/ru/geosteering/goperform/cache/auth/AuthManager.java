@@ -1,6 +1,8 @@
 package ru.geosteering.goperform.cache.auth;
 
-import lombok.*;
+import lombok.RequiredArgsConstructor;
+import lombok.Setter;
+import lombok.ToString;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -40,7 +42,7 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
 
             return switch (method) {
                 case "GET" -> new AuthorizationDecision(checkObjectReadAccess(id));
-                case "POST", "PUT", "DELETE" -> new AuthorizationDecision( checkObjectWriteAccess(id));
+                case "POST", "PUT", "DELETE" -> new AuthorizationDecision(checkObjectWriteAccess(id));
                 default -> new AuthorizationDecision(false);
             };
 
@@ -109,7 +111,7 @@ public class AuthManager implements AuthorizationManager<RequestAuthorizationCon
         }
 
         UserAuthentication authentication = new UserAuthentication();
-        authentication.setUserName( config.GOSTREAM_USERNAME);
+        authentication.setUserName(config.GOSTREAM_USERNAME);
         authentication.setToken(authenticationService.getToken());
         authentication.setAuthority(new SimpleGrantedAuthority("ROLE_USER"));
         authentication.setAuthenticated(true);

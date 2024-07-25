@@ -4,7 +4,6 @@ import io.nats.client.Message;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
-import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Component;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.TLUserObjectIn;
@@ -20,7 +19,7 @@ import ru.geosteering.goperform.cache.utils.StaticMapper;
 public class ObjectAccessor {
 
     /**
-     * Порог логгирования: проверки доступа, проведённые быстрее данного порога, не должны логгироваться, чтобы не захламлять лог.
+     * Порог логирования: проверки доступа, проведённые быстрее данного порога, не должны логироваться, чтобы не захламлять лог.
      */
     public static final long LOG_THRESHOLD_MILLIS = 100;
     private final Config config;
@@ -29,18 +28,9 @@ public class ObjectAccessor {
     public boolean check(String username, long id, TLUserObjectIn.Permissions permission) {
 
         try {
-            /*String userName = auth.getName();
-            if (userName == null
-                            || userName.isEmpty()
-                            || userName.equalsIgnoreCase("anonymousUser")
-                            || userName.equalsIgnoreCase("anonymous")
-            ) {
-                return false;
-            }*/
-
             CheckObjectAccessRequest request = new CheckObjectAccessRequest();
             request.setAction("checkObjectAccess");
-            request.setUsername(config.GOSTREAM_USERNAME);
+            request.setUsername(username);
             request.setObjectId(id);
             request.setPermission(permission);
 
