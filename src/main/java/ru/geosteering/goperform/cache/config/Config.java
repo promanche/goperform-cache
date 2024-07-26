@@ -1,6 +1,7 @@
 package ru.geosteering.goperform.cache.config;
 
 import io.nats.client.NUID;
+import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -24,6 +25,12 @@ public class Config {
      */
     @NotBlank
     public final String SUBJECT;
+
+    /**
+     * Топик NATS для аутентификации
+     */
+    @NotBlank
+    public final String GOSTREAM_AUTH;
 
     /**
      * Хост для подключения NATS
@@ -160,6 +167,7 @@ public class Config {
 
 
     public Config(@Value("${goperform.subject}") String subject,
+                  @Value("gostream.auth") String auth,
                   @Value("${goperform.host}") String host,
                   @Value("${goperform.api-service.username}") String username,
                   @Value("${goperform.api-service.password}") String password,
@@ -178,6 +186,7 @@ public class Config {
                   @Value("${goperform.cleaning.curve.days}") int daysUntilCurveIsRemoved,
                   @Value("${goperform.cleaning.processor.days}") int daysUntilCurveProcessorIsRemoved) {
         this.SUBJECT = subject;
+        this.GOSTREAM_AUTH = auth;
         this.HOST = host;
         this.GOSTREAM_USERNAME = username;
         this.GOSTREAM_PASSWORD = password;

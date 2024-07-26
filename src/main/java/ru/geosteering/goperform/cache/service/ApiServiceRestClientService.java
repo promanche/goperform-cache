@@ -55,26 +55,31 @@ public class ApiServiceRestClientService {
                             break;
                         }
 
-                        jsTreeResponse = getObject(jwtToken,Long.parseLong(jsTreeResponse.getParent()));
+                        try {
+                            long parentId = Long.parseLong(jsTreeResponse.getParent());
+                            jsTreeResponse = getObject(jwtToken,parentId);
 
-                        if (jsTreeResponse != null) {
-                            if (jsTreeResponse.getType().equals("WELLBORE")) {
-                                log.debug("Wellbore {} for curve {}", jsTreeResponse.getId(), id);
-                                List<JSTreeResponse> objectsCurves =
-                                        getObjects(jwtToken,Long.parseLong(jsTreeResponse.getId()), true);
-                                List<Long> logCurves = objectsCurves
-                                        .stream().filter(treeResponse -> treeResponse.getType().equals("CURVE"))
-                                        .map(object -> Long.parseLong(object.getId())).toList();
-                                curves.addAll(logCurves);
+                            if (jsTreeResponse != null) {
+                                if (jsTreeResponse.getType().equals("WELLBORE")) {
+                                    log.debug("Wellbore {} for curve {}", jsTreeResponse.getId(), id);
+                                    List<JSTreeResponse> objectsCurves =
+                                            getObjects(jwtToken,Long.parseLong(jsTreeResponse.getId()), true);
+                                    List<Long> logCurves = objectsCurves
+                                            .stream().filter(treeResponse -> treeResponse.getType().equals("CURVE"))
+                                            .map(object -> Long.parseLong(object.getId())).toList();
+                                    curves.addAll(logCurves);
+                                }
+                            } else {
+                                WellState wellState = new WellState(0L, "WELL");
+                                List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
+                                if (!listCurves.contains(id)) {
+                                    listCurves.add(id);
+                                    wellCurves.put(wellState, listCurves);
+                                    log.error("Curve {} must be removed cause it does not have log", id);
+                                }
+                                return;
                             }
-                        } else {
-                            WellState wellState = new WellState(0L, "WELL");
-                            List<Long> listCurves = wellCurves.getOrDefault(wellState, new ArrayList<>());
-                            if (!listCurves.contains(id)) {
-                                listCurves.add(id);
-                                wellCurves.put(wellState, listCurves);
-                                log.error("Curve {} must be removed cause it does not have log", id);
-                            }
+                        } catch (NumberFormatException e) {
                             return;
                         }
                     }
