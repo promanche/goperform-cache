@@ -1,5 +1,5 @@
-import java.time.LocalDate
-import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+import com.bmuschko.gradle.docker.tasks.image.DockerPushImage
 
 plugins {
     id 'java'
@@ -8,8 +8,11 @@ plugins {
     id 'io.spring.dependency-management' version '1.0.11.RELEASE'
     id 'io.freefair.lombok' version '6.5.0.2'
     id 'com.bmuschko.docker-spring-boot-application' version '9.3.0'
+    id 'application'
+}
 
-    id 'com.gorylenko.gradle-git-properties' version '2.4.1'
+application {
+    mainClass = 'ru.geosteering.goperform.cache.GoperformCacheApplication'
 }
 
 repositories {
@@ -56,63 +59,69 @@ dependencies {
     implementation 'biz.paluch.logging:logstash-gelf:1.14.1'
 }
 
-group = 'ru.geosteering'
-version = generateVersion()
+group = 'ru.geosteering.goperform.cache.service'
+version = '1.0.0-SNAPSHOT'
 description = 'goperform-cache'
-java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+sourceCompatibility = 17
+targetCompatibility = 17
 
-publishing {
-    publications {
-        maven(MavenPublication) {
-            from(components.java)
-        }
+task copyJarToDockerDir(type: Copy) {
+    dependsOn bootJar
+    from 'build/libs/'
+    include '*.jar'
+    into 'docker/app/'
+    rename {
+        String filename -> filename.replace("-$project.version", "").replace("-all", "")
     }
 }
 
-tasks.withType(JavaCompile) {
-    options.encoding = 'UTF-8'
+static def mapBranchNameToDockerImageTag(branchName) {
+    if (branchName == 'master') {
+        return 'latest'
+    } else {
+        return branchName.replaceAll('\\W', '_')
+    }
+}
+
+def getCurrentGitBranch() {
+    def gitBranch = 'unknown'
+    try {
+        def workingDir = new File("${project.projectDir}")
+        def result = 'git rev-parse --abbrev-ref HEAD'.execute(null, workingDir)
+        result.waitFor()
+        if (result.exitValue() == 0) {
+            gitBranch = result.text.trim()
+        }
+    } catch (ignored) {
+    }
+    return gitBranch
+}
+
+def getDockerImageTag() {
+    def branchName
+    if (project.hasProperty('branchName')) {
+        branchName = project.getProperty('branchName')
+    } else {
+        branchName = getCurrentGitBranch()
+    }
+    return mapBranchNameToDockerImageTag(branchName)
+}
+
+task buildDockerImage(type: DockerBuildImage) {
+    dependsOn copyJarToDockerDir
+    inputDir = file('docker')
+    images = ['nexus.geosteering.ru:5001/gostream/goperform-cache-service:' + getDockerImageTag()]
+}
+
+task pushDockerImage(type: DockerPushImage) {
+    dependsOn buildDockerImage
+    images = buildDockerImage.images
 }
 
 docker {
     springBootApplication {
         baseImage = "eclipse-temurin:17-jre-alpine"
         ports = [9010]
-        images = ["$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getDockerImageTag()}_${version}",
-                  "$dockerTargetRegistryUrl/gostream/goperform-cache-service:${getDockerImageTag()}_latest"]
+        images = ["nexus.geosteering.ru:5001/gostream/goperform-cache-service:latest"]
     }
-}
-tasks.named('dockerCreateDockerfile', Dockerfile) {
-    runCommand 'apk --update --no-cache add curl'
-}
-
-gitProperties {
-    keys = ['git.branch', 'git.commit.id', 'git.commit.message.full', 'git.commit.time']
-    dateFormat = "dd-MM-yyyy HH:mm Z"
-}
-
-springBoot {
-    buildInfo()
-}
-
-def generateVersion() {
-    def workDir = new File("${projectDir}")
-    def date = LocalDate.now().toString().replaceAll("-", "")
-    def commit = 'git rev-parse --short HEAD'.execute(null, workDir).text.trim()
-    return date + "_" + commit
-}
-
-def getCurrentGitBranch() {
-    def gitBranch = ""
-    def workingDir = new File("${projectDir}")
-    def result = 'git rev-parse --abbrev-ref HEAD'.execute(null, workingDir)
-    result.waitFor()
-    if (result.exitValue() == 0) {
-        gitBranch = result.text.trim()
-    }
-    return gitBranch
-}
-
-def getDockerImageTag() {
-    def branchName = getCurrentGitBranch()
-    return branchName.replaceAll('/', '_')
 }
