@@ -51,6 +51,7 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'io.micrometer:micrometer-core'
 
     implementation 'biz.paluch.logging:logstash-gelf:1.14.1'
 }

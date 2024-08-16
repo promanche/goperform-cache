@@ -14,6 +14,8 @@ import ru.geosteering.commonModels.dataService.requests.CurveDataRequest;
 import ru.geosteering.commonModels.dataService.responses.*;
 import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
+import ru.geosteering.goperform.cache.metrics.MetricName;
+import ru.geosteering.goperform.cache.metrics.MetricService;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
 import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
@@ -67,6 +69,8 @@ public class CurveDispatcher implements ConnectionEventListener {
     private long timer = System.currentTimeMillis();
     private final ConcurrentMap<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
 
+    private final MetricService metricService;
+
     @PostConstruct
     private void runExecutors() {
 
@@ -76,7 +80,20 @@ public class CurveDispatcher implements ConnectionEventListener {
                         .map(SingleCurveProcessor::getLoadStatus)
                         .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
                 Long totalPoints = processors.values().stream().collect(Collectors.summingLong(SingleCurveProcessor::totalBufferSize));
+                metricService.setGaugeValue(MetricName.CURVES_IN_TOTAL, processors.size());
+                metricService.setGaugeValue(MetricName.TOTAL_POINTS,totalPoints.intValue());
+
+                Integer unknownStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.UNKNOWN.name())).orElse(0);
+                metricService.setGaugeValue(MetricName.UNKNOWN, unknownStatus);
+                Integer inQueueStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.IN_QUEUE.name())).orElse(0);
+                metricService.setGaugeValue(MetricName.IN_QUEUE, inQueueStatus);
+                Integer inProgressStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.IN_PROGRESS.name())).orElse(0);
+                metricService.setGaugeValue(MetricName.IN_PROGRESS, inProgressStatus);
+                Integer loadedStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.LOADED.name())).orElse(0);
+                metricService.setGaugeValue(MetricName.LOADED, loadedStatus);
+
                 curvesInfo.put("ACTIVE", activeCurves.size());
+                metricService.setGaugeValue(MetricName.ACTIVE_CURVES, activeCurves.size());
                 curvesInfo.put("BROKEN", brokenCurves.size());
                 curvesInfo.put("REQUEST_ALLOWED", requestAllowed.get());
                 log.info("DispatcherState.Curves: {}, total {} curves with {} points.", curvesInfo, processors.size(), totalPoints);
@@ -85,7 +102,9 @@ public class CurveDispatcher implements ConnectionEventListener {
                 timer = System.currentTimeMillis();
 
                 int history = histCount.getAndSet(0);
+                metricService.setGaugeValue(MetricName.HISTORY_POINTS, history);
                 int real = realCount.getAndSet(0);
+                metricService.setGaugeValue(MetricName.REAL_POINTS, real);
 
                 seconds = seconds == 0 ? 1 : seconds;
 
@@ -106,8 +125,10 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     }
 
+
+
     /**
-     * Определение времени последнего обновления для каждой кривой
+     * Определение времени последнего обновления для каждой кривой.
      */
 
     @EventListener(ApplicationStartedEvent.class)
@@ -161,12 +182,14 @@ public class CurveDispatcher implements ConnectionEventListener {
     @Override
     public void onConnect() {
         requestAllowed.set(config.NATS_ONETIME_REQUESTS);
+        metricService.setGaugeValue(MetricName.REQUEST_ALLOWED, config.NATS_ONETIME_REQUESTS);
         processors.values().forEach(SingleCurveProcessor::onConnect);
     }
 
     @Override
     public void onDisconnect() {
         requestAllowed.set(0);
+        metricService.setGaugeValue(MetricName.REQUEST_ALLOWED, 0);
         processors.values().forEach(SingleCurveProcessor::onDisconnect);
         requestQueue.clear();
     }
@@ -176,6 +199,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         if (isReal) {
             activeCurves.add(id);
             realCount.incrementAndGet();
+            metricService.incrementGauge(MetricName.REAL_POINTS);
         }
         if (isBroken(id)) {
             return;
@@ -197,6 +221,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             log.error(e.getMessage(), e);
         } finally {
             requestAllowed.incrementAndGet();
+            metricService.incrementGauge(MetricName.REQUEST_ALLOWED);
         }
     }
 
@@ -229,6 +254,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
             ExtraCurveInfo info = repository.getInfo(id).orElse(null);
             if (info != null) {
+                metricService.incrementGauge(MetricName.CURVES_IN_TOTAL);
                 return new SingleCurveProcessor(info, fromRest, this);
             }
             return null;
@@ -263,13 +289,19 @@ public class CurveDispatcher implements ConnectionEventListener {
                         CurveInfo curveInfo = ((CurveInfoMessage) apiMessage).getCurveInfo();
                         ExtraCurveInfo info = new ExtraCurveInfo(prepareInfoKeys(curveInfo));
                         repository.saveOrUpdateInfo(info);
-                        processors.computeIfAbsent(curveInfo.getId(), k -> new SingleCurveProcessor(info, fromRest, this));
+                        processors.computeIfAbsent(curveInfo.getId(), k -> {
+                            metricService.incrementGauge(MetricName.CURVES_IN_TOTAL);
+                            return new SingleCurveProcessor(info, fromRest, this);
+                        });
                     }
                     case STATUS -> {
                         StatusMessage statusMessage = (StatusMessage) apiMessage;
                         if (statusMessage.getStatus() != EResult.OK) {
                             log.error("Missing curveInfo for {}, message {}", id, statusMessage);
-                            brokenCurves.computeIfAbsent(id, k -> LocalDateTime.now());
+                            brokenCurves.computeIfAbsent(id, k -> {
+                                metricService.incrementGauge(MetricName.BROKEN_CURVES);
+                                return LocalDateTime.now();
+                            });
                         }
                     }
                     default -> log.error("Unknown response {}", new String(response.getData()));
@@ -280,6 +312,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             log.error(e.getMessage(), e);
         } finally {
             requestAllowed.incrementAndGet();
+            metricService.incrementGauge(MetricName.REQUEST_ALLOWED);
         }
     }
 
@@ -322,8 +355,10 @@ public class CurveDispatcher implements ConnectionEventListener {
         if (NatsConnector.isConnected()) {
             if (requestAllowed.getAndDecrement() > 0 && !requestQueue.isEmpty()) {
                 try {
+                    metricService.decrementGauge(MetricName.REQUEST_ALLOWED);
                     requestQueue.poll().requestJob.doRequest();
                 } catch (NullResponseException e) {
+                    metricService.incrementGauge(MetricName.REQUEST_ALLOWED);
                     requestAllowed.incrementAndGet();
                 }
             } else {
@@ -340,6 +375,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                 boolean removable = entry.getValue().plusMinutes(30).isBefore(LocalDateTime.now());
                 if (removable) {
                     count.getAndIncrement();
+                    metricService.decrementGauge(MetricName.BROKEN_CURVES);
                 }
                 return removable;
             });
@@ -355,6 +391,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         if (!brokenCurves.containsKey(id)) {
             LocalDateTime now = LocalDateTime.now();
             brokenCurves.put(id, now);
+            metricService.incrementGauge(MetricName.BROKEN_CURVES);
             log.warn("Curve {} is marked as broken at {} for 30 minutes", id, now);
         } else {
             log.debug("Curve {} is already marked as broken", id);
@@ -368,6 +405,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         }
 
         requestAllowed.incrementAndGet();
+        metricService.incrementGauge(MetricName.REQUEST_ALLOWED);
     }
 
     /**
@@ -503,7 +541,6 @@ public class CurveDispatcher implements ConnectionEventListener {
             }
             if (!contains) {
                 queue.add(newTask);
-
             }
         }
 
