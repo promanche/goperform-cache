@@ -218,7 +218,7 @@ public class CurveService {
             response[i] = cir;
         }
 
-        return Arrays.stream(response).filter(Objects::nonNull).toArray(CurveInfoResponse[]::new);
+        return response;
     }
 
     public Long createCurve(CreateCurveRequest req) {
