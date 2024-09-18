@@ -60,7 +60,7 @@ dependencies {
 }
 
 group = 'ru.geosteering.goperform.cache.service'
-version = '1.0.0-SNAPSHOT'
+version = '1.0.1'
 description = 'goperform-cache'
 sourceCompatibility = 17
 targetCompatibility = 17
