@@ -43,13 +43,13 @@ public class PermissionService {
 
                     if (homefolder != null && homefolder.containsKey("id")) {
                         String id = (String) homefolder.get("id");
-                        if (authManager.checkObjectWriteAccess(authentication, Long.parseLong(id))) {
-                            if (authManager.checkObjectAccess(authentication, Long.parseLong(id), TLUserObjectIn.Permissions.CONTROL)) {
+                        if (authManager.checkObjectWriteAccess(Long.parseLong(id))) {
+                            if (authManager.checkObjectAccess(Long.parseLong(id), TLUserObjectIn.Permissions.CONTROL)) {
                                 return "CONTROL";
                             }
                             return "WRITE";
                         }
-                        if (authManager.checkObjectReadAccess(authentication, Long.parseLong(id))) {
+                        if (authManager.checkObjectReadAccess(Long.parseLong(id))) {
                             return "READ";
                         }
                     }

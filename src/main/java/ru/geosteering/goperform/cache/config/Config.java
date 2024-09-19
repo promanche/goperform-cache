@@ -1,6 +1,7 @@
 package ru.geosteering.goperform.cache.config;
 
 import io.nats.client.NUID;
+import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
@@ -26,10 +27,28 @@ public class Config {
     public final String SUBJECT;
 
     /**
+     * Топик NATS для аутентификации
+     */
+    @NotBlank
+    public final String GOSTREAM_AUTH;
+
+    /**
      * Хост для подключения NATS
      */
     @NotBlank
     public final String HOST;
+
+    /**
+     * Логин пользователя GoStream
+     */
+    @NotBlank
+    public final String GOSTREAM_USERNAME;
+
+    /**
+     * Пароль пользователя GoStream
+     */
+    @NotBlank
+    public final String GOSTREAM_PASSWORD;
 
     /**
      * Количество потоков для обработки данных в реальном времени
@@ -121,7 +140,7 @@ public class Config {
     public final double MAX_DEPTH_METERS;
 
     /**
-     * URL для доступа к датасервису по АПИ. Сейчас не используется
+     * URL для доступа к ApiService
      */
     @NotBlank
     public final String DATA_SERVICE_BASEURL;
@@ -134,8 +153,24 @@ public class Config {
     @Positive
     public final int CACHEABLE_DURATION_MINUTES;
 
-    public Config(@Value("${goperform" + '.' + "subject}") String subject,
+    /**
+     * Число дней после которого кривые должны быть удалены
+     */
+    public final int DAYS_UNTIL_CURVE_IS_REMOVED;
+
+    /**
+     * Число дней после которого обработчики кривых должны быть удалены
+     */
+    public final int DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED;
+
+
+
+
+    public Config(@Value("${goperform.subject}") String subject,
+                  @Value("gostream.auth") String auth,
                   @Value("${goperform.host}") String host,
+                  @Value("${goperform.api-service.username}") String username,
+                  @Value("${goperform.api-service.password}") String password,
                   @Value("${goperform.realtime-threads}") int realtimeThreads,
                   @Value("${goperform.history-threads}") int historyThreads,
                   @Value("${goperform.history-request-limit}") int historyRequestLimit,
@@ -147,9 +182,14 @@ public class Config {
                   @Value("#{${goperform.scale-minutes}}") List<Integer> scaleMinutes,
                   @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds,
                   @Value("${goperform.dataservice-baseurl}") String dataServiceBaseUrl,
-                  @Value("${goperform.cacheable-duration-min:10}") int cacheableDurationMin) {
+                  @Value("${goperform.cacheable-duration-min:10}") int cacheableDurationMin,
+                  @Value("${goperform.cleaning.curve.days}") int daysUntilCurveIsRemoved,
+                  @Value("${goperform.cleaning.processor.days}") int daysUntilCurveProcessorIsRemoved) {
         this.SUBJECT = subject;
+        this.GOSTREAM_AUTH = auth;
         this.HOST = host;
+        this.GOSTREAM_USERNAME = username;
+        this.GOSTREAM_PASSWORD = password;
         this.REALTIME_THREADS = realtimeThreads;
         this.HISTORY_THREADS = historyThreads;
         this.HISTORY_REQUEST_LIMIT = historyRequestLimit;
@@ -168,5 +208,8 @@ public class Config {
 
         this.DATA_SERVICE_BASEURL = dataServiceBaseUrl;
         this.CACHEABLE_DURATION_MINUTES = cacheableDurationMin;
+
+        this.DAYS_UNTIL_CURVE_IS_REMOVED = daysUntilCurveIsRemoved;
+        this.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED = daysUntilCurveProcessorIsRemoved;
     }
 }

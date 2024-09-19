@@ -27,6 +27,13 @@ create table segments
 
 );
 
+create table perform_cache_state
+(
+  curve_id bigint primary key,
+  updated_at timestamp(3),
+  well_id varchar(256)
+);
+
 create index on items(curve_id);
 create index on items(curve_id, first, last);
 
@@ -35,3 +42,5 @@ create index on info(curve_id);
 create index on segments(curve_id);
 create index on segments(curve_id, scale);
 create index on segments(curve_id, scale, first, last);
+
+create index on perform_cache_state(curve_id);

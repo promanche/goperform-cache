@@ -323,8 +323,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         boolean skipLogging = false;
 
         if (reloadData == null) {
-            log.info("Curve set reload time in 5 minutes. Details: {}", reloadLog(item));
+            log.info("Curve set reload time in 3 minutes. Details: {}", reloadLog(item));
             reloadData = new ReloadData();
+            reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
             log.info("Curve reload time extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
             lastUpdateReloadLogTime = System.currentTimeMillis();
@@ -335,7 +336,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
 
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
-        reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
         dispatcher.removeLoadTask(info.getId(), skipLogging);
     }
 
@@ -387,7 +387,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
         savedCount = dispatcher.repository.getItemsRecordsCount(info.getId()) * dispatcher.config.BATCH_SIZE;
 
-        info.setMaxValue(dispatcher.repository.getItemsMinValue(info.getId()));
+        info.setMinValue(dispatcher.repository.getItemsMinValue(info.getId()));
         info.setMaxValue(dispatcher.repository.getItemsMaxValue(info.getId()));
     }
 
