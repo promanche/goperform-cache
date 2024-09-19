@@ -81,7 +81,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                         .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
                 Long totalPoints = processors.values().stream().collect(Collectors.summingLong(SingleCurveProcessor::totalBufferSize));
                 metricService.setGaugeValue(MetricName.CURVES_IN_TOTAL, processors.size());
-                metricService.setGaugeValue(MetricName.TOTAL_POINTS,totalPoints.intValue());
+                metricService.setGaugeValue(MetricName.TOTAL_POINTS, totalPoints.intValue());
 
                 Integer unknownStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.UNKNOWN.name())).orElse(0);
                 metricService.setGaugeValue(MetricName.UNKNOWN, unknownStatus);
@@ -124,7 +124,6 @@ public class CurveDispatcher implements ConnectionEventListener {
         }, 0, 5, TimeUnit.SECONDS);
 
     }
-
 
 
     /**
@@ -418,9 +417,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         curvesLastChange.put(id, LocalDateTime.now());
         processors.compute(id, (k, v) -> {
             removeLoadTask(id);
-            repository.deleteInfo(id);
-            repository.deleteSegments(id, null);
-            repository.deleteItems(id, null);
+            deleteCurveById(id);
             addRequestTask(new RequestTask(id, RequestType.INFO_REST, () -> doInfoRequest(id, true)));
             return null;
         });
@@ -434,13 +431,25 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     public void deleteCurve(Long id) {
         processors.compute(id, (k, v) -> {
-            removeLoadTask(id);
-            repository.deleteInfo(id);
-            repository.deleteSegments(id, null);
-            repository.deleteItems(id, null);
+            deleteCurveById(id);
             return null;
         });
         log.debug("Curve {} was removed", id);
+    }
+
+    private void deleteCurveById(Long id) {
+        repository.deleteInfo(id);
+
+        boolean isSegmentsExist = repository.getSegmentsRecordsCount(id) > 0;
+        boolean isItemsExist = repository.getItemsRecordsCount(id) > 0;
+        while (isSegmentsExist || isItemsExist) {
+            if (isItemsExist) {
+                isItemsExist = repository.deleteBatchItems(id);
+            }
+            if (isSegmentsExist) {
+                isSegmentsExist = repository.deleteBatchSegments(id);
+            }
+        }
     }
 
     /**
@@ -457,18 +466,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                 log.debug("SingleCurveProcessor was removed for curve {}", id);
             }
             if (lastChange.isBefore(LocalDateTime.now().minusDays(config.DAYS_UNTIL_CURVE_IS_REMOVED))) {
-                repository.deleteInfo(id);
-
-                boolean isSegmentsExist = repository.getSegmentsRecordsCount(id) > 0;
-                boolean isItemsExist = repository.getItemsRecordsCount(id) > 0;
-                while (isSegmentsExist || isItemsExist) {
-                    if (isItemsExist) {
-                        isItemsExist = repository.deleteBatchItems(id);
-                    }
-                    if (isSegmentsExist) {
-                        isSegmentsExist = repository.deleteBatchSegments(id);
-                    }
-                }
+                deleteCurveById(id);
                 deletedCurves.add(id);
             }
         });

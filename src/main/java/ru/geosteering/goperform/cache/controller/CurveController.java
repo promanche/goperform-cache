@@ -112,6 +112,13 @@ public class CurveController {
         service.reloadCurve(id);
     }
 
+    @DeleteMapping("/reload/list")
+    @ResponseStatus(HttpStatus.OK)
+    public void reloadListCurves(@RequestParam List<Long> ids) {
+        log.info("Reload curves: {}", ids);
+        service.reloadListCurves(ids);
+    }
+
     @DeleteMapping("/manually/{id}")
     @ResponseStatus(HttpStatus.OK)
     public void deleteCurve(@PathVariable Long id) {

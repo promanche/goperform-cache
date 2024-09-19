@@ -167,6 +167,13 @@ public class CurveService {
         curveDispatcher.fullCurveReload(id);
     }
 
+    public void reloadListCurves(List<Long> ids){
+        ids.forEach(id -> {
+            checkCurve(id, null);
+            curveDispatcher.fullCurveReload(id);
+        });
+    }
+
     public void deleteCurve(Long id){
         checkCurve(id, null);
         curveDispatcher.deleteCurve(id);
