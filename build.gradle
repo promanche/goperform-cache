@@ -1,5 +1,6 @@
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerPushImage
+import org.apache.tools.ant.filters.ReplaceTokens
 
 plugins {
     id 'java'
@@ -123,5 +124,13 @@ docker {
         baseImage = "eclipse-temurin:17-jre-alpine"
         ports = [9010]
         images = ["nexus.geosteering.ru:5001/gostream/goperform-cache-service:latest"]
+    }
+}
+
+processResources {
+    filesMatching('application.properties') {
+        filter {
+            it.replace('@application.version@', version)
+        }
     }
 }
