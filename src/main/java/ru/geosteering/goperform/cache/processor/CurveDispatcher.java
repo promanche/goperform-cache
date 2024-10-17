@@ -110,6 +110,7 @@ public class CurveDispatcher implements ConnectionEventListener {
 
                 log.info("DispatcherState.Statistics: histPoints - {}, histPoints/sec - {}, real points - {}",
                         history, history / seconds, real);
+
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
@@ -512,7 +513,8 @@ public class CurveDispatcher implements ConnectionEventListener {
         INFO_REST(0),
         INFO_ACTIVE(1),
         LOAD_REST(2),
-        LOAD_ACTIVE(3);
+        LOAD_ACTIVE(3),
+        RELOAD(4);
 
         final int priority;
 
