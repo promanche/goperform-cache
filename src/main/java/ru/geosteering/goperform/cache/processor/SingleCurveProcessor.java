@@ -643,9 +643,9 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             log.error("findFrom(): key for {} must not be null", getInfo().getId());
             key = isDateTimeCurve ? dispatcher.config.MIN_TIME_MILLIS : dispatcher.config.MIN_DEPTH_METERS;
         }
-        if (isDateTimeCurve) {
+        /*if (isDateTimeCurve) {
             key = (double) Instant.ofEpochMilli((long) key.doubleValue()).plusMillis(10).toEpochMilli();
-        }
+        }*/
         return getKeyAsString(key, info.getIndexType());
     }
 
