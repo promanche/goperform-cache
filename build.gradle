@@ -111,7 +111,14 @@ def getDockerImageTag() {
 task buildDockerImage(type: DockerBuildImage) {
     dependsOn copyJarToDockerDir
     inputDir = file('docker')
-    images = ['nexus.geosteering.ru:5001/gostream/goperform-cache-service:' + getDockerImageTag()]
+
+    def dockerImageTag = getDockerImageTag()
+    images = ['nexus.geosteering.ru:5001/gostream/goperform-cache-service:' + dockerImageTag]
+
+    if (dockerImageTag.startsWith("release")) {
+        images.add('lib.geosteering.ru:5001/gostream/goperform-cache-service:' + dockerImageTag)
+    }
+
 }
 
 task pushDockerImage(type: DockerPushImage) {
