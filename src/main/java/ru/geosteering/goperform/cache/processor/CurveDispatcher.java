@@ -513,8 +513,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         INFO_REST(0),
         INFO_ACTIVE(1),
         LOAD_REST(2),
-        LOAD_ACTIVE(3),
-        RELOAD(4);
+        LOAD_ACTIVE(3);
 
         final int priority;
 
