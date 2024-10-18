@@ -182,7 +182,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 updateInfo(item);
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
-            } else {
+            } else if (!isDateTimeCurve){
                 updateReloadData(item);
             }
 
@@ -338,6 +338,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (reloadData == null) {
             log.info("Curve set reload time in 3 minutes. Details: {}", reloadLog(item));
             reloadData = new ReloadData();
+            toggleLoadStatus(LoadStatus.BLOCKED);
             reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
             log.info("Curve reload time extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
@@ -792,7 +793,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public enum LoadStatus {
-        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN
+        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN, BLOCKED
     }
 
     private static class ReloadData {
