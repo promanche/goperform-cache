@@ -15,7 +15,8 @@ public enum MetricName {
     UNKNOWN("curve_status_unknown"),
     IN_QUEUE("curve_status_in_queue"),
     IN_PROGRESS("curve_status_in_progress"),
-    LOADED("curve_status_loaded");
+    LOADED("curve_status_loaded"),
+    BLOCKED("curve_blocked");
 
     MetricName(String name) {
         this.name = name;

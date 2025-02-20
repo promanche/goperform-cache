@@ -101,9 +101,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     @Setter
     private boolean fromRest;
-
-    private boolean isReload;
-
     @Getter
     private ReloadData reloadData;
 
@@ -185,7 +182,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 updateInfo(item);
                 sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
-            } else {
+            } else if (!isDateTimeCurve){
                 updateReloadData(item);
             }
 
@@ -325,8 +322,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         data.put("mnemonic", info.getMnemonic());
         data.put("received point", received.toString());
         data.put("last point in db", lastSaved.toString());
-        data.put("received - last in db", (received.getKey() - lastSaved.getKey()) + " ms");
+        data.put("first point in memory", realItemCache.isEmpty() ? "null" : realItemCache.first().toString());
         data.put("last point in memory", realItemCache.isEmpty() ? "null" : realItemCache.last().toString());
+        data.put("received - last in db", (received.getKey() - lastSaved.getKey()) + " ms");
+        data.put("received - first in memory", realItemCache.isEmpty() ? "null" : (received.getKey() - realItemCache.first().getKey()) + " ms");
         data.put("received - last in memory", realItemCache.isEmpty() ? "null" : (received.getKey() - realItemCache.last().getKey()) + " ms");
         data.put("points in memory", String.valueOf(realItemCache.size()));
         return data.toString();
@@ -339,6 +338,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         if (reloadData == null) {
             log.info("Curve set reload time in 3 minutes. Details: {}", reloadLog(item));
             reloadData = new ReloadData();
+            toggleLoadStatus(LoadStatus.BLOCKED);
             reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
             log.info("Curve reload time extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
@@ -361,7 +361,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 clearData(reloadData.from);
                 restoreScaledSegments();
                 reloadData = null;
-                isReload = true;
                 addRequestJob();
             } else if (System.currentTimeMillis() - lastBlockedLogTime > 60000) {
                 String reason =
@@ -564,10 +563,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     private void addRequestJob() {
         loadBuffer.clear();
         CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
-        if (isReload) {
-            requestType = CurveDispatcher.RequestType.RELOAD;
-            isReload = false;
-        }
         dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
         toggleLoadStatus(LoadStatus.IN_QUEUE);
     }
@@ -798,7 +793,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     public enum LoadStatus {
-        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN
+        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN, BLOCKED
     }
 
     private static class ReloadData {

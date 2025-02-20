@@ -89,6 +89,8 @@ public class CurveDispatcher implements ConnectionEventListener {
                 metricService.setGaugeValue(MetricName.IN_QUEUE, inQueueStatus);
                 Integer inProgressStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.IN_PROGRESS.name())).orElse(0);
                 metricService.setGaugeValue(MetricName.IN_PROGRESS, inProgressStatus);
+                Integer blockedStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.BLOCKED.name())).orElse(0);
+                metricService.setGaugeValue(MetricName.BLOCKED, blockedStatus);
                 Integer loadedStatus = Optional.ofNullable(curvesInfo.get(SingleCurveProcessor.LoadStatus.LOADED.name())).orElse(0);
                 metricService.setGaugeValue(MetricName.LOADED, loadedStatus);
 
@@ -111,6 +113,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                 log.info("DispatcherState.Statistics: histPoints - {}, histPoints/sec - {}, real points - {}",
                         history, history / seconds, real);
 
+                log.info("DispatcherState.Curves.InQueue: {}", processors.values().stream().filter(a -> a.getLoadStatus() == SingleCurveProcessor.LoadStatus.IN_QUEUE).map(a -> a.getInfo().getId()).toList());
             } catch (Exception e) {
                 log.error(e.getMessage(), e);
             }
@@ -513,8 +516,7 @@ public class CurveDispatcher implements ConnectionEventListener {
         INFO_REST(0),
         INFO_ACTIVE(1),
         LOAD_REST(2),
-        LOAD_ACTIVE(3),
-        RELOAD(4);
+        LOAD_ACTIVE(3);
 
         final int priority;
 
