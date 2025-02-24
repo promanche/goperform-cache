@@ -66,10 +66,9 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final AtomicInteger histCount = new AtomicInteger();
     private final AtomicInteger realCount = new AtomicInteger();
     private final Set<Long> activeCurves = ConcurrentHashMap.newKeySet();
-    private long timer = System.currentTimeMillis();
     private final ConcurrentMap<Long, LocalDateTime> curvesLastChange = new ConcurrentHashMap<>();
-
     private final MetricService metricService;
+    private long timer = System.currentTimeMillis();
 
     @PostConstruct
     private void runExecutors() {
@@ -79,7 +78,7 @@ public class CurveDispatcher implements ConnectionEventListener {
                 Map<String, Integer> curvesInfo = processors.values().stream()
                         .map(SingleCurveProcessor::getLoadStatus)
                         .collect(Collectors.toMap(Enum::name, ls -> 1, Integer::sum));
-                Long totalPoints = processors.values().stream().collect(Collectors.summingLong(SingleCurveProcessor::totalBufferSize));
+                Long totalPoints = processors.values().stream().mapToLong(SingleCurveProcessor::totalBufferSize).sum();
                 metricService.setGaugeValue(MetricName.CURVES_IN_TOTAL, processors.size());
                 metricService.setGaugeValue(MetricName.TOTAL_POINTS, totalPoints.intValue());
 
@@ -254,14 +253,13 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     public SingleCurveProcessor getCurveProcessor(Long id, boolean fromRest) {
-        SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key -> {
-            ExtraCurveInfo info = repository.getInfo(id).orElse(null);
-            if (info != null) {
-                metricService.incrementGauge(MetricName.CURVES_IN_TOTAL);
-                return new SingleCurveProcessor(info, fromRest, this);
-            }
-            return null;
-        });
+        SingleCurveProcessor curveProcessor = processors.computeIfAbsent(id, key ->
+                repository.getInfo(id)
+                        .map(info -> {
+                            metricService.incrementGauge(MetricName.CURVES_IN_TOTAL);
+                            return new SingleCurveProcessor(info, fromRest, this);
+                        })
+                        .orElse(null));
         if (curveProcessor != null) {
             curveProcessor.setFromRest(fromRest);
         } else {
@@ -495,6 +493,21 @@ public class CurveDispatcher implements ConnectionEventListener {
         log.debug("State values were updated");
     }
 
+    protected enum RequestType {
+
+        INFO_REST(0),
+        INFO_ACTIVE(1),
+        LOAD_REST(2),
+        LOAD_ACTIVE(3),
+        RELOAD(4);
+
+        final int priority;
+
+        RequestType(int priority) {
+            this.priority = priority;
+        }
+    }
+
     protected interface RequestJob {
         void doRequest();
     }
@@ -508,20 +521,6 @@ public class CurveDispatcher implements ConnectionEventListener {
 
         int getPriority() {
             return type.priority;
-        }
-    }
-
-    protected enum RequestType {
-
-        INFO_REST(0),
-        INFO_ACTIVE(1),
-        LOAD_REST(2),
-        LOAD_ACTIVE(3);
-
-        final int priority;
-
-        RequestType(int priority) {
-            this.priority = priority;
         }
     }
 

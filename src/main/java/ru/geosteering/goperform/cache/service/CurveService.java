@@ -7,15 +7,24 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StopWatch;
 import ru.geosteering.commonModels.EResult;
 import ru.geosteering.commonModels.dataService.CurveInfo;
-import ru.geosteering.commonModels.dataService.requests.*;
+import ru.geosteering.commonModels.dataService.requests.CurveAddRequest;
+import ru.geosteering.commonModels.dataService.requests.CurveDataClearRequest;
+import ru.geosteering.commonModels.dataService.requests.CurveDataStoreRequest;
 import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.StatusMessage;
 import ru.geosteering.commonModels.wits.RecordIndex;
 import ru.geosteering.goperform.cache.auth.AuthManager;
 import ru.geosteering.goperform.cache.config.Config;
-import ru.geosteering.goperform.cache.exception.*;
-import ru.geosteering.goperform.cache.model.*;
-import ru.geosteering.goperform.cache.model.rest.*;
+import ru.geosteering.goperform.cache.exception.BadRequestException;
+import ru.geosteering.goperform.cache.exception.BrokenCurveException;
+import ru.geosteering.goperform.cache.exception.CurveProcessorNotExistException;
+import ru.geosteering.goperform.cache.model.CurveItem;
+import ru.geosteering.goperform.cache.model.CurveSegment;
+import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
+import ru.geosteering.goperform.cache.model.rest.Comment;
+import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
+import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
+import ru.geosteering.goperform.cache.model.rest.MultiResponse;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
@@ -26,7 +35,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @Slf4j
@@ -63,19 +75,51 @@ public class CurveService {
             from = from == null ? Double.MIN_VALUE : from;
             to = to == null ? Double.MAX_VALUE : to;
         }
-
-        List<?> result = curveDispatcher.getCurveProcessor(id, true).getCurveData(from, to, scale);
-
-        if (result != null) {
-            log.info("Response for id {} prepared. Result list size: {}", id, result.size());
+        List<?> result;
+        if (isApproximatedScale(scale)) {
+            result = getSegments(id, from, to, scale);
+        } else {
+            result = getItems(id, from, to);
         }
+
+        log.info("Response for id {} prepared. Result list size: {}", id, result.size());
+
+        return result;
+    }
+
+    private List<?> getItems(Long id, Double from, Double to) {
+        var result = repository.getItemsFromTo(id, from, to)
+                .stream()
+                .flatMap(str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
+                .collect(Collectors.toList());
+
+        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+        result.addAll(curveProcessor.getTail(from, to));
+
+        return result;
+    }
+
+    private boolean isApproximatedScale(Integer scale) {
+        return scale != null && scale >= config.SEGMENT_SCALE_MIN;
+    }
+
+    private List<CurveSegment> getSegments(Long id, Double from, Double to, Integer scale) {
+        var result = repository.getSegmentsFromTo(id, scale, from, to)
+                .stream()
+                .flatMap(str -> StaticMapper.parseListOf(str, CurveSegment.class).stream())
+                .collect(Collectors.toList());
+        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+        var segmentProcessor = curveProcessor.getSegmentProcessor();
+        result.addAll(segmentProcessor.getSegmentFromCache(from, to, scale));
+
+        segmentProcessor.addItemsToSegments(curveProcessor.getTail(from, to), scale, result);
 
         return result;
     }
 
     public MultiResponse getMultiResponse(long[] ids, Double from, Double to, Integer scale) {
         Long[] checkedAccess = authManager.checkBatchDeniedAccess(Arrays.stream(ids).boxed().toArray(Long[]::new));
-        if (checkedAccess.length == 0){
+        if (checkedAccess.length == 0) {
             return null;
         }
         List<Long> checked = new ArrayList<>();
@@ -95,59 +139,10 @@ public class CurveService {
         StopWatch swProcess = new StopWatch();
         StopWatch swParse = new StopWatch();
         StopWatch swAdd = new StopWatch();
-        if (scale == null || scale < 15) {
-            repository.getItemsFromTo(ids, from, to)
-                    .forEach(dto -> {
-                        swParse.start();
-                        List<CurveItem> items = StaticMapper.parseListOf(dto.getData(), CurveItem.class);
-                        swParse.stop();
-
-                        swAdd.start();
-                        response.addItems(dto.getId(), items);
-                        swAdd.stop();
-                    });
-
-            for (long id : ids) {
-                swDispatch.start();
-                SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
-                swDispatch.stop();
-                if (processor != null) {
-                    swProcess.start();
-                    List<CurveItem> items = processor.getTail(from, to);
-                    swProcess.stop();
-
-                    swAdd.start();
-                    response.addItems(id, items);
-                    swAdd.stop();
-                }
-            }
-
+        if (isApproximatedScale(scale)) {
+            getSegments(ids, from, to, scale, swParse, swAdd, response, swDispatch, swProcess);
         } else {
-            repository.getSegmentsFromTo(ids, scale, from, to)
-                    .forEach(dto -> {
-                        swParse.start();
-                        List<CurveSegment> items = StaticMapper.parseListOf(dto.getData(), CurveSegment.class);
-                        swParse.stop();
-
-                        swAdd.start();
-                        response.addSegments(dto.getId(), items);
-                        swAdd.stop();
-                    });
-
-            for (long id : ids) {
-                swDispatch.start();
-                SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
-                swDispatch.stop();
-                if (processor != null) {
-                    swProcess.start();
-                    List<CurveSegment> items = processor.getSegmentsFromTail(from, to, scale);
-                    swProcess.stop();
-
-                    swAdd.start();
-                    response.addSegments(id, items);
-                    swAdd.stop();
-                }
-            }
+            getItems(ids, from, to, swParse, swAdd, response, swDispatch, swProcess);
         }
 
         int size = response.getData() == null ? 0 : response.getData().size();
@@ -162,19 +157,77 @@ public class CurveService {
         return response;
     }
 
+    private void getSegments(long[] ids, Double from, Double to, Integer scale, StopWatch swParse, StopWatch swAdd, MultiResponse response, StopWatch swDispatch, StopWatch swProcess) {
+        repository.getSegmentsFromTo(ids, scale, from, to)
+                .forEach(dto -> {
+                    swParse.start();
+                    List<CurveSegment> segments = StaticMapper.parseListOf(dto.getData(), CurveSegment.class);
+                    swParse.stop();
+
+                    swAdd.start();
+                    response.addSegments(dto.getId(), segments);
+                    swAdd.stop();
+                });
+
+        for (long id : ids) {
+            swDispatch.start();
+            SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
+            swDispatch.stop();
+            if (processor != null) {
+                swProcess.start();
+                var segmentProcessor = processor.getSegmentProcessor();
+                List<CurveSegment> cachedSegments = segmentProcessor.getSegmentFromCache(from, to, scale);
+                segmentProcessor.addItemsToSegments(processor.getTail(from, to), scale, cachedSegments);
+                swProcess.stop();
+
+                swAdd.start();
+                response.addSegments(id, cachedSegments);
+                swAdd.stop();
+            }
+        }
+    }
+
+    private void getItems(long[] ids, Double from, Double to, StopWatch swParse, StopWatch swAdd, MultiResponse response, StopWatch swDispatch, StopWatch swProcess) {
+        repository.getItemsFromTo(ids, from, to)
+                .forEach(dto -> {
+                    swParse.start();
+                    List<CurveItem> items = StaticMapper.parseListOf(dto.getData(), CurveItem.class);
+                    swParse.stop();
+
+                    swAdd.start();
+                    response.addItems(dto.getId(), items);
+                    swAdd.stop();
+                });
+
+        for (long id : ids) {
+            swDispatch.start();
+            SingleCurveProcessor processor = curveDispatcher.getCurveProcessor(id, true);
+            swDispatch.stop();
+            if (processor != null) {
+                swProcess.start();
+                List<CurveItem> items = processor.getTail(from, to);
+                swProcess.stop();
+
+                swAdd.start();
+                response.addItems(id, items);
+                swAdd.stop();
+            }
+        }
+    }
+
     public void reloadCurve(Long id) {
         checkCurve(id, null);
         curveDispatcher.fullCurveReload(id);
     }
 
-    public void reloadListCurves(List<Long> ids){
+    public void reloadListCurves(List<Long> ids) {
         ids.forEach(id -> {
             checkCurve(id, null);
             curveDispatcher.fullCurveReload(id);
         });
     }
 
-    public void deleteCurve(Long id){
+    public void deleteCurve(Long id) {
         checkCurve(id, null);
         curveDispatcher.deleteCurve(id);
     }
@@ -182,7 +235,7 @@ public class CurveService {
     public CurveInfoResponse getCurveInfoResponse(Long id) {
 
         Long[] checked = authManager.checkBatchDeniedAccess(new Long[]{id});
-        if (checked.length == 0){
+        if (checked.length == 0) {
             return null;
         }
         checkCurve(id, null);
@@ -230,7 +283,7 @@ public class CurveService {
 
     public Long createCurve(CreateCurveRequest req) {
         Long[] checked = authManager.checkBatchDeniedAccess(new Long[]{req.getLogId()});
-        if (checked.length == 0){
+        if (checked.length == 0) {
             return null;
         }
         CurveInfo info = new CurveInfo();
@@ -260,7 +313,7 @@ public class CurveService {
                 }
             }
             return null;
-        }else {
+        } else {
             log.error("Response from GOstream is null");
             throw new NullPointerException("Response from GOstream is null");
         }
