@@ -1,13 +1,14 @@
 package ru.geosteering.goperform.cache.config;
 
 import io.nats.client.NUID;
-import lombok.NonNull;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 import org.springframework.validation.annotation.Validated;
 
-import javax.validation.constraints.*;
+import javax.validation.constraints.NotBlank;
+import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Positive;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -113,6 +114,12 @@ public class Config {
     public final List<Integer> SCALE_MINUTES;
 
     /**
+     * Минимальная шкала сегментации
+     */
+    @NotNull
+    public final Integer SEGMENT_SCALE_MIN;
+
+    /**
      * Период вывода статистики в лог
      */
     @NotNull
@@ -164,8 +171,6 @@ public class Config {
     public final int DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED;
 
 
-
-
     public Config(@Value("${goperform.subject}") String subject,
                   @Value("gostream.auth") String auth,
                   @Value("${goperform.host}") String host,
@@ -180,6 +185,7 @@ public class Config {
                   @Value("${goperform.nats-onetime-requests}") int natsOnetimeRequests,
                   @Value("${goperform.reconnect-timeout-sec:10}") int reconnectTimeoutSeconds,
                   @Value("#{${goperform.scale-minutes}}") List<Integer> scaleMinutes,
+                  @Value("${goperform.segment-scale-min}") int segmentScaleMin,
                   @Value("${goperform.statistic-period-sec:30}") int statisticPeriodSeconds,
                   @Value("${goperform.dataservice-baseurl}") String dataServiceBaseUrl,
                   @Value("${goperform.cacheable-duration-min:10}") int cacheableDurationMin,
@@ -199,6 +205,7 @@ public class Config {
         this.NATS_ONETIME_REQUESTS = natsOnetimeRequests;
         this.RECONNECT_TIMEOUT_SECONDS = reconnectTimeoutSeconds;
         this.SCALE_MINUTES = scaleMinutes;
+        this.SEGMENT_SCALE_MIN = segmentScaleMin;
         this.STATISTIC_PERIOD_SECONDS = statisticPeriodSeconds;
 
         this.HISTORY_NUID = NUID.nextGlobal();

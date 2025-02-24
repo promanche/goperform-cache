@@ -6,6 +6,7 @@ import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
 
 @Getter
 @Setter
+@ToString
 @EqualsAndHashCode
 @NoArgsConstructor
 public class CurveSegment {

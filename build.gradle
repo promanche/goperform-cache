@@ -1,6 +1,5 @@
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
 import com.bmuschko.gradle.docker.tasks.image.DockerPushImage
-import org.apache.tools.ant.filters.ReplaceTokens
 
 plugins {
     id 'java'
@@ -63,8 +62,11 @@ dependencies {
 group = 'ru.geosteering.goperform.cache.service'
 version = '1.1.0-SNAPSHOT'
 description = 'goperform-cache'
-sourceCompatibility = 17
-targetCompatibility = 17
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
 
 task copyJarToDockerDir(type: Copy) {
     dependsOn bootJar
