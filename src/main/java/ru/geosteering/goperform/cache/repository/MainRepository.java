@@ -2,11 +2,16 @@ package ru.geosteering.goperform.cache.repository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.ibatis.session.*;
+import org.apache.ibatis.session.ExecutorType;
+import org.apache.ibatis.session.SqlSession;
+import org.apache.ibatis.session.SqlSessionFactory;
 import org.springframework.stereotype.Repository;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
-import ru.geosteering.goperform.cache.repository.dto.*;
+import ru.geosteering.goperform.cache.repository.dto.CurveInfoDto;
+import ru.geosteering.goperform.cache.repository.dto.ItemDto;
+import ru.geosteering.goperform.cache.repository.dto.PerformCacheState;
+import ru.geosteering.goperform.cache.repository.dto.SegmentDto;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.util.*;
@@ -84,12 +89,12 @@ public class MainRepository {
         log.trace("deleteItems completed in {} ms", System.currentTimeMillis() - started);
     }
 
-    public boolean deleteBatchItems(Long id){
+    public boolean deleteBatchItems(Long id) {
         boolean result = false;
         log.trace("deleteBatchItems started");
         long started = System.currentTimeMillis();
         int count = itemsMapper.getRecordsCount(id);
-        if (count > 0){
+        if (count > 0) {
             itemsMapper.deleteBatch(id);
             result = true;
         }
@@ -152,6 +157,20 @@ public class MainRepository {
         }
         log.trace("getInfo completed in {} ms", System.currentTimeMillis() - started);
         return optional;
+    }
+
+    public List<ExtraCurveInfo> getInfos(List<Long> ids) {
+        log.trace("getInfos started");
+        long started = System.currentTimeMillis();
+        StringJoiner joiner = new StringJoiner(",");
+        for (Long id : ids) {
+            joiner.add(String.valueOf(id));
+        }
+        List<ExtraCurveInfo> infos = curveInfoMapper.getAllByIds(joiner.toString()).stream()
+                .map(e -> StaticMapper.parseObject(e, ExtraCurveInfo.class))
+                .toList();
+        log.trace("getInfos completed in {} ms", System.currentTimeMillis() - started);
+        return infos;
     }
 
     public List<Long> getInfoIds() {
@@ -240,12 +259,12 @@ public class MainRepository {
         log.trace("deleteSegments completed in {} ms", System.currentTimeMillis() - started);
     }
 
-    public boolean deleteBatchSegments(Long id){
+    public boolean deleteBatchSegments(Long id) {
         log.trace("deleteBatchSegments started");
         boolean result = false;
         long started = System.currentTimeMillis();
         int count = segmentsMapper.getRecordsCount(id);
-        if (count > 0){
+        if (count > 0) {
             segmentsMapper.deleteBatch(id);
             result = true;
         }
@@ -253,7 +272,7 @@ public class MainRepository {
         return result;
     }
 
-    public int getSegmentsRecordsCount(Long id){
+    public int getSegmentsRecordsCount(Long id) {
         return segmentsMapper.getRecordsCount(id);
     }
 

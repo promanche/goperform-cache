@@ -69,13 +69,20 @@ public class SegmentProcessor {
     }
 
     public List<CurveSegment> getSegmentFromCache(Double from, Double to, Integer scale) {
-        if (segmentCache.containsKey(scale)) {
-            return segmentCache.get(scale).stream()
-                    .filter(segment -> Double.compare(segment.getFirstKey(), from) >= 0
-                            && Double.compare(segment.getLastKey(), to) < 0)
-                    .toList();
+        if (!segmentCache.containsKey(scale))
+            return Collections.emptyList();
+
+        var segments = segmentCache.get(scale);
+
+        if (from == null && to == null) {
+            return segments;
         }
-        return Collections.emptyList();
+
+        return segments.stream()
+                .filter(segment -> Double.compare(segment.getFirstKey(), from) >= 0
+                        && Double.compare(segment.getLastKey(), to) < 0)
+                .toList();
+
     }
 
     public void logResults(String label) {
