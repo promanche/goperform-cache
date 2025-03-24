@@ -20,7 +20,7 @@ public class CurveSegment {
     private Double maxVal;
 
     public CurveSegment(CurveItem item, int scale) {
-        int msOnPixel = scale * 60000 / 120;
+        int msOnPixel = scale * 60 * 1000 / 120;
         long key = item.getKey().longValue();
         firstKey = (double) (key - key % msOnPixel);
         lastKey = firstKey + msOnPixel;

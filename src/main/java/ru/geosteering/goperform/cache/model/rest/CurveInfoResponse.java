@@ -1,16 +1,22 @@
 package ru.geosteering.goperform.cache.model.rest;
 
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Setter;
 import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
 import ru.geosteering.goperform.cache.utils.CustomDoubleSerializer;
-import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.*;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.CsAxisDefinition;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
+import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
 
 import java.util.List;
 import java.util.Set;
 
 @Getter
 @Setter
+@Builder
 @AllArgsConstructor
 public class CurveInfoResponse {
 
@@ -38,4 +44,5 @@ public class CurveInfoResponse {
     @JsonSerialize(using = CustomDoubleSerializer.class)
     private Double maxLoadedKey;
     private boolean waitReload;
+    private Boolean initializing;
 }

@@ -43,7 +43,21 @@ public class CurveController {
         log.info("By-time request id {}, from {}, to {}, scale {}", id, from, to, scale);
         Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
         Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
+
         return new ResponseEntity<>(service.getCurveData(id, doubleFrom, doubleTo, scale), HttpStatus.OK);
+    }
+
+    @GetMapping("/{id}/coordinates/by-time/linear")
+    public ResponseEntity<List<?>> getByTimeChunks(@PathVariable Long id,
+                                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+                                                   @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+                                                   @RequestParam(required = false) Integer scale) {
+
+        log.info("Chunks request id {}, from {}, to {}, scale {}", id, from, to, scale);
+        Double doubleFrom = from == null ? null : (double) from.toInstant().toEpochMilli();
+        Double doubleTo = to == null ? null : (double) to.toInstant().toEpochMilli();
+
+        return new ResponseEntity<>(service.getLinearCurveData(id, doubleFrom, doubleTo, scale), HttpStatus.OK);
     }
 
     @GetMapping("/{id}/coordinates/by-depth")
@@ -80,9 +94,9 @@ public class CurveController {
     }
 
     @GetMapping("/multi")
-    public ResponseEntity<CurveInfoResponse[]> getCurveInfo(@RequestParam Long[] ids) {
+    public ResponseEntity<List<CurveInfoResponse>> getCurveInfo(@RequestParam Long[] ids) {
         log.info("Curve-info request ids {}", Arrays.toString(ids));
-        CurveInfoResponse[] infos = service.getCurveInfoResponse(ids);
+        List<CurveInfoResponse> infos = service.getCurveInfoResponse(ids);
         for (CurveInfoResponse cir : infos) {
             if (cir == null) {
                 return new ResponseEntity<>(infos, HttpStatus.ACCEPTED);

@@ -600,7 +600,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 : new BigDecimal(key).setScale(4, RoundingMode.UP).stripTrailingZeros().toPlainString(); // FIXME: зачем округление?
     }
 
-    private void sendWsMessage(WsMessage message) {
+    public void sendWsMessage(WsMessage message) {
         dispatcher.webSocketMessageProcessor.sendMessage(info.getId(), message);
     }
 

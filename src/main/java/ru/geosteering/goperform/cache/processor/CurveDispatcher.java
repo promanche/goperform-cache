@@ -156,29 +156,31 @@ public class CurveDispatcher implements ConnectionEventListener {
         Set<Long> savedCurvesWithState = curvesLastChange.keySet();
         infoIds.removeAll(savedCurvesWithState);
 
-        if (!infoIds.isEmpty()) {
-            Map<ApiServiceRestClientService.WellState, List<Long>> allWellsCurves = apiServiceRestClientService.getAllWellsCurves(infoIds);
-            infoIds.forEach(id -> {
-
-                LocalDateTime lastChange = curvesLastChange.get(id);
-                for (Map.Entry<ApiServiceRestClientService.WellState, List<Long>> entry : allWellsCurves.entrySet()) {
-                    if (entry.getValue().contains(id)) {
-                        if (lastChange == null) {
-                            switch (entry.getKey().getState()) {
-                                case "WELL_GREEN" -> lastChange = LocalDateTime.now();
-                                case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
-                                case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
-                                case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
-                            }
-                            curvesLastChange.put(id, lastChange);
-                        }
-                        log.debug("Curve {} last change was {}", id, lastChange);
-                        repository.saveOrUpdateState(
-                                new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getWellId().toString()));
-                    }
-                }
-            });
+        if (infoIds.isEmpty()) {
+            return;
         }
+        Map<ApiServiceRestClientService.WellState, List<Long>> allWellsCurves = apiServiceRestClientService.getAllWellsCurves(infoIds);
+        infoIds.forEach(id -> {
+
+            LocalDateTime lastChange = curvesLastChange.get(id);
+            for (Map.Entry<ApiServiceRestClientService.WellState, List<Long>> entry : allWellsCurves.entrySet()) {
+                if (entry.getValue().contains(id)) {
+                    if (lastChange == null) {
+                        switch (entry.getKey().getState()) {
+                            case "WELL_GREEN" -> lastChange = LocalDateTime.now();
+                            case "WELL_YELLOW" -> lastChange = LocalDateTime.now().minusMinutes(10);
+                            case "WELL_RED" -> lastChange = LocalDateTime.now().minusDays(1);
+                            case "WELL" -> lastChange = LocalDateTime.now().minusDays(30);
+                        }
+                        curvesLastChange.put(id, lastChange);
+                    }
+                    log.debug("Curve {} last change was {}", id, lastChange);
+                    repository.saveOrUpdateState(
+                            new PerformCacheState(id, lastChange.atOffset(ZoneOffset.UTC), entry.getKey().getWellId().toString()));
+                }
+            }
+        });
+
     }
 
     @Override
@@ -250,6 +252,10 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     protected void incrementHistCount(int count) {
         histCount.addAndGet(count);
+    }
+
+    public boolean isCurveProcessorPresent(Long id) {
+        return processors.containsKey(id);
     }
 
     public SingleCurveProcessor getCurveProcessor(Long id, boolean fromRest) {
