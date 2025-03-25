@@ -81,7 +81,7 @@ public class SegmentProcessor {
         return segments.stream()
                 .filter(segment -> Double.compare(segment.getFirstKey(), from) >= 0
                         && Double.compare(segment.getLastKey(), to) < 0)
-                .toList();
+                .collect(Collectors.toList());
 
     }
 
