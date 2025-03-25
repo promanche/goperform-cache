@@ -70,7 +70,7 @@ public class SegmentProcessor {
 
     public List<CurveSegment> getSegmentFromCache(Double from, Double to, Integer scale) {
         if (!segmentCache.containsKey(scale))
-            return Collections.emptyList();
+            return new ArrayList<>();
 
         var segments = segmentCache.get(scale);
 
