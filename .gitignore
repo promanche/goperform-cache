@@ -43,3 +43,5 @@ bin/
 /creds/
 /src/main/java/ru/geosteering/goperform/cache/local/
 /out/
+/run/secrets/
+/.env
