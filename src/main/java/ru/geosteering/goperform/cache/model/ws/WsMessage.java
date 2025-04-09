@@ -1,6 +1,9 @@
 package ru.geosteering.goperform.cache.model.ws;
 
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 @Getter
 @Setter
@@ -14,6 +17,7 @@ public abstract class WsMessage {
     public enum MessageType {
         POINT,
         PART,
-        LOADED
+        LOADED,
+        PROCESSOR_INIT
     }
 }

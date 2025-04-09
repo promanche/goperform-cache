@@ -20,6 +20,9 @@ public interface CurveInfoMapper {
     @Select("select data from info where curve_id=#{id}")
     String get(@Param("id") Long id);
 
+    @Select("select data from info where curve_id in (${ids})")
+    List<String> getAllByIds(@Param("ids") String ids);
+
     @Select("select curve_id from info")
     List<Long> getAllIds();
 

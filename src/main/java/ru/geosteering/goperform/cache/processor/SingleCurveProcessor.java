@@ -191,7 +191,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         } else if (!isDateTimeCurve){
             updateReloadData(item);
         }
-
     }
 
     public synchronized void onDataEndMessage(DataEndMessage message) {

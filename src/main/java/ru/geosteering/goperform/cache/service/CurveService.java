@@ -1,6 +1,8 @@
 package ru.geosteering.goperform.cache.service;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import io.nats.client.Message;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ import ru.geosteering.goperform.cache.model.rest.Comment;
 import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
 import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
 import ru.geosteering.goperform.cache.model.rest.MultiResponse;
+import ru.geosteering.goperform.cache.model.ws.ProcessorMessage;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
@@ -37,7 +40,9 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 @Service
@@ -51,7 +56,7 @@ public class CurveService {
     private final AuthManager authManager;
 
 
-    public void checkCurve(Long id, Integer scale) {
+    private void checkCurve(Long id, Integer scale) {
         if (curveDispatcher.getCurveProcessor(id, true) == null) {
             throw new CurveProcessorNotExistException();
         }
@@ -95,6 +100,108 @@ public class CurveService {
 
         var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
         result.addAll(curveProcessor.getTail(from, to));
+
+        return result;
+    }
+
+    /**
+     * Метод возвращает данные кривой(точки, штрихи) в линейном формате.
+     * Линейный формат представляет собой список непрерывающихся элементов с одинаковым шагом,
+     * 0й - элемент начало чанка, 1й - шаг и далее последовательность значений элементов
+     *
+     * @param id
+     * @param from
+     * @param to
+     * @param scale
+     * @return массив чанков
+     */
+    public List<List<Double>> getLinearCurveData(Long id, Double from, Double to, Integer scale) {
+        checkCurve(id, scale);
+
+        log.debug("Begin response preparing for id {}", id);
+
+        if (from != null || to != null) {
+            from = from == null ? Double.MIN_VALUE : from;
+            to = to == null ? Double.MAX_VALUE : to;
+        }
+        List<List<Double>> result;
+        if (isApproximatedScale(scale)) {
+            result = getLinearSegments(id, from, to, scale);
+        } else {
+            result = getLinearItems(id, from, to);
+        }
+
+        log.info("Response for id {} prepared. Result list size: {}", id, result.size());
+
+        return result;
+    }
+
+    private List<List<Double>> getLinearSegments(Long id, Double from, Double to, Integer scale) {
+        var result = repository.getSegmentsFromTo(id, scale, from, to)
+                .stream()
+                .map(str -> StaticMapper.parseListOf(str, CurveSegment.class))
+                .flatMap(segments -> mapToLinearSegments(segments).stream())
+                .collect(Collectors.toList());
+
+        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+        var segmentProcessor = curveProcessor.getSegmentProcessor();
+        List<CurveSegment> segmentFromCache = segmentProcessor.getSegmentFromCache(from, to, scale);
+        segmentProcessor.addItemsToSegments(curveProcessor.getTail(from, to), scale, segmentFromCache);
+
+        result.addAll(mapToLinearSegments(segmentFromCache));
+
+        return result;
+    }
+
+    private List<List<Double>> getLinearItems(Long id, Double from, Double to) {
+        var result = repository.getItemsFromTo(id, from, to)
+                .stream()
+                .map(str -> StaticMapper.parseListOf(str, CurveItem.class))
+                .flatMap(items -> mapToLinearItems(items).stream())
+                .collect(Collectors.toList());
+
+        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+        result.addAll(mapToLinearItems(curveProcessor.getTail(from, to)));
+
+        return result;
+    }
+
+    private List<List<Double>> mapToLinearSegments(List<CurveSegment> segments) {
+        if (segments == null || segments.isEmpty()) return Collections.emptyList();
+        var result = new ArrayList<List<Double>>();
+        var previousItem = segments.get(0);
+        var chunk = new ChunkSegment(previousItem);
+        for (int i = 1; i < segments.size(); i++) {
+            var segment = segments.get(i);
+            if (chunk.allowsToAddNext(segment))
+                chunk.addItem(segment);
+            else {
+                result.add(chunk.getValues());
+                chunk = new ChunkSegment(segment);
+            }
+            previousItem = segment;
+        }
+        result.add(chunk.getValues());
+
+        return result;
+    }
+
+    private List<List<Double>> mapToLinearItems(List<CurveItem> items) {
+        if (items == null || items.isEmpty()) return Collections.emptyList();
+        var result = new ArrayList<List<Double>>();
+        var previousItem = items.get(0);
+        var chunk = new Chunk(previousItem);
+        for (int i = 1; i < items.size(); i++) {
+            var item = items.get(i);
+            if (chunk.allowsToAddNext(item))
+                chunk.addItem(item);
+            else {
+                result.add(chunk.getValues());
+                chunk = new Chunk(item);
+            }
+            previousItem = item;
+        }
+        result.add(chunk.getValues());
 
         return result;
     }
@@ -262,23 +369,68 @@ public class CurveService {
                 curveProcessor.getLoadStatus(),
                 info.getMinLoadedKey(),
                 info.getMaxLoadedKey(),
-                curveProcessor.getReloadData() != null);
+                curveProcessor.getReloadData() != null,
+                true);
     }
 
-    public CurveInfoResponse[] getCurveInfoResponse(Long[] ids) {
-        CurveInfoResponse[] response = new CurveInfoResponse[ids.length];
-
-        for (int i = 0; i < response.length; i++) {
-            CurveInfoResponse cir = null;
-            try {
-                cir = getCurveInfoResponse(ids[i]);
-            } catch (Exception e) {
-                log.info(ids[i] + " " + e.getMessage());
-            }
-            response[i] = cir;
+    public List<CurveInfoResponse> getCurveInfoResponse(Long[] ids) {
+        Long[] checked = authManager.checkBatchDeniedAccess(ids);
+        if (checked.length == 0) {
+            return null;
         }
+        List<CurveInfoResponse> response = new ArrayList<>();
+        List<Long> noProcessorIds = new ArrayList<>();
+        Arrays.stream(checked)
+                .forEach(id -> {
+                    if (curveDispatcher.isCurveProcessorPresent(id)) {
+                        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+                        var info = curveProcessor.getInfo();
+                        var cir = map(info);
+                        cir.saved(curveProcessor.getSavedCount())
+                                .initializing(false)
+                                .scaleSet(curveProcessor.getScaleSet())
+                                .status(curveProcessor.getLoadStatus())
+                                .waitReload(curveProcessor.getReloadData() != null);
+                        response.add(cir.build());
+                    } else {
+                        noProcessorIds.add(id);
+                    }
+                });
 
+        if (!noProcessorIds.isEmpty()) {
+            CompletableFuture.runAsync(() -> noProcessorIds
+                    .forEach(id -> {
+                        var processor = curveDispatcher.getCurveProcessor(id, true);
+                        if (processor != null)
+                            processor.sendWsMessage(new ProcessorMessage(id));
+                    }));
+
+            repository.getInfos(noProcessorIds)
+                    .forEach(info -> {
+                        var cir = map(info);
+                        cir.initializing(true);
+                        response.add(cir.build());
+                    });
+        }
         return response;
+    }
+
+    private CurveInfoResponse.CurveInfoResponseBuilder map(ExtraCurveInfo info) {
+        return CurveInfoResponse.builder()
+                .id(info.getId())
+                .mnemonic(info.getMnemonic())
+                .indexType(info.getIndexType())
+                .unit(info.getUnit())
+                .axisDefinition(info.getAxisDefinition())
+                .classWitsml(info.getClassWitsml())
+                .typeLogData(info.getTypeLogData())
+                .maxValue(info.getMaxValue())
+                .minValue(info.getMinValue())
+                .maxKey(info.getMaxKey())
+                .minKey(info.getMinKey())
+                .lastValue(info.getLastValue())
+                .minLoadedKey(info.getMinLoadedKey())
+                .maxLoadedKey(info.getMaxLoadedKey());
     }
 
     public Long createCurve(CreateCurveRequest req) {
@@ -390,6 +542,70 @@ public class CurveService {
             } else {
                 throw new BadRequestException(statusMessage.getMessage());
             }
+        }
+    }
+
+    @Getter
+    public static class Chunk {
+
+        private final List<Double> values = new ArrayList<>();
+        private CurveItem lastItem;
+
+        public Chunk(CurveItem item) {
+            values.add(item.getKey());
+            values.add(0d);
+            values.add((Double) item.getValue());
+            lastItem = item;
+        }
+
+        public boolean allowsToAddNext(CurveItem item) {
+            var step = item.getKey() - lastItem.getKey();
+            return this.getStep() == 0 || Double.compare(this.getStep(), step) == 0;
+        }
+
+        @JsonIgnore
+        public Double getStep() {
+            return values.get(1);
+        }
+
+        public void addItem(CurveItem item) {
+            if (Double.compare(getStep(), 0) == 0) {
+                values.set(1, item.getKey() - values.get(0));
+            }
+            values.add((Double) item.getValue());
+            lastItem = item;
+        }
+    }
+
+    @Getter
+    public static class ChunkSegment {
+
+        private final List<Double> values = new ArrayList<>();
+        private CurveSegment lastSegment;
+
+        public ChunkSegment(CurveSegment segment) {
+            lastSegment = segment;
+            values.add(segment.getFirstKey());
+            values.add(segment.getLastKey() - segment.getFirstKey());
+            values.add(segment.getMinVal());
+            values.add(segment.getMaxVal());
+        }
+
+        public boolean allowsToAddNext(CurveSegment segment) {
+            var step = segment.getLastKey() - segment.getFirstKey();
+            return Double.compare(this.lastSegment.getLastKey(), segment.getFirstKey()) == 0 &&
+                    Double.compare(this.getStep(), step) == 0;
+        }
+
+        @JsonIgnore
+        public Double getStep() {
+            return values.get(1);
+        }
+
+        public void addItem(CurveSegment segment) {
+            values.add(segment.getMinVal());
+            values.add(segment.getMaxVal());
+            lastSegment = segment;
         }
     }
 }
