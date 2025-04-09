@@ -178,20 +178,19 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             return;
         }
 
-        //Если есть последняя сохраненная точка и пришедшая точка старше ее, то обновляем данные для перезагрузки кривой
-        if (lastSaved != null && compareItems(item, lastSaved) <= 0) {
+        if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
+            if (!loadBuffer.isEmpty() && Double.compare(item.getKey(), loadBuffer.last().getKey()) < 0) {
+                log.warn("Curve {} real time point {} precedes last history point {}", info.getId(), item, loadBuffer.last());
+            }
+            realItemCache.add(item);
+
+            saveCachedItems(true);
+            updateInfo(item);
+            sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
+
+        } else if (!isDateTimeCurve){
             updateReloadData(item);
-            return;
         }
-
-        if (!loadBuffer.isEmpty() && compareItems(item, loadBuffer.last()) < 0) {
-            log.warn("Curve {} real time point {} precedes last history point {}", info.getId(), item, loadBuffer.last());
-        }
-        realItemCache.add(item);
-
-        saveCachedItems(true);
-        updateInfo(item);
-        sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
     }
 
     public synchronized void onDataEndMessage(DataEndMessage message) {
@@ -600,7 +599,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 : new BigDecimal(key).setScale(4, RoundingMode.UP).stripTrailingZeros().toPlainString(); // FIXME: зачем округление?
     }
 
-    public void sendWsMessage(WsMessage message) {
+    private void sendWsMessage(WsMessage message) {
         dispatcher.webSocketMessageProcessor.sendMessage(info.getId(), message);
     }
 
