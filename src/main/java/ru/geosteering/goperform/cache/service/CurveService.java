@@ -115,7 +115,7 @@ public class CurveService {
      * @param scale
      * @return массив чанков
      */
-    public List<List<Double>> getLinearCurveData(Long id, Double from, Double to, Integer scale) {
+    public List<List<Object>> getLinearCurveData(Long id, Double from, Double to, Integer scale) {
         checkCurve(id, scale);
 
         log.debug("Begin response preparing for id {}", id);
@@ -124,7 +124,7 @@ public class CurveService {
             from = from == null ? Double.MIN_VALUE : from;
             to = to == null ? Double.MAX_VALUE : to;
         }
-        List<List<Double>> result;
+        List<List<Object>> result;
         if (isApproximatedScale(scale)) {
             result = getLinearSegments(id, from, to, scale);
         } else {
@@ -136,7 +136,7 @@ public class CurveService {
         return result;
     }
 
-    private List<List<Double>> getLinearSegments(Long id, Double from, Double to, Integer scale) {
+    private List<List<Object>> getLinearSegments(Long id, Double from, Double to, Integer scale) {
         var result = repository.getSegmentsFromTo(id, scale, from, to)
                 .stream()
                 .map(str -> StaticMapper.parseListOf(str, CurveSegment.class))
@@ -153,7 +153,7 @@ public class CurveService {
         return result;
     }
 
-    private List<List<Double>> getLinearItems(Long id, Double from, Double to) {
+    private List<List<Object>> getLinearItems(Long id, Double from, Double to) {
         var result = repository.getItemsFromTo(id, from, to)
                 .stream()
                 .map(str -> StaticMapper.parseListOf(str, CurveItem.class))
@@ -166,9 +166,9 @@ public class CurveService {
         return result;
     }
 
-    private List<List<Double>> mapToLinearSegments(List<CurveSegment> segments) {
+    private List<List<Object>> mapToLinearSegments(List<CurveSegment> segments) {
         if (segments == null || segments.isEmpty()) return Collections.emptyList();
-        var result = new ArrayList<List<Double>>();
+        var result = new ArrayList<List<Object>>();
         var previousItem = segments.get(0);
         var chunk = new ChunkSegment(previousItem);
         for (int i = 1; i < segments.size(); i++) {
@@ -179,16 +179,15 @@ public class CurveService {
                 result.add(chunk.getValues());
                 chunk = new ChunkSegment(segment);
             }
-            previousItem = segment;
         }
         result.add(chunk.getValues());
 
         return result;
     }
 
-    private List<List<Double>> mapToLinearItems(List<CurveItem> items) {
+    private List<List<Object>> mapToLinearItems(List<CurveItem> items) {
         if (items == null || items.isEmpty()) return Collections.emptyList();
-        var result = new ArrayList<List<Double>>();
+        var result = new ArrayList<List<Object>>();
         var previousItem = items.get(0);
         var chunk = new Chunk(previousItem);
         for (int i = 1; i < items.size(); i++) {
@@ -199,7 +198,6 @@ public class CurveService {
                 result.add(chunk.getValues());
                 chunk = new Chunk(item);
             }
-            previousItem = item;
         }
         result.add(chunk.getValues());
 
@@ -548,13 +546,13 @@ public class CurveService {
     @Getter
     public static class Chunk {
 
-        private final List<Double> values = new ArrayList<>();
+        private final List<Object> values = new ArrayList<>();
         private CurveItem lastItem;
 
         public Chunk(CurveItem item) {
             values.add(item.getKey());
             values.add(0d);
-            values.add((Double) item.getValue());
+            values.add(item.getValue());
             lastItem = item;
         }
 
@@ -565,14 +563,14 @@ public class CurveService {
 
         @JsonIgnore
         public Double getStep() {
-            return values.get(1);
+            return (Double) values.get(1);
         }
 
         public void addItem(CurveItem item) {
             if (Double.compare(getStep(), 0) == 0) {
-                values.set(1, item.getKey() - values.get(0));
+                values.set(1, item.getKey() - (Double) values.get(0));
             }
-            values.add((Double) item.getValue());
+            values.add(item.getValue());
             lastItem = item;
         }
     }
@@ -580,7 +578,7 @@ public class CurveService {
     @Getter
     public static class ChunkSegment {
 
-        private final List<Double> values = new ArrayList<>();
+        private final List<Object> values = new ArrayList<>();
         private CurveSegment lastSegment;
 
         public ChunkSegment(CurveSegment segment) {
@@ -599,7 +597,7 @@ public class CurveService {
 
         @JsonIgnore
         public Double getStep() {
-            return values.get(1);
+            return (Double) values.get(1);
         }
 
         public void addItem(CurveSegment segment) {
