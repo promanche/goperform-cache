@@ -11,6 +11,7 @@ import ru.geosteering.commonModels.dataService.responses.ApiMessage;
 import ru.geosteering.commonModels.dataService.responses.CurveDataMessage;
 import ru.geosteering.commonModels.dataService.responses.DataEndMessage;
 import ru.geosteering.commonModels.dataService.responses.StatusMessage;
+import ru.geosteering.goperform.cache.config.Config;
 import ru.geosteering.goperform.cache.exception.NullResponseException;
 import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.ExtraCurveInfo;
@@ -18,8 +19,9 @@ import ru.geosteering.goperform.cache.model.ws.LoadedMessage;
 import ru.geosteering.goperform.cache.model.ws.PartMessage;
 import ru.geosteering.goperform.cache.model.ws.PointMessage;
 import ru.geosteering.goperform.cache.model.ws.WsMessage;
-import ru.geosteering.goperform.cache.nats.ConnectionEventListener;
 import ru.geosteering.goperform.cache.nats.NatsConnector;
+import ru.geosteering.goperform.cache.processor.request.RequestTask;
+import ru.geosteering.goperform.cache.processor.request.RequestType;
 import ru.geosteering.goperform.cache.repository.dto.ItemDto;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
@@ -70,7 +72,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * Если в реалтайм получена точка старше {@link #lastSaved}, кривая подлежит перезагрузке. См. {@link #reload()}
  */
 @Slf4j
-public class SingleCurveProcessor implements ConnectionEventListener {
+public class SingleCurveProcessor {
 
     /**
      * Промежуток времени после {@link #lastMinMaxErrorReported}, на который блокируются последующие сообщения
@@ -81,6 +83,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     protected final CurveDispatcher dispatcher;
     @Getter
     protected final SegmentProcessor segmentProcessor;
+    private final Config config;
     private final boolean isApproximated;
     @Getter
     private final boolean isDateTimeCurve;
@@ -120,6 +123,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         this.fromRest = fromRest;
         this.dispatcher = dispatcher;
 
+        this.config = dispatcher.config;
         isDateTimeCurve = info.getIndexType() != LogIndexType.MEASURED_DEPTH;
 
         isApproximated = isDateTimeCurve && isNumeric();
@@ -143,12 +147,10 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         return realItemCache.size() + historyItemCache.size() + loadBuffer.size();
     }
 
-    @Override
     public synchronized void onConnect() {
         addRequestJob();
     }
 
-    @Override
     public synchronized void onDisconnect() {
         toggleLoadStatus(LoadStatus.UNKNOWN);
         realItemCache.clear();
@@ -184,11 +186,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
             }
             realItemCache.add(item);
 
-            saveCachedItems(true);
+            //Сохраняем точки реалтайм в БД, если кривая вся загружена
+            if (loadStatus == LoadStatus.LOADED) saveCachedItems(true);
             updateInfo(item);
             sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
-        } else if (!isDateTimeCurve){
+        } else if (!isDateTimeCurve) {
             updateReloadData(item);
         }
     }
@@ -196,7 +199,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     public synchronized void onDataEndMessage(DataEndMessage message) {
         int sent = message.getSentCount();
         int received = historyPoints.getAndSet(0);
-        dispatcher.incrementHistCount(received);
 
         log.debug("End msg for {}: {},first point {}, last point {}", getInfo().getId(), message, loadBuffer.isEmpty() ? null : loadBuffer.first(), loadBuffer.isEmpty() ? null : loadBuffer.last());
 
@@ -253,7 +255,6 @@ public class SingleCurveProcessor implements ConnectionEventListener {
     }
 
     private void saveCachedItems(boolean isReal) {
-        if (isReal && loadStatus != LoadStatus.LOADED) return;
         TreeSet<CurveItem> curveItems;
         if (isReal) curveItems = realItemCache;
         else curveItems = historyItemCache;
@@ -339,7 +340,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
         }
 
         reloadData.from = reloadData.from != null && Double.compare(reloadData.from, from) < 0 ? reloadData.from : from;
-        dispatcher.removeLoadTask(info.getId(), skipLogging);
+        dispatcher.getRequestManager().removeLoadTask(info.getId(), skipLogging);
     }
 
     protected synchronized void reload() {
@@ -472,12 +473,12 @@ public class SingleCurveProcessor implements ConnectionEventListener {
 
     private void addRequestJob() {
         loadBuffer.clear();
-        CurveDispatcher.RequestType requestType = fromRest ? CurveDispatcher.RequestType.LOAD_REST : CurveDispatcher.RequestType.LOAD_ACTIVE;
+        RequestType requestType = fromRest ? RequestType.LOAD_REST : RequestType.LOAD_ACTIVE;
         if (isReload) {
-            requestType = CurveDispatcher.RequestType.RELOAD;
+            requestType = RequestType.RELOAD;
             isReload = false;
         }
-        dispatcher.addRequestTask(new CurveDispatcher.RequestTask(info.getId(), requestType, this::doItemsRequest));
+        dispatcher.getRequestManager().addRequestTask(new RequestTask(info.getId(), requestType, this::doItemsRequest));
         toggleLoadStatus(LoadStatus.IN_QUEUE);
     }
 
@@ -599,7 +600,7 @@ public class SingleCurveProcessor implements ConnectionEventListener {
                 : new BigDecimal(key).setScale(4, RoundingMode.UP).stripTrailingZeros().toPlainString(); // FIXME: зачем округление?
     }
 
-    private void sendWsMessage(WsMessage message) {
+    public void sendWsMessage(WsMessage message) {
         dispatcher.webSocketMessageProcessor.sendMessage(info.getId(), message);
     }
 
