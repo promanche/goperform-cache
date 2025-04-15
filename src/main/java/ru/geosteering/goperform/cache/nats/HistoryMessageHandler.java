@@ -73,6 +73,7 @@ public class HistoryMessageHandler implements MessageHandler, ConnectionEventLis
 
     @PreDestroy
     public void waitTerminated() {
+        if (executor == null) return;
         try {
             executor.shutdown();
             while (!executor.isTerminated()) {
