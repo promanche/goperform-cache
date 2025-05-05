@@ -19,6 +19,8 @@ import ru.geosteering.goperform.cache.processor.request.RequestTask;
 import ru.geosteering.goperform.cache.processor.request.RequestType;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
+import static ru.geosteering.goperform.cache.processor.SingleCurveProcessor.LoadStatus;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -54,6 +56,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final StatisticCollector statisticCollector;
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
+    private static final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
      * Периодический сбор статистики.
@@ -246,6 +249,8 @@ public class CurveDispatcher implements ConnectionEventListener {
 
     /**
      * Возвращает обработчик кривой или создает новый, если его нет.
+     * Если процессор отсутствует, инициирует асинхронную загрузку данных и публикует статус LOADING в общий топик NATS.
+     * После завершения загрузки публикуется статус LOADED.
      *
      * @param curveId  ID кривой.
      * @param fromRest Флаг, указывающий, был ли запрос инициирован через REST.
@@ -257,6 +262,14 @@ public class CurveDispatcher implements ConnectionEventListener {
             SingleCurveProcessor processor = createSingleCurveProcessor(key, fromRest);
             if (processor == null) {
                 requestCurveInfo(curveId, fromRest);
+                try {
+                    CurveStatusMessage statusMsg = new CurveStatusMessage(curveId, LoadStatus.IN_QUEUE);
+                    String message = objectMapper.writeValueAsString(statusMsg);
+                    String subject = "curve.status";
+                    NatsConnector.publish(subject, message.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                    log.error("Failed to serialize CurveStatusMessage for curveId {}: {}", curveId, e.getMessage(), e);
+                }
             }
             curveStateManager.changed(curveId);
             return processor;
@@ -264,7 +277,8 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Создает запрос на получение информации о кривой.
+     * Создает запрос на получение информации о кривой и инициирует асинхронную загрузку.
+     * Используется для реализации request-reply паттерна: после старта загрузки публикуется LOADING, после завершения — LOADED.
      *
      * @param curveId  ID кривой.
      * @param fromRest Флаг, указывающий, был ли запрос инициирован через REST.
@@ -295,7 +309,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Выполняет запрос информации о кривой.
+     * Выполняет запрос информации о кривой и публикует статус LOADED в общий топик после завершения загрузки.
      *
      * @param curveId  ID кривой.
      * @param fromRest Флаг, указывающий, был ли запрос инициирован через REST.
@@ -325,6 +339,15 @@ public class CurveDispatcher implements ConnectionEventListener {
                     repository.saveOrUpdateInfo(info);
                     processors.computeIfAbsent(curveInfo.getId(), k -> {
                         log.info("Created new processor for curve ID: {} after info request", k);
+                        // Публикуем статус LOADED в общий топик
+                        try {
+                            CurveStatusMessage statusMsg = new CurveStatusMessage(k, LoadStatus.LOADED);
+                            String message = objectMapper.writeValueAsString(statusMsg);
+                            String subject = "curve.status";
+                            NatsConnector.publish(subject, message.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                        } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+                            log.error("Failed to serialize CurveStatusMessage for curveId {}: {}", k, e.getMessage(), e);
+                        }
                         return new SingleCurveProcessor(info, fromRest, this);
                     });
                 }
@@ -448,5 +471,15 @@ public class CurveDispatcher implements ConnectionEventListener {
         requestManager.removeLoadTask(curveId, true);
         processors.remove(curveId);
         log.info("Removed processor for curve ID: {}", curveId);
+    }
+
+    // Вспомогательный класс для статуса
+    class CurveStatusMessage {
+        public Long curveId;
+        public LoadStatus status;
+        public CurveStatusMessage(Long curveId, LoadStatus status) {
+            this.curveId = curveId;
+            this.status = status;
+        }
     }
 }

@@ -112,6 +112,16 @@ public class NatsConnector {
         return response;
     }
 
+    public static void publish(String subject, byte[] data) {
+        if (isConnected()) {
+            try {
+                connection.publish(subject, data);
+            } catch (Exception e) {
+                log.error("Publish exception: {}", e.getMessage(), e);
+            }
+        }
+    }
+
     @PreDestroy
     private void closeConnection() {
         try {
