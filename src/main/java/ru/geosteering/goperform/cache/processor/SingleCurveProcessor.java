@@ -26,6 +26,7 @@ import ru.geosteering.goperform.cache.repository.dto.ItemDto;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogDataType;
 import ru.geosteering.witsmlLibrary.witsml.dataObjs.v131.LogIndexType;
+import ru.geosteering.goperform.cache.processor.CurveDispatcher.CurveStatusMessage;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -231,6 +232,11 @@ public class SingleCurveProcessor {
             toggleLoadStatus(LoadStatus.LOADED);
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
+
+            CurveStatusMessage statusMsg = new CurveStatusMessage(info.getId(), LoadStatus.LOADED);
+            String statusMessage = StaticMapper.toJson(statusMsg);
+            String subject = "curve.status";
+            NatsConnector.publish(subject, statusMessage.getBytes(java.nio.charset.StandardCharsets.UTF_8));
 
         } else if (sent != received) {
             log.error("Curve {} received count {} not equals to sent {}", info.getId(), received, sent);
