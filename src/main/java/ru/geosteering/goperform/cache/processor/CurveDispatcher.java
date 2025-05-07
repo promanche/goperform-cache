@@ -19,8 +19,6 @@ import ru.geosteering.goperform.cache.processor.request.RequestTask;
 import ru.geosteering.goperform.cache.processor.request.RequestType;
 import ru.geosteering.goperform.cache.repository.MainRepository;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
-import static ru.geosteering.goperform.cache.processor.SingleCurveProcessor.LoadStatus;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -30,6 +28,9 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
+
+import static ru.geosteering.goperform.cache.processor.SingleCurveProcessor.LoadStatus;
+
 
 /**
  * Диспетчер обработчиков кривых.
@@ -56,7 +57,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final StatisticCollector statisticCollector;
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
-    private static final ObjectMapper objectMapper = new ObjectMapper();
+ 
 
     /**
      * Периодический сбор статистики.
@@ -260,10 +261,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             SingleCurveProcessor processor = createSingleCurveProcessor(key, fromRest);
             if (processor == null) {
                 requestCurveInfo(curveId, fromRest);
-                CurveStatusMessage statusMsg = new CurveStatusMessage(curveId, LoadStatus.IN_QUEUE);
-                String message = StaticMapper.toJson(statusMsg);
-                String subject = "curve.status";
-                NatsConnector.publish(subject, message.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                CurveStatusNotifier.notifyStatus(curveId, LoadStatus.IN_QUEUE);
             }
             curveStateManager.changed(curveId);
             return processor;
