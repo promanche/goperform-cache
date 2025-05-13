@@ -67,6 +67,12 @@ public class CurveController {
         return getWithoutParams(id);
     }
 
+    @GetMapping("/{id}/coordinates/simplify")
+    public ResponseEntity<List<?>> getSimplified(@PathVariable Long id, @RequestParam double epsilon) {
+        log.info("Simplified request id {}", id);
+        return new ResponseEntity<>(service.getSimplifiedCurveData(id, epsilon), HttpStatus.OK);
+    }
+
     @GetMapping("/{id}/coordinates/image")
     public ResponseEntity<List<?>> getImage(@PathVariable Long id) {
 

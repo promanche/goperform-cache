@@ -54,6 +54,7 @@ public class CurveService {
     private final Config config;
     private final MainRepository repository;
     private final AuthManager authManager;
+    private final CurveSimplificationService curveSimplificationService;
 
 
     private void checkCurve(Long id, Integer scale) {
@@ -134,6 +135,14 @@ public class CurveService {
         log.info("Response for id {} prepared. Result list size: {}", id, result.size());
 
         return result;
+    }
+
+    public List<?> getSimplifiedCurveData(Long id, double epsilon) {
+        var items = repository.getItemsFromTo(id, null, null)
+                .stream()
+                .flatMap(str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
+                .toList();
+        return curveSimplificationService.simplify(items, epsilon);
     }
 
     private List<List<Object>> getLinearSegments(Long id, Double from, Double to, Integer scale) {
