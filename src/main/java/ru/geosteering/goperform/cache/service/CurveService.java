@@ -138,6 +138,10 @@ public class CurveService {
     }
 
     public List<?> getSimplifiedCurveData(Long id, double epsilon) {
+        checkCurve(id, null);
+
+        log.debug("Begin response preparing for id {}", id);
+
         var items = repository.getItemsFromTo(id, null, null)
                 .stream()
                 .flatMap(str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
