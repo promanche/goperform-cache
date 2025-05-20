@@ -29,6 +29,9 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.LockSupport;
 
+import static ru.geosteering.goperform.cache.processor.SingleCurveProcessor.LoadStatus;
+
+
 /**
  * Диспетчер обработчиков кривых.
  * <p>
@@ -54,6 +57,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     private final StatisticCollector statisticCollector;
     private final Map<Long, SingleCurveProcessor> processors = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> brokenCurves = new ConcurrentHashMap<>();
+ 
 
     /**
      * Периодический сбор статистики.
@@ -257,6 +261,7 @@ public class CurveDispatcher implements ConnectionEventListener {
             SingleCurveProcessor processor = createSingleCurveProcessor(key, fromRest);
             if (processor == null) {
                 requestCurveInfo(curveId, fromRest);
+                CurveStatusNotifier.notifyStatus(curveId, LoadStatus.IN_QUEUE);
             }
             curveStateManager.changed(curveId);
             return processor;
@@ -264,7 +269,8 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Создает запрос на получение информации о кривой.
+     * Создает запрос на получение информации о кривой и инициирует асинхронную загрузку.
+     * Используется для реализации request-reply паттерна: после старта загрузки публикуется LOADING, после завершения — LOADED.
      *
      * @param curveId  ID кривой.
      * @param fromRest Флаг, указывающий, был ли запрос инициирован через REST.
@@ -295,7 +301,7 @@ public class CurveDispatcher implements ConnectionEventListener {
     }
 
     /**
-     * Выполняет запрос информации о кривой.
+     * Выполняет запрос информации о кривой и публикует статус LOADED в общий топик после завершения загрузки.
      *
      * @param curveId  ID кривой.
      * @param fromRest Флаг, указывающий, был ли запрос инициирован через REST.
@@ -448,5 +454,15 @@ public class CurveDispatcher implements ConnectionEventListener {
         requestManager.removeLoadTask(curveId, true);
         processors.remove(curveId);
         log.info("Removed processor for curve ID: {}", curveId);
+    }
+
+    // Вспомогательный класс для статуса
+    public static class CurveStatusMessage {
+        public Long curveId;
+        public LoadStatus status;
+        public CurveStatusMessage(Long curveId, LoadStatus status) {
+            this.curveId = curveId;
+            this.status = status;
+        }
     }
 }

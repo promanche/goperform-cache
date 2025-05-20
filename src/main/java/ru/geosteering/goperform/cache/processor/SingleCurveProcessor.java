@@ -232,6 +232,8 @@ public class SingleCurveProcessor {
             sendWsMessage(new LoadedMessage(info.getId()));
             log.info("Curve {} data loaded, {}", info.getId(), message);
 
+            CurveStatusNotifier.notifyStatus(info.getId(), LoadStatus.LOADED);
+
         } else if (sent != received) {
             log.error("Curve {} received count {} not equals to sent {}", info.getId(), received, sent);
             addRequestJob();
