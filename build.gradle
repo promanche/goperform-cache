@@ -66,7 +66,7 @@ test {
 }
 
 group = 'ru.geosteering.goperform.cache.service'
-version = '1.3.0-SNAPSHOT'
+version = '1.4.0-SNAPSHOT'
 description = 'goperform-cache'
 
 java {
