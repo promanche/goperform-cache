@@ -96,7 +96,7 @@ public class SegmentProcessor {
     }
 
     public void addItems(Collection<CurveItem> items, int scale) {
-        if (!isApproximatedScale(scale) || curveProcessor.getFirstSaved() == null || curveProcessor.getLastSaved() == null)
+        if (!isApproximatedScale(scale))
             return;
 
         List<CurveSegment> segments = segmentCache.computeIfAbsent(scale, k -> new ArrayList<>());
