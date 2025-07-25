@@ -191,7 +191,7 @@ public class SingleCurveProcessor {
             updateInfo(item);
             sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
-        } else if (!isDateTimeCurve) {
+        } else if (info.getClassWitsml().equals("SYNTHETIC")) {
             updateReloadData(item);
         }
     }
