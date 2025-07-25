@@ -39,8 +39,6 @@ dependencies {
 
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
-    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
 
     implementation 'io.nats:jnats:2.15.3'
 
@@ -59,10 +57,6 @@ dependencies {
     implementation 'io.micrometer:micrometer-core'
 
     implementation 'biz.paluch.logging:logstash-gelf:1.14.1'
-}
-
-test {
-    useJUnitPlatform()
 }
 
 group = 'ru.geosteering.goperform.cache.service'
