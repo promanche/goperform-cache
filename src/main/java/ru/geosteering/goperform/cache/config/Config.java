@@ -170,6 +170,11 @@ public class Config {
      */
     public final int DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED;
 
+    /**
+     * Топик NATS для публикации статусов кривых
+     */
+    public final String GOPERFORM_STATUS_TOPIC;
+
 
     public Config(@Value("${goperform.subject}") String subject,
                   @Value("gostream.auth") String auth,
@@ -190,7 +195,8 @@ public class Config {
                   @Value("${goperform.dataservice-baseurl}") String dataServiceBaseUrl,
                   @Value("${goperform.cacheable-duration-min:10}") int cacheableDurationMin,
                   @Value("${goperform.cleaning.curve.days}") int daysUntilCurveIsRemoved,
-                  @Value("${goperform.cleaning.processor.days}") int daysUntilCurveProcessorIsRemoved) {
+                  @Value("${goperform.cleaning.processor.days}") int daysUntilCurveProcessorIsRemoved,
+                  @Value("${goperform.curves.status.topic:curves.status.csv}}") String statusTopic) {
         this.SUBJECT = subject;
         this.GOSTREAM_AUTH = auth;
         this.HOST = host;
@@ -218,5 +224,6 @@ public class Config {
 
         this.DAYS_UNTIL_CURVE_IS_REMOVED = daysUntilCurveIsRemoved;
         this.DAYS_UNTIL_CURVE_PROCESSOR_IS_REMOVED = daysUntilCurveProcessorIsRemoved;
+        this.GOPERFORM_STATUS_TOPIC = statusTopic;
     }
 }

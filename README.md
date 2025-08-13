@@ -88,6 +88,7 @@ docker run --rm --name goperform-cache-service \
   -e DB_USR="goperform_cache"
   -e DB_PSW="goperform_cache"
   -e NATS_URL="nats://localhost:4222"
+  -e GOPERFORM_STATUS_TOPIC= "curves.status.csv" топик для отправки загрузки статусов кривых
   nexus.geosteering.ru:5001/gostream/goperform-cache-service:latest
 ```
 
@@ -104,3 +105,4 @@ docker run --rm --name goperform-cache-service \
 * GRAYLOG_SOURCE - указать условное имя хоста, например, `perform.corp.geosteering.ru`
 
 Имя хоста не обязательно должно совпадать с реальным именем хоста, где развернуто приложение - это скорее способ отличать стенды
+

@@ -606,7 +606,7 @@ public class SingleCurveProcessor {
     }
 
     public enum LoadStatus {
-        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN, BLOCKED
+        IN_QUEUE, IN_PROGRESS, LOADED, UNKNOWN, BLOCKED, BROKEN
     }
 
     private static class ReloadData {

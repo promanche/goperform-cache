@@ -45,4 +45,5 @@ public class CurveInfoResponse {
     private Double maxLoadedKey;
     private boolean waitReload;
     private Boolean initializing;
+    private String error;
 }
