@@ -13,6 +13,7 @@ import ru.geosteering.goperform.cache.model.rest.Comment;
 import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
 import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
 import ru.geosteering.goperform.cache.model.rest.MultiResponse;
+import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
 import ru.geosteering.goperform.cache.service.CurveService;
 
 import java.time.OffsetDateTime;
@@ -103,10 +104,12 @@ public class CurveController {
     public ResponseEntity<List<CurveInfoResponse>> getCurveInfo(@RequestParam Long[] ids) {
         log.info("Curve-info request ids {}", Arrays.toString(ids));
         List<CurveInfoResponse> infos = service.getCurveInfoResponse(ids);
-        for (CurveInfoResponse cir : infos) {
-            if (cir == null) {
-                return new ResponseEntity<>(infos, HttpStatus.ACCEPTED);
-            }
+        boolean notReady = infos.stream().anyMatch(cir -> Boolean.TRUE.equals(cir.getInitializing())
+                || cir.getStatus() == null
+                || cir.getStatus() != null && cir.getStatus() != SingleCurveProcessor.LoadStatus.LOADED
+                || cir.getError() != null);
+        if (notReady) {
+            return new ResponseEntity<>(infos, HttpStatus.ACCEPTED);
         }
         return new ResponseEntity<>(infos, HttpStatus.OK);
     }

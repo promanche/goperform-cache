@@ -56,7 +56,6 @@ public class CurveService {
     private final AuthManager authManager;
     private final CurveSimplificationService curveSimplificationService;
 
-
     private void checkCurve(Long id, Integer scale) {
         if (curveDispatcher.getCurveProcessor(id, true) == null) {
             throw new CurveProcessorNotExistException();
@@ -381,7 +380,9 @@ public class CurveService {
                 info.getMinLoadedKey(),
                 info.getMaxLoadedKey(),
                 curveProcessor.getReloadData() != null,
-                true);
+                true,
+                null
+        );
     }
 
     public List<CurveInfoResponse> getCurveInfoResponse(Long[] ids) {
@@ -390,38 +391,33 @@ public class CurveService {
             return null;
         }
         List<CurveInfoResponse> response = new ArrayList<>();
-        List<Long> noProcessorIds = new ArrayList<>();
-        Arrays.stream(checked)
-                .forEach(id -> {
-                    if (curveDispatcher.isCurveProcessorPresent(id)) {
-                        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
-                        var info = curveProcessor.getInfo();
-                        var cir = map(info);
-                        cir.saved(curveProcessor.getSavedCount())
-                                .initializing(false)
-                                .scaleSet(curveProcessor.getScaleSet())
-                                .status(curveProcessor.getLoadStatus())
-                                .waitReload(curveProcessor.getReloadData() != null);
-                        response.add(cir.build());
-                    } else {
-                        noProcessorIds.add(id);
-                    }
-                });
-
-        if (!noProcessorIds.isEmpty()) {
-            CompletableFuture.runAsync(() -> noProcessorIds
-                    .forEach(id -> {
-                        var processor = curveDispatcher.getCurveProcessor(id, true);
-                        if (processor != null)
-                            processor.sendWsMessage(new ProcessorMessage(id));
-                    }));
-
-            repository.getInfos(noProcessorIds)
-                    .forEach(info -> {
-                        var cir = map(info);
-                        cir.initializing(true);
-                        response.add(cir.build());
-                    });
+        for (Long id : checked) {
+            if (curveDispatcher.isCurveProcessorPresent(id)) {
+                var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+                var info = curveProcessor.getInfo();
+                var cir = map(info);
+                cir.saved(curveProcessor.getSavedCount())
+                        .initializing(false)
+                        .scaleSet(curveProcessor.getScaleSet())
+                        .status(curveProcessor.getLoadStatus())
+                        .waitReload(curveProcessor.getReloadData() != null);
+                response.add(cir.build());
+            } else if (curveDispatcher.isBroken(id)) {
+                // Кривая сломана
+                response.add(CurveInfoResponse.builder()
+                        .id(id)
+                        .initializing(false)
+                        .status(SingleCurveProcessor.LoadStatus.BROKEN)
+                        .error("Curve is broken or failed to load")
+                        .build());
+            } else {
+                // Кривая отсутствует, инициирована загрузка
+                response.add(CurveInfoResponse.builder()
+                        .id(id)
+                        .initializing(true)
+                        .status(SingleCurveProcessor.LoadStatus.IN_QUEUE)
+                        .build());
+            }
         }
         return response;
     }
