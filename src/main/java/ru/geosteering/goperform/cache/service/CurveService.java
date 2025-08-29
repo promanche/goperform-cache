@@ -137,16 +137,19 @@ public class CurveService {
         return result;
     }
 
-    public List<?> getSimplifiedCurveData(Long id, double epsilon) {
+    public List<CurveItem> getSimplifiedCurveData(Long id, Double from, Double to, double epsilon) {
         checkCurve(id, null);
 
         log.debug("Begin response preparing for id {}", id);
 
-        var items = repository.getItemsFromTo(id, null, null)
+        var items = repository.getItemsFromTo(id, from, to)
                 .stream()
                 .flatMap(str -> StaticMapper.parseListOf(str, CurveItem.class).stream())
                 .toList();
-        return curveSimplificationService.simplify(items, epsilon);
+        List<CurveItem> result = curveSimplificationService.simplify(items, epsilon);
+        log.info("Simplified CurveData response for id {} prepared. Result list size: {}", id, result.size());
+
+        return result;
     }
 
     private List<List<Object>> getLinearSegments(Long id, Double from, Double to, Integer scale) {

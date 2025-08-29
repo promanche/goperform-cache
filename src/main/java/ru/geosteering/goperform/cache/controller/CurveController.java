@@ -68,9 +68,15 @@ public class CurveController {
     }
 
     @GetMapping("/{id}/coordinates/simplify")
-    public ResponseEntity<List<?>> getSimplified(@PathVariable Long id, @RequestParam double epsilon) {
-        log.info("Simplified request id {}", id);
-        return new ResponseEntity<>(service.getSimplifiedCurveData(id, epsilon), HttpStatus.OK);
+    public ResponseEntity<List<?>> getSimplified(@PathVariable Long id,
+                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+                                                 @RequestParam double epsilon) {
+        log.info("Simplified request id {}, from {}, to {}", id, from, to);
+        Double doubleFrom = from == null ? config.MIN_TIME_MILLIS : (double) from.toInstant().toEpochMilli();
+        Double doubleTo = to == null ? OffsetDateTime.now().toInstant().toEpochMilli() : (double) to.toInstant().toEpochMilli();
+
+        return new ResponseEntity<>(service.getSimplifiedCurveData(id, doubleFrom, doubleTo, epsilon), HttpStatus.OK);
     }
 
     @GetMapping("/{id}/coordinates/image")
