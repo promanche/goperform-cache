@@ -60,7 +60,7 @@ dependencies {
 }
 
 group = 'ru.geosteering.goperform.cache.service'
-version = '1.3.0-SNAPSHOT'
+version = '1.3.3'
 description = 'goperform-cache'
 
 java {
