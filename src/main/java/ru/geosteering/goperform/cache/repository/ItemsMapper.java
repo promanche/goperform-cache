@@ -20,6 +20,18 @@ public interface ItemsMapper {
     @Select("select data from items where curve_id=#{id} order by first")
     List<String> getAll(@Param("id") Long id);
 
+    @Select({
+            "<script>",
+            "SELECT data, first ",
+            "FROM items ",
+            "WHERE curve_id = #{curveId} ",
+            "  AND first > #{lastFirst} ",
+            "ORDER BY first ",
+            "LIMIT #{limit}",
+            "</script>"
+    })
+    List<ItemDto> getBatchByFirst(@Param("curveId") Long curveId, @Param("lastFirst") Double lastFirst, @Param("limit") Integer limit);
+
     @Delete("delete from items where curve_id=#{id} and last >= #{key}")
     void deleteAfter(@Param("id") Long id, @Param("key") Double key);
 

@@ -181,7 +181,7 @@ public class SingleCurveProcessor {
             return;
         }
 
-        if (lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0) {
+        if (isHistoryUpdate(item)) {
             if (!loadBuffer.isEmpty() && Double.compare(item.getKey(), loadBuffer.last().getKey()) < 0) {
                 log.warn("Curve {} real time point {} precedes last history point {}", info.getId(), item, loadBuffer.last());
             }
@@ -192,9 +192,13 @@ public class SingleCurveProcessor {
             updateInfo(item);
             sendWsMessage(new PointMessage(info.getId(), item.getKey(), item.getValue()));
 
-        } else if (info.getClassWitsml().equals("SYNTHETIC")) {
+        } else if (info.getClassWitsml() != null && (info.getClassWitsml().equals("SYNTHETIC") || info.getClassWitsml().equals("RIGIS") )) {
             updateReloadData(item);
         }
+    }
+
+    private boolean isHistoryUpdate(CurveItem item) {
+        return lastSaved == null || Double.compare(item.getKey(), lastSaved.getKey()) > 0;
     }
 
     public synchronized void onDataEndMessage(DataEndMessage message) {
@@ -330,7 +334,7 @@ public class SingleCurveProcessor {
             log.info("Curve set reload time in 3 minutes. Details: {}", reloadLog(item));
             reloadData = new ReloadData();
             toggleLoadStatus(LoadStatus.BLOCKED);
-            reloadData.reloadTime = LocalDateTime.now().plusMinutes(3);
+            reloadData.reloadTime = LocalDateTime.now().plusMinutes(1);
         } else if (System.currentTimeMillis() - lastUpdateReloadLogTime > 60000) {
             log.info("Curve reload time extended to {}. {} more old points suppressed. Details: {}", reloadData.reloadTime, suppressedOldPoints, reloadLog(item));
             lastUpdateReloadLogTime = System.currentTimeMillis();
