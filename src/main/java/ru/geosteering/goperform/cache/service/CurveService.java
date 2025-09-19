@@ -32,6 +32,7 @@ import ru.geosteering.goperform.cache.nats.NatsConnector;
 import ru.geosteering.goperform.cache.processor.CurveDispatcher;
 import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
 import ru.geosteering.goperform.cache.repository.MainRepository;
+import ru.geosteering.goperform.cache.repository.dto.ItemDto;
 import ru.geosteering.goperform.cache.utils.StaticMapper;
 
 import java.math.BigDecimal;
@@ -394,33 +395,38 @@ public class CurveService {
             return null;
         }
         List<CurveInfoResponse> response = new ArrayList<>();
-        for (Long id : checked) {
-            if (curveDispatcher.isCurveProcessorPresent(id)) {
-                var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
-                var info = curveProcessor.getInfo();
-                var cir = map(info);
-                cir.saved(curveProcessor.getSavedCount())
-                        .initializing(false)
-                        .scaleSet(curveProcessor.getScaleSet())
-                        .status(curveProcessor.getLoadStatus())
-                        .waitReload(curveProcessor.getReloadData() != null);
-                response.add(cir.build());
-            } else if (curveDispatcher.isBroken(id)) {
-                // Кривая сломана
-                response.add(CurveInfoResponse.builder()
-                        .id(id)
-                        .initializing(false)
-                        .status(SingleCurveProcessor.LoadStatus.BROKEN)
-                        .error("Curve is broken or failed to load")
-                        .build());
-            } else {
-                // Кривая отсутствует, инициирована загрузка
-                response.add(CurveInfoResponse.builder()
-                        .id(id)
-                        .initializing(true)
-                        .status(SingleCurveProcessor.LoadStatus.IN_QUEUE)
-                        .build());
-            }
+        List<Long> noProcessorIds = new ArrayList<>();
+        Arrays.stream(checked)
+                .forEach(id -> {
+                    if (curveDispatcher.isCurveProcessorPresent(id)) {
+                        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+                        var info = curveProcessor.getInfo();
+                        var cir = map(info);
+                        cir.saved(curveProcessor.getSavedCount())
+                                .initializing(false)
+                                .scaleSet(curveProcessor.getScaleSet())
+                                .status(curveProcessor.getLoadStatus())
+                                .waitReload(curveProcessor.getReloadData() != null);
+                        response.add(cir.build());
+                    } else {
+                        noProcessorIds.add(id);
+                    }
+                });
+
+        if (!noProcessorIds.isEmpty()) {
+            CompletableFuture.runAsync(() -> noProcessorIds
+                    .forEach(id -> {
+                        var processor = curveDispatcher.getCurveProcessor(id, true);
+                        if (processor != null)
+                            processor.sendWsMessage(new ProcessorMessage(id));
+                    }));
+
+            repository.getInfos(noProcessorIds)
+                    .forEach(info -> {
+                        var cir = map(info);
+                        cir.initializing(true);
+                        response.add(cir.build());
+                    });
         }
         return response;
     }

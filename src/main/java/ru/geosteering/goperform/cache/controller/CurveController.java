@@ -9,11 +9,11 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.geosteering.goperform.cache.auth.AuthManager;
 import ru.geosteering.goperform.cache.config.Config;
+import ru.geosteering.goperform.cache.model.CurveItem;
 import ru.geosteering.goperform.cache.model.rest.Comment;
 import ru.geosteering.goperform.cache.model.rest.CreateCurveRequest;
 import ru.geosteering.goperform.cache.model.rest.CurveInfoResponse;
 import ru.geosteering.goperform.cache.model.rest.MultiResponse;
-import ru.geosteering.goperform.cache.processor.SingleCurveProcessor;
 import ru.geosteering.goperform.cache.service.CurveService;
 
 import java.time.OffsetDateTime;
@@ -69,10 +69,10 @@ public class CurveController {
     }
 
     @GetMapping("/{id}/coordinates/simplify")
-    public ResponseEntity<List<?>> getSimplified(@PathVariable Long id,
-                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
-                                                 @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
-                                                 @RequestParam double epsilon) {
+    public ResponseEntity<List<CurveItem>> getSimplified(@PathVariable Long id,
+                                                         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,
+                                                         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime to,
+                                                         @RequestParam double epsilon) {
         log.info("Simplified request id {}, from {}, to {}", id, from, to);
         Double doubleFrom = from == null ? config.MIN_TIME_MILLIS : (double) from.toInstant().toEpochMilli();
         Double doubleTo = to == null ? OffsetDateTime.now().toInstant().toEpochMilli() : (double) to.toInstant().toEpochMilli();
@@ -110,12 +110,10 @@ public class CurveController {
     public ResponseEntity<List<CurveInfoResponse>> getCurveInfo(@RequestParam Long[] ids) {
         log.info("Curve-info request ids {}", Arrays.toString(ids));
         List<CurveInfoResponse> infos = service.getCurveInfoResponse(ids);
-        boolean notReady = infos.stream().anyMatch(cir -> Boolean.TRUE.equals(cir.getInitializing())
-                || cir.getStatus() == null
-                || cir.getStatus() != null && cir.getStatus() != SingleCurveProcessor.LoadStatus.LOADED
-                || cir.getError() != null);
-        if (notReady) {
-            return new ResponseEntity<>(infos, HttpStatus.ACCEPTED);
+        for (CurveInfoResponse cir : infos) {
+            if (cir == null) {
+                return new ResponseEntity<>(infos, HttpStatus.ACCEPTED);
+            }
         }
         return new ResponseEntity<>(infos, HttpStatus.OK);
     }

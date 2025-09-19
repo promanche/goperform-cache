@@ -49,15 +49,26 @@ public class MainRepository {
         log.trace("saveItems: saved {} element(s) in {} ms", list.size(), System.currentTimeMillis() - started);
     }
 
-    public List<String> getItemsFromTo(Long id, Double from, Double to) {
+    public List<String> getItemsFromTo(Long curveId, Double from, Double to) {
         log.debug("getItemsFromTo started");
         long started = System.currentTimeMillis();
         List<String> result;
         if (from == null && to == null) {
-            result = getAllItems(id);
+            result = getAllItems(curveId);
         } else {
-            result = itemsMapper.getFromTo(id, from, to);
+            result = itemsMapper.getFromTo(curveId, from, to);
         }
+        log.debug("getItemsFromTo completed in {} ms", System.currentTimeMillis() - started);
+        return result;
+    }
+
+    public List<ItemDto> getItemsWithLimit(Long curveId, Double first, Integer limit) {
+        log.debug("getItemsWithLimit started");
+        long started = System.currentTimeMillis();
+        List<ItemDto> result;
+
+        result = itemsMapper.getBatchByFirst(curveId, first, limit);
+
         log.debug("getItemsFromTo completed in {} ms", System.currentTimeMillis() - started);
         return result;
     }
