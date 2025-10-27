@@ -152,6 +152,65 @@ public class CurveService {
         return result;
     }
 
+    public List<CurveItem> getItemsByIndices(Long id, List<Long> indices) {
+        checkCurve(id, null);
+
+        log.debug("Begin response preparing for id {} with {} indices", id, indices.size());
+
+        List<CurveItem> result = new ArrayList<>();
+        
+        // Process each index to find exact match or nearest earlier point
+        // Optimized for memory efficiency by querying one index at a time
+        for (Long index : indices) {
+            Double doubleIndex = index.doubleValue();
+            
+            // First check the database
+            Optional<CurveItem> itemOpt = repository.getItemAtOrBeforeIndex(id, doubleIndex);
+            
+            if (itemOpt.isPresent()) {
+                CurveItem item = itemOpt.get();
+                // Create a new item with the requested index as key
+                result.add(new CurveItem(doubleIndex, item.getValue()));
+            } else {
+                // If not found in database, check the in-memory tail
+                var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+                List<CurveItem> tailItems = curveProcessor.getTail(null, doubleIndex);
+                
+                // Find the exact match or closest before in tail
+                CurveItem closestItem = findClosestItemInTail(tailItems, doubleIndex);
+                
+                if (closestItem != null) {
+                    result.add(new CurveItem(doubleIndex, closestItem.getValue()));
+                } else {
+                    // If no match found anywhere, add item with null value
+                    result.add(new CurveItem(doubleIndex, null));
+                }
+            }
+        }
+
+        log.info("Response for id {} prepared with {} items for {} indices", id, result.size(), indices.size());
+
+        return result;
+    }
+
+    private CurveItem findClosestItemInTail(List<CurveItem> items, Double targetIndex) {
+        CurveItem closestBefore = null;
+        for (CurveItem item : items) {
+            if (item.getKey() != null) {
+                if (item.getKey().equals(targetIndex)) {
+                    // Exact match found
+                    return item;
+                } else if (item.getKey() < targetIndex) {
+                    // This item is before the target, keep track of it
+                    if (closestBefore == null || item.getKey() > closestBefore.getKey()) {
+                        closestBefore = item;
+                    }
+                }
+            }
+        }
+        return closestBefore;
+    }
+
     private List<List<Object>> getLinearSegments(Long id, Double from, Double to, Integer scale) {
         var result = repository.getSegmentsFromTo(id, scale, from, to)
                 .stream()

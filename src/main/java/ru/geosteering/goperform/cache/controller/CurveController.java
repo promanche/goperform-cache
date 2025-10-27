@@ -68,6 +68,13 @@ public class CurveController {
         return getWithoutParams(id);
     }
 
+    @GetMapping("/{id}/coordinates/by-index")
+    public ResponseEntity<List<CurveItem>> getItemsByIndices(@PathVariable Long id,
+                                                              @RequestParam List<Long> index) {
+        log.info("By-index request id {}, indices count {}", id, index.size());
+        return new ResponseEntity<>(service.getItemsByIndices(id, index), HttpStatus.OK);
+    }
+
     @GetMapping("/{id}/coordinates/simplify")
     public ResponseEntity<List<CurveItem>> getSimplified(@PathVariable Long id,
                                                          @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) OffsetDateTime from,

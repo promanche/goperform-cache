@@ -55,4 +55,10 @@ public interface ItemsMapper {
 
     @Delete("with batch as (select id from items where curve_id=#{id} limit 1000 for update skip locked) delete from items using batch where items.id=batch.id")
     void deleteBatch(@Param("id") Long id);
+
+    @Select("select data from items where curve_id=#{id} and #{index} >= first and #{index} <= last limit 1")
+    String getItemAtIndex(@Param("id") Long id, @Param("index") Double index);
+
+    @Select("select data from items where curve_id=#{id} and #{index} >= last order by last desc limit 1")
+    String getItemBeforeIndex(@Param("id") Long id, @Param("index") Double index);
 }

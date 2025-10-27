@@ -145,6 +145,54 @@ public class MainRepository {
         return itemsMapper.getMaxValue(id);
     }
 
+    public Optional<CurveItem> getItemAtOrBeforeIndex(Long id, Double index) {
+        log.trace("getItemAtOrBeforeIndex started for index {}", index);
+        long started = System.currentTimeMillis();
+        
+        // First try to find an exact match in the range
+        String exactMatch = itemsMapper.getItemAtIndex(id, index);
+        if (exactMatch != null) {
+            List<CurveItem> items = StaticMapper.parseListOf(exactMatch, CurveItem.class);
+            // Find the exact match or closest before in the items array
+            Optional<CurveItem> result = findExactOrClosestBefore(items, index);
+            log.trace("getItemAtOrBeforeIndex completed in {} ms", System.currentTimeMillis() - started);
+            return result;
+        }
+        
+        // If no exact match, find the item before the index
+        String beforeMatch = itemsMapper.getItemBeforeIndex(id, index);
+        if (beforeMatch != null) {
+            List<CurveItem> items = StaticMapper.parseListOf(beforeMatch, CurveItem.class);
+            // Get the last item from this batch (closest to the index)
+            if (!items.isEmpty()) {
+                Optional<CurveItem> result = Optional.of(items.get(items.size() - 1));
+                log.trace("getItemAtOrBeforeIndex completed in {} ms", System.currentTimeMillis() - started);
+                return result;
+            }
+        }
+        
+        log.trace("getItemAtOrBeforeIndex completed in {} ms (no match)", System.currentTimeMillis() - started);
+        return Optional.empty();
+    }
+    
+    private Optional<CurveItem> findExactOrClosestBefore(List<CurveItem> items, Double targetIndex) {
+        CurveItem closestBefore = null;
+        for (CurveItem item : items) {
+            if (item.getKey() != null) {
+                if (item.getKey().equals(targetIndex)) {
+                    // Exact match found
+                    return Optional.of(item);
+                } else if (item.getKey() < targetIndex) {
+                    // This item is before the target, keep track of it
+                    if (closestBefore == null || item.getKey() > closestBefore.getKey()) {
+                        closestBefore = item;
+                    }
+                }
+            }
+        }
+        return Optional.ofNullable(closestBefore);
+    }
+
     //Info
 
     public void saveOrUpdateInfo(ExtraCurveInfo info) {
