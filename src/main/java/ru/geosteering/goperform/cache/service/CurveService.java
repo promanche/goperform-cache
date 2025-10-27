@@ -638,10 +638,7 @@ public class CurveService {
         log.debug("Begin getItemsByIndices for id {} with {} timestamps", id, timestamps.length);
         
         // Convert long[] to List<Long> for batch query
-        List<Long> timestampList = new ArrayList<>();
-        for (long ts : timestamps) {
-            timestampList.add(ts);
-        }
+        List<Long> timestampList = Arrays.stream(timestamps).boxed().collect(Collectors.toList());
         
         // Fetch all item batches in a single query
         List<ItemDto> itemBatches = repository.getItemBatchesByTimestamps(id, timestampList);
@@ -658,21 +655,27 @@ public class CurveService {
             }
         }
         
-        // Check in-memory cache for timestamps not found in database
-        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
-        List<CurveItem> tailItems = null;
-        if (curveProcessor != null) {
-            tailItems = curveProcessor.getTail(null, null);
-        }
-        
         // Build result list in the same order as input timestamps
         List<CurveItem> result = new ArrayList<>();
+        List<CurveItem> tailItems = null; // Lazy load only if needed
+        
         for (long timestamp : timestamps) {
             CurveItem item = timestampToItemMap.get(timestamp);
             
-            // If not found in database, check tail
-            if (item == null && tailItems != null && !tailItems.isEmpty()) {
-                item = findBestMatchingItem(tailItems, timestamp);
+            // If not found in database, check tail (fetch lazily)
+            if (item == null) {
+                if (tailItems == null) {
+                    var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+                    if (curveProcessor != null) {
+                        tailItems = curveProcessor.getTail(null, null);
+                    } else {
+                        tailItems = Collections.emptyList();
+                    }
+                }
+                
+                if (!tailItems.isEmpty()) {
+                    item = findBestMatchingItem(tailItems, timestamp);
+                }
             }
             
             result.add(item);
