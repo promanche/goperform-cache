@@ -42,7 +42,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -623,5 +625,111 @@ public class CurveService {
             values.add(segment.getMaxVal());
             lastSegment = segment;
         }
+    }
+
+    public List<CurveItem> getItemsByIndices(Long id, long[] timestamps) {
+        checkCurve(id, null);
+        
+        if (timestamps == null || timestamps.length == 0) {
+            log.info("getItemsByIndices for id {} called with empty timestamps array", id);
+            return Collections.emptyList();
+        }
+        
+        log.debug("Begin getItemsByIndices for id {} with {} timestamps", id, timestamps.length);
+        
+        // Convert long[] to List<Long> for batch query
+        List<Long> timestampList = Arrays.stream(timestamps).boxed().collect(Collectors.toList());
+        
+        // Fetch all item batches in a single query
+        List<ItemDto> itemBatches = repository.getItemBatchesByTimestamps(id, timestampList);
+        
+        // Create a map of timestamp -> best matching item from database
+        Map<Long, CurveItem> timestampToItemMap = new HashMap<>();
+        for (ItemDto batch : itemBatches) {
+            if (batch.getData() != null && batch.getRequestedTimestamp() != null) {
+                List<CurveItem> items = StaticMapper.parseListOf(batch.getData(), CurveItem.class);
+                CurveItem bestMatch = findBestMatchingItem(items, batch.getRequestedTimestamp());
+                if (bestMatch != null) {
+                    timestampToItemMap.put(batch.getRequestedTimestamp(), bestMatch);
+                }
+            }
+        }
+        
+        // Build result list in the same order as input timestamps
+        List<CurveItem> result = new ArrayList<>();
+        List<CurveItem> tailItems = null; // Lazy load only if needed
+        
+        for (long timestamp : timestamps) {
+            CurveItem item = timestampToItemMap.get(timestamp);
+            
+            // If not found in database, check tail (fetch lazily)
+            if (item == null) {
+                if (tailItems == null) {
+                    var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+                    if (curveProcessor != null) {
+                        tailItems = curveProcessor.getTail(null, null);
+                    } else {
+                        tailItems = Collections.emptyList();
+                    }
+                }
+                
+                if (!tailItems.isEmpty()) {
+                    item = findBestMatchingItem(tailItems, timestamp);
+                }
+            }
+            
+            result.add(item);
+        }
+        
+        log.info("getItemsByIndices for id {} completed. Result list size: {}", id, result.size());
+        
+        return result;
+    }
+    
+    private CurveItem findBestMatchingItem(List<CurveItem> items, long timestamp) {
+        CurveItem bestMatch = null;
+        for (CurveItem item : items) {
+            if (item.getKey() != null) {
+                long itemKey = item.getKey().longValue();
+                if (itemKey <= timestamp) {
+                    if (bestMatch == null || itemKey > bestMatch.getKey().longValue()) {
+                        bestMatch = item;
+                    }
+                }
+                // If we found exact match, we can stop
+                if (itemKey == timestamp) {
+                    break;
+                }
+            }
+        }
+        return bestMatch;
+    }
+    
+    private CurveItem getItemByTimestamp(Long curveId, long timestamp) {
+        // First, try to get from database
+        String batchData = repository.getItemBatchByTimestamp(curveId, timestamp);
+        
+        if (batchData != null) {
+            List<CurveItem> items = StaticMapper.parseListOf(batchData, CurveItem.class);
+            CurveItem bestMatch = findBestMatchingItem(items, timestamp);
+            
+            if (bestMatch != null) {
+                return bestMatch;
+            }
+        }
+        
+        // If not found in database, check the in-memory tail
+        var curveProcessor = curveDispatcher.getCurveProcessor(curveId, true);
+        if (curveProcessor != null) {
+            List<CurveItem> tailItems = curveProcessor.getTail(null, null);
+            CurveItem bestMatch = findBestMatchingItem(tailItems, timestamp);
+            
+            if (bestMatch != null) {
+                return bestMatch;
+            }
+        }
+        
+        // Return null if no item found
+        return null;
     }
 }

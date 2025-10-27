@@ -145,6 +145,22 @@ public class MainRepository {
         return itemsMapper.getMaxValue(id);
     }
 
+    public String getItemBatchByTimestamp(Long curveId, Long timestamp) {
+        log.trace("getItemBatchByTimestamp started for curveId {} and timestamp {}", curveId, timestamp);
+        long started = System.currentTimeMillis();
+        String result = itemsMapper.getItemBatchByTimestamp(curveId, timestamp);
+        log.trace("getItemBatchByTimestamp completed in {} ms", System.currentTimeMillis() - started);
+        return result;
+    }
+
+    public List<ItemDto> getItemBatchesByTimestamps(Long curveId, List<Long> timestamps) {
+        log.trace("getItemBatchesByTimestamps started for curveId {} with {} timestamps", curveId, timestamps.size());
+        long started = System.currentTimeMillis();
+        List<ItemDto> result = itemsMapper.getItemBatchesByTimestamps(curveId, timestamps);
+        log.trace("getItemBatchesByTimestamps completed in {} ms", System.currentTimeMillis() - started);
+        return result;
+    }
+
     //Info
 
     public void saveOrUpdateInfo(ExtraCurveInfo info) {

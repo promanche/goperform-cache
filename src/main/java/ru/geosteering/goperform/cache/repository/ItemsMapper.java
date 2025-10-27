@@ -55,4 +55,41 @@ public interface ItemsMapper {
 
     @Delete("with batch as (select id from items where curve_id=#{id} limit 1000 for update skip locked) delete from items using batch where items.id=batch.id")
     void deleteBatch(@Param("id") Long id);
+
+    @Select({
+            "<script>",
+            "SELECT data ",
+            "FROM items ",
+            "WHERE curve_id = #{curveId} ",
+            "  AND first &lt;= #{timestamp} ",
+            "ORDER BY first DESC ",
+            "LIMIT 1",
+            "</script>"
+    })
+    String getItemBatchByTimestamp(@Param("curveId") Long curveId, @Param("timestamp") Long timestamp);
+
+    @Select({
+            "<script>",
+            "WITH timestamps_unnested AS (",
+            "  SELECT CAST(ts AS NUMERIC) as timestamp FROM unnest(ARRAY[",
+            "  <foreach collection='timestamps' item='ts' separator=','>#{ts}</foreach>",
+            "  ]) ts",
+            "),",
+            "matched_items AS (",
+            "  SELECT DISTINCT ON (t.timestamp) ",
+            "    t.timestamp,",
+            "    i.data,",
+            "    i.first",
+            "  FROM timestamps_unnested t",
+            "  LEFT JOIN items i ON i.curve_id = #{curveId} AND i.first &lt;= t.timestamp",
+            "  ORDER BY t.timestamp, i.first DESC",
+            ")",
+            "SELECT timestamp, data FROM matched_items ORDER BY timestamp",
+            "</script>"
+    })
+    @Results({
+            @Result(column = "timestamp", property = "requestedTimestamp"),
+            @Result(column = "data", property = "data")
+    })
+    List<ItemDto> getItemBatchesByTimestamps(@Param("curveId") Long curveId, @Param("timestamps") List<Long> timestamps);
 }
