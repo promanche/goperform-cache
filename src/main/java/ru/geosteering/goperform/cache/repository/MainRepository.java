@@ -168,7 +168,8 @@ public class MainRepository {
                 CurveItem lastItem = null;
                 for (CurveItem item : items) {
                     if (item.getKey() != null) {
-                        if (lastItem == null || item.getKey() > lastItem.getKey()) {
+                        if (lastItem == null || lastItem.getKey() == null || 
+                            item.getKey().compareTo(lastItem.getKey()) > 0) {
                             lastItem = item;
                         }
                     }
