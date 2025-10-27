@@ -628,6 +628,11 @@ public class CurveService {
     public List<CurveItem> getItemsByIndices(Long id, long[] timestamps) {
         checkCurve(id, null);
         
+        if (timestamps == null || timestamps.length == 0) {
+            log.info("getItemsByIndices for id {} called with empty timestamps array", id);
+            return Collections.emptyList();
+        }
+        
         log.debug("Begin getItemsByIndices for id {} with {} timestamps", id, timestamps.length);
         
         List<CurveItem> result = new ArrayList<>();
