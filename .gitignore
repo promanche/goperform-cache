@@ -45,3 +45,4 @@ bin/
 /out/
 /run/secrets/
 /.env
+gradle.properties
