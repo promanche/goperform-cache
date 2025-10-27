@@ -153,6 +153,14 @@ public class MainRepository {
         return result;
     }
 
+    public List<ItemDto> getItemBatchesByTimestamps(Long curveId, List<Long> timestamps) {
+        log.trace("getItemBatchesByTimestamps started for curveId {} with {} timestamps", curveId, timestamps.size());
+        long started = System.currentTimeMillis();
+        List<ItemDto> result = itemsMapper.getItemBatchesByTimestamps(curveId, timestamps);
+        log.trace("getItemBatchesByTimestamps completed in {} ms", System.currentTimeMillis() - started);
+        return result;
+    }
+
     //Info
 
     public void saveOrUpdateInfo(ExtraCurveInfo info) {

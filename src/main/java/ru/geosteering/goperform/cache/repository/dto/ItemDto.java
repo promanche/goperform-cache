@@ -17,6 +17,7 @@ public class ItemDto {
     private Double minValue;
     private Double maxValue;
     private String data;
+    private Long requestedTimestamp;
 
     public static ItemDto fromItemsList(Long id, List<CurveItem> list, boolean isNumeric) {
         ItemDto itemDto = new ItemDto();

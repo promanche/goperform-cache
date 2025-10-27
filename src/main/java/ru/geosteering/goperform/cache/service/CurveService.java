@@ -42,7 +42,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -635,16 +637,69 @@ public class CurveService {
         
         log.debug("Begin getItemsByIndices for id {} with {} timestamps", id, timestamps.length);
         
-        List<CurveItem> result = new ArrayList<>();
+        // Convert long[] to List<Long> for batch query
+        List<Long> timestampList = new ArrayList<>();
+        for (long ts : timestamps) {
+            timestampList.add(ts);
+        }
         
+        // Fetch all item batches in a single query
+        List<ItemDto> itemBatches = repository.getItemBatchesByTimestamps(id, timestampList);
+        
+        // Create a map of timestamp -> best matching item from database
+        Map<Long, CurveItem> timestampToItemMap = new HashMap<>();
+        for (ItemDto batch : itemBatches) {
+            if (batch.getData() != null && batch.getRequestedTimestamp() != null) {
+                List<CurveItem> items = StaticMapper.parseListOf(batch.getData(), CurveItem.class);
+                CurveItem bestMatch = findBestMatchingItem(items, batch.getRequestedTimestamp());
+                if (bestMatch != null) {
+                    timestampToItemMap.put(batch.getRequestedTimestamp(), bestMatch);
+                }
+            }
+        }
+        
+        // Check in-memory cache for timestamps not found in database
+        var curveProcessor = curveDispatcher.getCurveProcessor(id, true);
+        List<CurveItem> tailItems = null;
+        if (curveProcessor != null) {
+            tailItems = curveProcessor.getTail(null, null);
+        }
+        
+        // Build result list in the same order as input timestamps
+        List<CurveItem> result = new ArrayList<>();
         for (long timestamp : timestamps) {
-            CurveItem item = getItemByTimestamp(id, timestamp);
+            CurveItem item = timestampToItemMap.get(timestamp);
+            
+            // If not found in database, check tail
+            if (item == null && tailItems != null && !tailItems.isEmpty()) {
+                item = findBestMatchingItem(tailItems, timestamp);
+            }
+            
             result.add(item);
         }
         
         log.info("getItemsByIndices for id {} completed. Result list size: {}", id, result.size());
         
         return result;
+    }
+    
+    private CurveItem findBestMatchingItem(List<CurveItem> items, long timestamp) {
+        CurveItem bestMatch = null;
+        for (CurveItem item : items) {
+            if (item.getKey() != null) {
+                long itemKey = item.getKey().longValue();
+                if (itemKey <= timestamp) {
+                    if (bestMatch == null || itemKey > bestMatch.getKey().longValue()) {
+                        bestMatch = item;
+                    }
+                }
+                // If we found exact match, we can stop
+                if (itemKey == timestamp) {
+                    break;
+                }
+            }
+        }
+        return bestMatch;
     }
     
     private CurveItem getItemByTimestamp(Long curveId, long timestamp) {
