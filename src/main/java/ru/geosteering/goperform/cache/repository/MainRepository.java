@@ -165,13 +165,23 @@ public class MainRepository {
             List<CurveItem> items = StaticMapper.parseListOf(beforeMatch, CurveItem.class);
             // Get the item with the maximum key from this batch (closest to the index)
             if (!items.isEmpty()) {
-                CurveItem lastItem = items.stream()
-                        .filter(item -> item.getKey() != null)
-                        .max((a, b) -> a.getKey().compareTo(b.getKey()))
-                        .orElse(items.get(items.size() - 1));
-                Optional<CurveItem> result = Optional.of(lastItem);
-                log.trace("getItemAtOrBeforeIndex completed in {} ms", System.currentTimeMillis() - started);
-                return result;
+                CurveItem lastItem = null;
+                for (CurveItem item : items) {
+                    if (item.getKey() != null) {
+                        if (lastItem == null || item.getKey() > lastItem.getKey()) {
+                            lastItem = item;
+                        }
+                    }
+                }
+                // Fallback to last item if all keys are null
+                if (lastItem == null && !items.isEmpty()) {
+                    lastItem = items.get(items.size() - 1);
+                }
+                if (lastItem != null) {
+                    Optional<CurveItem> result = Optional.of(lastItem);
+                    log.trace("getItemAtOrBeforeIndex completed in {} ms", System.currentTimeMillis() - started);
+                    return result;
+                }
             }
         }
         
