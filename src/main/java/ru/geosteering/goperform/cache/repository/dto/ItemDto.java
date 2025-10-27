@@ -17,6 +17,13 @@ public class ItemDto {
     private Double minValue;
     private Double maxValue;
     private String data;
+    
+    /**
+     * The timestamp that was requested in a batch query.
+     * This field is populated when using getItemBatchesByTimestamps to map
+     * which timestamp was requested for each returned item batch.
+     * It is null for other query types.
+     */
     private Long requestedTimestamp;
 
     public static ItemDto fromItemsList(Long id, List<CurveItem> list, boolean isNumeric) {

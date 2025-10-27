@@ -708,23 +708,7 @@ public class CurveService {
         
         if (batchData != null) {
             List<CurveItem> items = StaticMapper.parseListOf(batchData, CurveItem.class);
-            
-            // Find the exact timestamp or the latest one before it
-            CurveItem bestMatch = null;
-            for (CurveItem item : items) {
-                if (item.getKey() != null) {
-                    long itemKey = item.getKey().longValue();
-                    if (itemKey <= timestamp) {
-                        if (bestMatch == null || itemKey > bestMatch.getKey().longValue()) {
-                            bestMatch = item;
-                        }
-                    }
-                    // If we found exact match, we can stop
-                    if (itemKey == timestamp) {
-                        break;
-                    }
-                }
-            }
+            CurveItem bestMatch = findBestMatchingItem(items, timestamp);
             
             if (bestMatch != null) {
                 return bestMatch;
@@ -735,21 +719,7 @@ public class CurveService {
         var curveProcessor = curveDispatcher.getCurveProcessor(curveId, true);
         if (curveProcessor != null) {
             List<CurveItem> tailItems = curveProcessor.getTail(null, null);
-            
-            CurveItem bestMatch = null;
-            for (CurveItem item : tailItems) {
-                if (item.getKey() != null) {
-                    long itemKey = item.getKey().longValue();
-                    if (itemKey <= timestamp) {
-                        if (bestMatch == null || itemKey > bestMatch.getKey().longValue()) {
-                            bestMatch = item;
-                        }
-                    }
-                    if (itemKey == timestamp) {
-                        break;
-                    }
-                }
-            }
+            CurveItem bestMatch = findBestMatchingItem(tailItems, timestamp);
             
             if (bestMatch != null) {
                 return bestMatch;
