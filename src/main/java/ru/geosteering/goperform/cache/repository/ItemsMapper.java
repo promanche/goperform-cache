@@ -55,4 +55,16 @@ public interface ItemsMapper {
 
     @Delete("with batch as (select id from items where curve_id=#{id} limit 1000 for update skip locked) delete from items using batch where items.id=batch.id")
     void deleteBatch(@Param("id") Long id);
+
+    @Select({
+            "<script>",
+            "SELECT data ",
+            "FROM items ",
+            "WHERE curve_id = #{curveId} ",
+            "  AND first &lt;= #{timestamp} ",
+            "ORDER BY first DESC ",
+            "LIMIT 1",
+            "</script>"
+    })
+    String getItemBatchByTimestamp(@Param("curveId") Long curveId, @Param("timestamp") Long timestamp);
 }

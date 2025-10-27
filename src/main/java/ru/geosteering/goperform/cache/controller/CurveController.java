@@ -190,6 +190,13 @@ public class CurveController {
         service.removeComment(id, key);
     }
 
+    @GetMapping("/{id}/coordinates/by-indices")
+    public ResponseEntity<List<CurveItem>> getItemsByIndices(@PathVariable Long id, @RequestParam long[] timestamps) {
+        log.info("Get items by indices request id {}, timestamps {}", id, Arrays.toString(timestamps));
+        List<CurveItem> items = service.getItemsByIndices(id, timestamps);
+        return new ResponseEntity<>(items, HttpStatus.OK);
+    }
+
     private ResponseEntity<List<?>> getWithoutParams(Long id) {
         return new ResponseEntity<>(service.getCurveData(id, null, null, null), HttpStatus.OK);
     }

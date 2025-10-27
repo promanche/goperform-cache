@@ -624,4 +624,79 @@ public class CurveService {
             lastSegment = segment;
         }
     }
+
+    public List<CurveItem> getItemsByIndices(Long id, long[] timestamps) {
+        checkCurve(id, null);
+        
+        log.debug("Begin getItemsByIndices for id {} with {} timestamps", id, timestamps.length);
+        
+        List<CurveItem> result = new ArrayList<>();
+        
+        for (long timestamp : timestamps) {
+            CurveItem item = getItemByTimestamp(id, timestamp);
+            result.add(item);
+        }
+        
+        log.info("getItemsByIndices for id {} completed. Result list size: {}", id, result.size());
+        
+        return result;
+    }
+    
+    private CurveItem getItemByTimestamp(Long curveId, long timestamp) {
+        // First, try to get from database
+        String batchData = repository.getItemBatchByTimestamp(curveId, timestamp);
+        
+        if (batchData != null) {
+            List<CurveItem> items = StaticMapper.parseListOf(batchData, CurveItem.class);
+            
+            // Find the exact timestamp or the latest one before it
+            CurveItem bestMatch = null;
+            for (CurveItem item : items) {
+                if (item.getKey() != null) {
+                    long itemKey = item.getKey().longValue();
+                    if (itemKey <= timestamp) {
+                        if (bestMatch == null || itemKey > bestMatch.getKey().longValue()) {
+                            bestMatch = item;
+                        }
+                    }
+                    // If we found exact match, we can stop
+                    if (itemKey == timestamp) {
+                        break;
+                    }
+                }
+            }
+            
+            if (bestMatch != null) {
+                return bestMatch;
+            }
+        }
+        
+        // If not found in database, check the in-memory tail
+        var curveProcessor = curveDispatcher.getCurveProcessor(curveId, true);
+        if (curveProcessor != null) {
+            List<CurveItem> tailItems = curveProcessor.getTail(null, null);
+            
+            CurveItem bestMatch = null;
+            for (CurveItem item : tailItems) {
+                if (item.getKey() != null) {
+                    long itemKey = item.getKey().longValue();
+                    if (itemKey <= timestamp) {
+                        if (bestMatch == null || itemKey > bestMatch.getKey().longValue()) {
+                            bestMatch = item;
+                        }
+                    }
+                    if (itemKey == timestamp) {
+                        break;
+                    }
+                }
+            }
+            
+            if (bestMatch != null) {
+                return bestMatch;
+            }
+        }
+        
+        // Return null if no item found
+        return null;
+    }
 }
