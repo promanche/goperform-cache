@@ -163,9 +163,13 @@ public class MainRepository {
         String beforeMatch = itemsMapper.getItemBeforeIndex(id, index);
         if (beforeMatch != null) {
             List<CurveItem> items = StaticMapper.parseListOf(beforeMatch, CurveItem.class);
-            // Get the last item from this batch (closest to the index)
+            // Get the item with the maximum key from this batch (closest to the index)
             if (!items.isEmpty()) {
-                Optional<CurveItem> result = Optional.of(items.get(items.size() - 1));
+                CurveItem lastItem = items.stream()
+                        .filter(item -> item.getKey() != null)
+                        .max((a, b) -> a.getKey().compareTo(b.getKey()))
+                        .orElse(items.get(items.size() - 1));
+                Optional<CurveItem> result = Optional.of(lastItem);
                 log.trace("getItemAtOrBeforeIndex completed in {} ms", System.currentTimeMillis() - started);
                 return result;
             }
