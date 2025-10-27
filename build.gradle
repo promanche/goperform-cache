@@ -20,6 +20,7 @@ repositories {
     mavenCentral()
     maven {
         url "$nexusUrl/repository/maven-gostream-utils"
+        allowInsecureProtocol = true
         credentials {
             username nexusUsername
             password nexusPassword
